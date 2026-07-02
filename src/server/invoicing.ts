@@ -251,22 +251,35 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string): Prom
     };
   }
 
+  const visitBillAmount = Number(visit.billAmount ?? 0);
+  const visitDiscount = Number(invoice?.discount ?? 0);
+  const gstRate = branchGst.gstRatePercent;
+
+  // visit.billAmount is the GST-inclusive grand total, not the taxable amount.
+  // Use stored invoice subtotal if available, otherwise reverse-calculate
+  // the tax-exclusive amount to avoid double taxation.
+  const fallbackTaxable = invoice?.subtotal
+    ? Number(invoice.subtotal)
+    : gstRate > 0
+      ? Math.round((visitBillAmount / (1 + gstRate / 100)) * 100) / 100
+      : visitBillAmount;
+
   const gstInvoice = computeGstInvoice({
     settings: branchGst,
     lines: [
       {
         label: visit.counselPackageLabel ?? "OPD consultation & services",
         quantity: 1,
-        taxableAmount: Number(visit.billAmount ?? 0),
+        taxableAmount: fallbackTaxable,
       },
     ],
-    discount: 0,
+    discount: visitDiscount,
   });
 
   return receiptFromGstBreakdown(
     {
       ...base,
-      discount: 0,
+      discount: visitDiscount,
     },
     gstInvoice,
   );

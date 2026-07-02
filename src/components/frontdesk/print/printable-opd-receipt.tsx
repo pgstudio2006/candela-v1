@@ -62,7 +62,7 @@ export function PrintableOpdReceipt({ receipt }: PrintableOpdReceiptProps) {
               <td style={s.td}>{line.quantity}</td>
               <td style={s.td}>{formatInr(line.taxableAmount ?? line.lineTotal - (line.cgst ?? 0) - (line.sgst ?? 0) - (line.igst ?? 0))}</td>
               <td style={s.td}>{formatGstPercent(line.gstRatePercent ?? 0)}</td>
-              <td style={{ ...s.td, textAlign: "right" }}>{formatInr(line.taxableAmount ?? line.lineTotal)}</td>
+              <td style={{ ...s.td, textAlign: "right" }}>{formatInr(line.lineTotal)}</td>
             </tr>
           ))}
         </tbody>

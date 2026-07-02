@@ -39,7 +39,7 @@ const LAYOUT = {
   colRight: [56, 300, 342, 374, 553],
 } as const;
 
-const TABLE_HEADERS = ["#", "Service", "SAC", "Qty", "Amount"] as const;
+const TABLE_HEADERS = ["#", "Service", "SAC", "Qty", "Taxable"] as const;
 
 type TableLayout = {
   infoTop: number;
@@ -428,7 +428,7 @@ function drawBillingTable(
   const headerY = cellBaseline(tableTop, LAYOUT.headerHeight);
   TABLE_HEADERS.forEach((label, i) => {
     const x = i === 0 ? LAYOUT.tableLeft + 4 : LAYOUT.colRight[i - 1] + 4;
-    if (label === "Amount") {
+    if (label === "Taxable") {
       drawRightText(page, label, LAYOUT.colRight[4], headerY, bold, FONT.tableHead);
     } else {
       drawText(page, label, x, headerY, bold, FONT.tableHead);
