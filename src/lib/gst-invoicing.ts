@@ -118,7 +118,9 @@ export function computeGstInvoice(input: {
   const lines = rawLines.map((l) => {
     if (discountRatio <= 0) return l;
     const adjustedTaxable = l.taxableAmount * (1 - discountRatio);
-    return computeGstLine(l.label, l.quantity, adjustedTaxable, input.settings);
+    const discounted = computeGstLine(l.label, l.quantity, adjustedTaxable, input.settings);
+    // Keep the original pre-discount taxable amount for display; lineTotal remains discounted.
+    return { ...discounted, taxableAmount: l.taxableAmount };
   });
 
   const cgstTotal = round2(lines.reduce((s, l) => s + l.cgst, 0));

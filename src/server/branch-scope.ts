@@ -12,6 +12,10 @@ const unscopedClinicalWhere = {
   ],
 };
 
+const unscopedIpdWhere = {
+  OR: [{ tenantId: "" }, { branchId: "" }],
+};
+
 /** Assign legacy rows missing tenant/branch to the active session branch. */
 export async function backfillBranchScope(ctx: ServerContext) {
   const scope = branchScope(ctx);
@@ -25,7 +29,7 @@ export async function backfillBranchScope(ctx: ServerContext) {
     data: scope,
   });
   await prisma.ipdAdmission.updateMany({
-    where: unscopedClinicalWhere,
+    where: unscopedIpdWhere,
     data: scope,
   });
 

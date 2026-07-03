@@ -10,6 +10,7 @@ import type {
   DiseaseMapNode,
   ExpenseEntry,
   MrdRequest,
+  ReferralDoctor,
   RevenueSharePolicy,
   StaffMember,
 } from "@/design-system/admin-data";
@@ -17,8 +18,8 @@ import type {
 type ActionBody = {
   op: string;
   id?: string;
-  patch?: Partial<StaffMember> | Partial<DepartmentConfig> | Partial<DiseaseMapNode> | Partial<AdminPlatformSettings> | Partial<RevenueSharePolicy>;
-  input?: Omit<StaffMember, "id"> | Omit<DepartmentConfig, "id"> | Omit<DiseaseMapNode, "id"> | Omit<ExpenseEntry, "id"> | Omit<RevenueSharePolicy, "id"> | Omit<MrdRequest, "id" | "requestedAt" | "status">;
+  patch?: Partial<StaffMember> | Partial<DepartmentConfig> | Partial<DiseaseMapNode> | Partial<AdminPlatformSettings> | Partial<RevenueSharePolicy> | Partial<ReferralDoctor>;
+  input?: Omit<StaffMember, "id"> | Omit<DepartmentConfig, "id"> | Omit<DiseaseMapNode, "id"> | Omit<ExpenseEntry, "id"> | Omit<RevenueSharePolicy, "id"> | Omit<MrdRequest, "id" | "requestedAt" | "status"> | Omit<ReferralDoctor, "id">;
   approved?: boolean;
   status?: MrdRequest["status"];
   flagId?: string;
@@ -95,6 +96,15 @@ export async function POST(request: Request) {
         break;
       case "addMrdRequest":
         result = await core.addMrdRequest(ctx, operator, body.input as Omit<MrdRequest, "id" | "requestedAt" | "status">);
+        break;
+      case "updateReferralDoctor":
+        result = await core.updateReferralDoctor(ctx, operator, body.id!, body.patch as Partial<ReferralDoctor>);
+        break;
+      case "addReferralDoctor":
+        result = await core.addReferralDoctor(ctx, operator, body.input as Omit<ReferralDoctor, "id">);
+        break;
+      case "removeReferralDoctor":
+        result = await core.removeReferralDoctor(ctx, operator, body.id!);
         break;
       case "runMisReport": {
         const misResult = await core.runMisReport(ctx, operator, body.id!);

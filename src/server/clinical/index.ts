@@ -34,6 +34,8 @@ import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 import { loadClinicalRoster } from "@/server/clinical/roster";
 import { withPrismaError } from "@/server/prisma-errors";
 import { resolveDoctorName, staffIdFromDoctorId } from "@/lib/clinical-roster";
+import { ensureIpdWardBed } from "@/server/ipd";
+import { createId } from "@/lib/id";
 import type { ClinicalRoster } from "@/lib/clinical-roster";
 import { notifyAppointmentReminder } from "@/server/notifications";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
@@ -103,7 +105,7 @@ function parseUhidCounter(uhid: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-async function maxUhidCounterInBranch(ctx: ServerContext): Promise<number> {
+export async function maxUhidCounterInBranch(ctx: ServerContext): Promise<number> {
   const patients = await prisma.patient.findMany({
     where: { tenantId: ctx.tenantId, branchId: ctx.branchId },
     select: { uhid: true },
@@ -261,6 +263,7 @@ async function ensureClinicalSeed() {
           },
         });
       }
+      const { wardId, bedId } = await ensureIpdWardBed(tx, { tenantId, branchId }, ipd.ward, ipd.bed, ipd.category ?? "general");
       await tx.ipdAdmission.create({
         data: {
           id: ipd.id,
@@ -268,17 +271,17 @@ async function ensureClinicalSeed() {
           branchId,
           visitId: seedVisitId,
           patientId: ipd.patientId,
-          ward: ipd.ward,
-          bed: ipd.bed,
-          category: ipd.category,
-          patientType: ipd.patientType,
-          billingMode: ipd.billingMode,
-          expectedDischarge: ipd.expectedDischarge,
-          admittedAt: ipd.admittedAt,
+          wardId,
+          bedId,
+          doctorName: "Doctor",
+          patientType: ipd.patientType ?? "general",
+          billingMode: ipd.billingMode ?? "prepaid",
+          expectedDischarge: ipd.expectedDischarge ? new Date(ipd.expectedDischarge) : null,
+          admittedAt: ipd.admittedAt ? new Date(ipd.admittedAt) : new Date(),
           diagnosis: ipd.diagnosis,
           attendingDoctorId: ipd.attendingDoctorId,
-          lastRoundAt: ipd.lastRoundAt,
-          lastRoundNote: ipd.lastRoundNote,
+          lastRoundAt: ipd.lastRoundAt ? new Date(ipd.lastRoundAt) : null,
+          lastRoundNote: ipd.lastRoundNote ?? null,
           status: ipd.status,
         },
       });
@@ -517,6 +520,23 @@ export async function saveSubmission(
   });
 }
 
+function resolveReferralDoctorId(data: RegisterInput): string | null {
+  const selection = String((data as any).referralDoctor ?? "").trim();
+  if (!selection || selection === "none" || selection === "other") return null;
+  return selection;
+}
+
+function resolveReferralDoctorName(data: RegisterInput): string | null {
+  const selection = String((data as any).referralDoctor ?? "").trim();
+  if (!selection || selection === "none") return null;
+  if (selection === "other") {
+    const otherName = String((data as any).referralDoctorName ?? "").trim();
+    return otherName || null;
+  }
+  const name = String((data as any).referralDoctorName ?? "").trim();
+  return name || null;
+}
+
 export async function registerPatient(
   ctx: ServerContext,
   input: {
@@ -572,8 +592,8 @@ export async function registerPatient(
       meta: registration.meta,
       tenantId: scope.tenantId,
       branchId: scope.branchId,
-      referralDoctorId: (data as any).referralDoctor || null,
-      referralDoctorName: (data as any).referralDoctor ? (data as any).referralDoctorName || null : null,
+      referralDoctorId: resolveReferralDoctorId(data),
+      referralDoctorName: resolveReferralDoctorName(data),
     },
     create: {
       id: patientId,
@@ -594,8 +614,8 @@ export async function registerPatient(
       tags: registration.tags,
       referrer: registration.referrer,
       meta: registration.meta,
-      referralDoctorId: (data as any).referralDoctor || null,
-      referralDoctorName: (data as any).referralDoctor ? (data as any).referralDoctorName || null : null,
+      referralDoctorId: resolveReferralDoctorId(data),
+      referralDoctorName: resolveReferralDoctorName(data),
     },
   });
 
@@ -949,11 +969,13 @@ export async function processCounselBilling(
     ipdAdmissionId = `ipd_${visitId}`;
     const wardLabel = input.ward ?? "MSK Ward A";
     const bedLabel = input.bed ?? "A-14";
+    const { wardId, bedId } = await ensureIpdWardBed(prisma, ctx, wardLabel, bedLabel, "general");
+    const doctor = await prisma.adminStaff.findFirst({ where: { id: handoff.doctorId }, select: { name: true } });
     await prisma.ipdAdmission.upsert({
       where: { visitId },
       update: {
-        ward: wardLabel,
-        bed: bedLabel,
+        wardId,
+        bedId,
         diagnosis: handoff.diagnosisSummary ?? handoff.quote.packageLabel,
         status: "admitted",
       },
@@ -963,12 +985,12 @@ export async function processCounselBilling(
         branchId: scope.branchId,
         visitId,
         patientId: handoff.patientId,
-        ward: wardLabel,
-        bed: bedLabel,
-        category: "general",
+        wardId,
+        bedId,
+        doctorName: doctor?.name ?? handoff.doctorId,
         patientType: "general",
         billingMode: "prepaid",
-        admittedAt: new Date().toISOString().slice(0, 10),
+        admittedAt: new Date(),
         diagnosis: handoff.diagnosisSummary ?? handoff.quote.packageLabel,
         attendingDoctorId: handoff.doctorId,
         status: "admitted",
@@ -1614,4 +1636,91 @@ export async function listFrontdeskAuditLogs(
     summary: r.summary,
     severity: r.severity,
   }));
+}
+
+export async function getActiveReferralDoctors(ctx: ServerContext) {
+  const rows = await prisma.referralDoctor.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      OR: [{ branchId: ctx.branchId }, { branchId: null }],
+      active: true,
+    },
+    orderBy: { name: "asc" },
+  });
+  return rows.map((x) => ({
+    id: x.id,
+    name: x.name,
+    phone: x.phone ?? undefined,
+    email: x.email ?? undefined,
+    clinicName: x.clinicName ?? undefined,
+    address: x.address ?? undefined,
+    specialization: x.specialization ?? undefined,
+    commissionPercent: Number(x.commissionPercent),
+    active: x.active,
+    notes: x.notes ?? undefined,
+  }));
+}
+
+export async function getReferralDoctorWithPatients(ctx: ServerContext, referralDoctorId: string) {
+  const doctor = await prisma.referralDoctor.findFirst({
+    where: {
+      id: referralDoctorId,
+      tenantId: ctx.tenantId,
+      branchId: ctx.branchId,
+    },
+  });
+  if (!doctor) return null;
+
+  const patients = await prisma.patient.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      branchId: ctx.branchId,
+      referralDoctorId,
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      opdVisits: { orderBy: { createdAt: "desc" } },
+    },
+  });
+
+  const round2 = (value: number) => Math.round(value * 100) / 100;
+  const rows = patients.map((p) => {
+    const totalBilled = p.opdVisits.reduce((s: number, v: { billAmount: number | null | undefined }) => s + Number(v.billAmount ?? 0), 0);
+    const totalPaid = p.opdVisits.reduce((s: number, v: { amountPaid: number | null | undefined }) => s + Number(v.amountPaid ?? 0), 0);
+    const lastVisit = p.opdVisits[0];
+    return {
+      id: p.id,
+      uhid: p.uhid,
+      name: p.fullName || p.name || "Unknown",
+      phone: p.phone,
+      firstVisitAt: p.createdAt.toISOString(),
+      lastVisitAt: lastVisit?.createdAt?.toISOString() ?? p.createdAt.toISOString(),
+      totalBilled,
+      totalPaid,
+      commissionEstimate: round2((totalBilled * Number(doctor.commissionPercent)) / 100),
+    };
+  });
+
+  const totalBilled = rows.reduce((s, r) => s + r.totalBilled, 0);
+  const totalPaid = rows.reduce((s, r) => s + r.totalPaid, 0);
+  const totalCommission = rows.reduce((s, r) => s + r.commissionEstimate, 0);
+
+  return {
+    doctor: {
+      id: doctor.id,
+      name: doctor.name,
+      phone: doctor.phone ?? undefined,
+      email: doctor.email ?? undefined,
+      clinicName: doctor.clinicName ?? undefined,
+      address: doctor.address ?? undefined,
+      specialization: doctor.specialization ?? undefined,
+      commissionPercent: Number(doctor.commissionPercent),
+      active: doctor.active,
+      notes: doctor.notes ?? undefined,
+    },
+    patients: rows,
+    totalBilled,
+    totalPaid,
+    totalCommission,
+  };
 }

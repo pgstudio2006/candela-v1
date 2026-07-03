@@ -17,3 +17,7 @@ export type CandelaClientSession = {
   pharmacyOperatorId?: string;
   hrOperatorId?: string;
 };
+
+export function isPataudiBranch(branchName?: string | null): boolean {
+  return (branchName ?? "").toLowerCase().replace(/\s+/g, "").includes("pataudi");
+}

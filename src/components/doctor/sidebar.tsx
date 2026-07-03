@@ -5,7 +5,7 @@ import { CopilotMark } from "@/components/frontdesk/copilot-mark";
 import { SectionLabel } from "@/components/frontdesk/page-chrome";
 import { SidebarIcon } from "@/components/frontdesk/sidebar-icon";
 import { DOCTOR_NAV } from "@/design-system/doctor-nav";
-import { DEPARTMENTS } from "@/design-system/mock-data";
+import { useDoctorStore } from "@/components/doctor/doctor-store";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +48,7 @@ export function DoctorSidebar({
   onSignOut,
 }: DoctorSidebarProps) {
   const pathname = usePathname();
+  const { profile } = useDoctorStore();
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -175,13 +176,13 @@ export function DoctorSidebar({
           <>
             <SectionLabel>Departments</SectionLabel>
             <nav className="space-y-0.5">
-              {DEPARTMENTS.map((d) => (
+              {profile.departmentLabels.map((label) => (
                 <div
-                  key={d.id}
+                  key={label}
                   className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-[var(--attio-text-secondary)]"
                 >
                   <span className="size-2 shrink-0 rounded-full bg-[var(--attio-accent)] opacity-60" />
-                  <span className="truncate">{d.label}</span>
+                  <span className="truncate">{label}</span>
                 </div>
               ))}
             </nav>

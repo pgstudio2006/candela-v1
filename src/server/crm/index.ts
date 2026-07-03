@@ -961,6 +961,7 @@ export function resolveWebhookContext(url: URL): ServerContext {
     userId: "webhook",
     tenantId: url.searchParams.get("tenantId") ?? DEFAULT_WEBHOOK_TENANT_ID,
     branchId: url.searchParams.get("branchId") ?? DEFAULT_WEBHOOK_BRANCH_ID,
+    branchName: "",
     role: "system",
     sessionToken: "",
   };

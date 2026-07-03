@@ -1,6 +1,7 @@
 "use client";
 
 import type { FormSchema } from "@/design-system/frontdesk-schemas";
+import type { ReferralDoctor } from "@/design-system/admin-data";
 import { doctorsForDepartment, type ClinicalRoster } from "@/lib/clinical-roster";
 import { getFormSchema, type FormSchemaId } from "@/lib/schema-registry";
 import { useEffect, useMemo, useState } from "react";
@@ -16,6 +17,7 @@ function patchSchemaWithRoster(
   base: FormSchema,
   roster: ClinicalRoster | null,
   departmentId?: string,
+  referralDoctors?: ReferralDoctor[],
 ): FormSchema {
   if (!roster) return base;
 
@@ -33,6 +35,7 @@ function patchSchemaWithRoster(
       : deptValueSet.has(deptDefault)
         ? deptDefault
         : "";
+  const hasReferralDoctors = referralDoctors && referralDoctors.length > 0;
 
   return {
     ...base,
@@ -53,6 +56,17 @@ function patchSchemaWithRoster(
             options: deptDoctors.map((d) => ({ value: d.id, label: d.name })),
           };
         }
+        if (field.id === "referralDoctor" && field.type === "select") {
+          const baseOptions = (field.options ?? []).filter((o) => o.value !== "none");
+          const doctorOptions = (referralDoctors ?? []).map((d) => ({ value: d.id, label: d.name }));
+          const noneOption = { value: "none", label: "None" };
+          return {
+            ...field,
+            allowOther: true,
+            options: [...doctorOptions, ...baseOptions, noneOption],
+            defaultValue: field.defaultValue ?? "none",
+          };
+        }
         return field;
       }),
     })),
@@ -63,6 +77,7 @@ export function useFrontdeskFormSchema(
   formId: FormSchemaId,
   roster: ClinicalRoster | null,
   departmentId?: string,
+  referralDoctors?: ReferralDoctor[],
 ): FormSchema {
   const [base, setBase] = useState<FormSchema>(() => getFormSchema(formId));
 
@@ -87,7 +102,7 @@ export function useFrontdeskFormSchema(
   }, [formId]);
 
   return useMemo(
-    () => patchSchemaWithRoster(base, roster, departmentId),
-    [base, roster, departmentId],
+    () => patchSchemaWithRoster(base, roster, departmentId, referralDoctors),
+    [base, roster, departmentId, referralDoctors],
   );
 }

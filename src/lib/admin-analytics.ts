@@ -9,6 +9,7 @@ import type {
   TreatmentOutcomeMonth,
 } from "@/design-system/admin-data";
 import { SEED_GEO } from "@/design-system/admin-data";
+import { isPataudiBranch } from "@/lib/auth-types";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 
 type SubmissionRow = {
@@ -108,7 +109,10 @@ export function computeLiveGeoClusters(
   submissions: SubmissionRow[],
   consultations: ConsultationRow[],
   diseaseMap: DiseaseMapNode[],
+  branchName?: string | null,
 ): GeoCluster[] {
+  const pataudi = isPataudiBranch(branchName);
+  const seedPins = pataudi ? [] : SEED_GEO;
   const buckets = new Map<
     string,
     {
@@ -124,7 +128,7 @@ export function computeLiveGeoClusters(
     }
   >();
 
-  for (const pin of basePins.length ? basePins : SEED_GEO) {
+  for (const pin of basePins.length ? basePins : seedPins) {
     buckets.set(pin.pincode, {
       pincode: pin.pincode,
       city: pin.city,
@@ -145,11 +149,13 @@ export function computeLiveGeoClusters(
     const key = pincode ?? `unknown_${city.toLowerCase().replace(/\s+/g, "_")}`;
 
     if (!buckets.has(key)) {
+      const defaultLat = pataudi ? 28.3276 : 23.0225;
+      const defaultLng = pataudi ? 76.7784 : 72.5714;
       buckets.set(key, {
         pincode: pincode ?? "000000",
         city,
-        lat: seed?.lat ?? 23.0225,
-        lng: seed?.lng ?? 72.5714,
+        lat: seed?.lat ?? defaultLat,
+        lng: seed?.lng ?? defaultLng,
         patientIds: new Set(),
         opd: 0,
         ipd: 0,

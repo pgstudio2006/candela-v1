@@ -8,6 +8,7 @@ import type {
   ExpenseEntry,
   MisReport,
   MrdRequest,
+  ReferralDoctor,
   RevenueSharePolicy,
   StaffMember,
 } from "@/design-system/admin-data";
@@ -76,6 +77,9 @@ type AdminStoreValue = Omit<
   addRevenuePolicy: (policy: Omit<RevenueSharePolicy, "id">) => Promise<void>;
   updateMrdStatus: (id: string, status: MrdRequest["status"]) => Promise<void>;
   addMrdRequest: (req: Omit<MrdRequest, "id" | "requestedAt" | "status">) => Promise<void>;
+  updateReferralDoctor: (id: string, patch: Partial<ReferralDoctor>) => Promise<void>;
+  addReferralDoctor: (doctor: Omit<ReferralDoctor, "id">) => Promise<void>;
+  removeReferralDoctor: (id: string) => Promise<void>;
   runMisReport: (id: string) => Promise<{ csv: string; filename: string }>;
   exportRevenueShare: (
     policyId: string,
@@ -256,6 +260,7 @@ export function AdminStoreProvider({ children }: { children: ReactNode }) {
       geo: [],
       expenses: [],
       revenuePolicies: [],
+      referralDoctors: [],
       mrdRequests: [],
       misReports: [],
       settings: {
@@ -335,6 +340,9 @@ export function AdminStoreProvider({ children }: { children: ReactNode }) {
       addRevenuePolicy: (policy) => run(() => adminMutate({ op: "addRevenuePolicy", input: policy })),
       updateMrdStatus: (id, status) => run(() => adminMutate({ op: "updateMrdStatus", id, status })),
       addMrdRequest: (req) => run(() => adminMutate({ op: "addMrdRequest", input: req })),
+      updateReferralDoctor: (id, patch) => run(() => adminMutate({ op: "updateReferralDoctor", id, patch })),
+      addReferralDoctor: (doctor) => run(() => adminMutate({ op: "addReferralDoctor", input: doctor })),
+      removeReferralDoctor: (id) => run(() => adminMutate({ op: "removeReferralDoctor", id })),
       runMisReport: async (id) => {
         try {
           const res = await adminMutate({ op: "runMisReport", id });

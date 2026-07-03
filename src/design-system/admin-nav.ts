@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bed,
   Building2,
   CalendarClock,
   ClipboardCheck,
@@ -15,6 +16,7 @@ import {
   Settings,
   Shield,
   Sparkles,
+  Stethoscope,
   UserRound,
   Users,
   Wallet,
@@ -46,6 +48,8 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "charges", label: "Service charges", href: "/app/admin/charges", icon: Receipt, group: "control", configOnly: true },
   { id: "packages", label: "Care packages", href: "/app/admin/packages", icon: Sparkles, group: "control", configOnly: true },
   { id: "whatsapp", label: "WhatsApp Templates", href: "/app/admin/whatsapp", icon: MessageCircle, group: "control", configOnly: true },
+  { id: "referral-doctors", label: "Referral sources", href: "/app/admin/referral-doctors", icon: Stethoscope, group: "control", configOnly: true },
+  { id: "ipd", label: "IPD wards", href: "/app/admin/ipd", icon: Bed, group: "control", configOnly: true },
   { id: "revenue-sharing", label: "Doctor revenue share", href: "/app/admin/revenue-sharing", icon: Wallet, group: "control", financeOnly: true },
   { id: "finance", label: "Finance & expenses", href: "/app/admin/finance", icon: Wallet, group: "optimize", financeOnly: true },
   { id: "rcm", label: "Revenue cycle AI", href: "/app/admin/rcm", icon: Sparkles, group: "optimize", financeOnly: true },

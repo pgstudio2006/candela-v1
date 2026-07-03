@@ -33,6 +33,8 @@ export type Patient = {
   referrer?: string;
   referrerSource?: string;
   corporateId?: string;
+  referralDoctorId?: string;
+  referralDoctorName?: string;
   registrationNotes?: string;
   consentTreatment?: boolean;
   consentData?: boolean;

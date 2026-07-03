@@ -6,6 +6,7 @@ export type ServerContext = {
   userId: string;
   tenantId: string;
   branchId: string;
+  branchName: string;
   role: string;
   sessionToken: string;
 };
@@ -51,6 +52,7 @@ export async function getServerContext(): Promise<ServerContext> {
     userId: session.user.id,
     tenantId: session.user.tenantId,
     branchId: session.user.branchId,
+    branchName: session.user.branchName ?? "",
     role: session.user.role,
     sessionToken: session.user.sessionToken,
   };

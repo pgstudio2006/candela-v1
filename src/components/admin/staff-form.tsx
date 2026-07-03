@@ -7,6 +7,7 @@ import {
   generateStaffPassword,
   staffRoleLabel,
 } from "@/lib/healthcare-roles";
+import { getIpdWardsAction } from "@/app/actions/ipd-actions";
 import { AttioButton } from "@/components/frontdesk/ui";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,9 +48,13 @@ export function StaffFormModal({ open, onClose, departments, branchId, initial, 
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [wards, setWards] = useState<{ id: string; label: string }[]>([]);
 
   useEffect(() => {
     if (!open) return;
+    getIpdWardsAction().then((res) => {
+      if (res.ok && res.data) setWards((res.data as { id: string; label: string; category: string; active: boolean }[]).map((w) => ({ id: w.id, label: w.label })));
+    });
     setName(initial?.name ?? "");
     setEmail(initial?.email ?? "");
     setPhone(initial?.phone ?? "");
@@ -174,7 +179,19 @@ export function StaffFormModal({ open, onClose, departments, branchId, initial, 
             {role === "nurse" && (
               <div className="space-y-1.5">
                 <Label className="text-[12px]">Ward assignment</Label>
-                <Input value={ward} onChange={(e) => setWard(e.target.value)} className="h-9 text-[13px]" placeholder="e.g. Ward A, Ward B, ICU" />
+                <Select value={ward} onValueChange={(v) => setWard(v ?? "")}>
+                  <SelectTrigger className="h-9 text-[13px]">
+                    <SelectValue placeholder="Select IPD ward">{ward || "Select IPD ward"}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {wards.length === 0 && <SelectItem value="">No wards configured</SelectItem>}
+                    {wards.map((w) => (
+                      <SelectItem key={w.id} value={w.label}>
+                        {w.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>

@@ -2,54 +2,69 @@
 
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { useAdminStore } from "@/components/admin/admin-store";
+import { useToast } from "@/components/ui/toast-provider";
+import type { ReferralDoctor } from "@/design-system/admin-data";
 import { useState } from "react";
-
-type ReferralDoctor = {
-  id: string;
-  name: string;
-  phone?: string;
-  email?: string;
-  clinicName?: string;
-  specialization?: string;
-  commissionPercent: number;
-  active: boolean;
-  notes?: string;
-};
+import Link from "next/link";
 
 export default function ReferralDoctorsPage() {
-  const [doctors, setDoctors] = useState<ReferralDoctor[]>([]);
+  const { referralDoctors, addReferralDoctor, updateReferralDoctor, removeReferralDoctor } = useAdminStore();
+  const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<ReferralDoctor | null>(null);
+  const [busy, setBusy] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
     email: "",
     clinicName: "",
+    address: "",
     specialization: "",
     commissionPercent: 0,
     active: true,
     notes: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editing) {
-      setDoctors(doctors.map((d) => (d.id === editing.id ? { ...formData, id: editing.id } : d)));
-      setEditing(null);
-    } else {
-      setDoctors([...doctors, { ...formData, id: `rd_${Date.now()}` }]);
-    }
-    setShowForm(false);
+  const resetForm = () => {
     setFormData({
       name: "",
       phone: "",
       email: "",
       clinicName: "",
+      address: "",
       specialization: "",
       commissionPercent: 0,
       active: true,
       notes: "",
     });
+    setEditing(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) return;
+    setBusy(true);
+    try {
+      const payload = {
+        ...formData,
+        name: formData.name.trim(),
+        commissionPercent: Number(formData.commissionPercent) || 0,
+      };
+      if (editing) {
+        await updateReferralDoctor(editing.id, payload);
+        toast("Referral source updated", "success");
+      } else {
+        await addReferralDoctor(payload);
+        toast("Referral source added", "success");
+      }
+      resetForm();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to save referral source", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleEdit = (doctor: ReferralDoctor) => {
@@ -59,6 +74,7 @@ export default function ReferralDoctorsPage() {
       phone: doctor.phone ?? "",
       email: doctor.email ?? "",
       clinicName: doctor.clinicName ?? "",
+      address: doctor.address ?? "",
       specialization: doctor.specialization ?? "",
       commissionPercent: doctor.commissionPercent,
       active: doctor.active,
@@ -67,28 +83,42 @@ export default function ReferralDoctorsPage() {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
-    setDoctors(doctors.filter((d) => d.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this referral source?")) return;
+    setBusy(true);
+    try {
+      await removeReferralDoctor(id);
+      toast("Referral source removed", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to remove referral source", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleToggleActive = (id: string) => {
-    setDoctors(doctors.map((d) => (d.id === id ? { ...d, active: !d.active } : d)));
+  const handleToggleActive = async (doctor: ReferralDoctor) => {
+    try {
+      await updateReferralDoctor(doctor.id, { active: !doctor.active });
+      toast(doctor.active ? "Referral source deactivated" : "Referral source activated", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to update referral source", "error");
+    }
   };
 
   return (
     <PageChrome
-      breadcrumbs={[{ label: "Admin", href: "/app/admin" }, { label: "Referral doctors" }]}
-      title="Referral doctor management"
-      meta="Manage external doctors · Track commissions · Patient referrals"
+      breadcrumbs={[{ label: "Admin", href: "/app/admin" }, { label: "Referral sources" }]}
+      title="Referral sources"
+      meta="Configure referring doctors · Drive registration dropdown · Track commissions"
       actions={
         <AttioButton variant="primary" onClick={() => setShowForm(true)}>
-          Add referral doctor
+          Add referral source
         </AttioButton>
       }
     >
       {showForm && (
-        <Panel title={editing ? "Edit referral doctor" : "Add referral doctor"}>
-          <form onSubmit={handleSubmit} className="space-y-4 text-[13px]">
+        <Panel title={editing ? "Edit referral source" : "Add referral source"}>
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 text-[13px]">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block">
                 Doctor name
@@ -124,6 +154,15 @@ export default function ReferralDoctorsPage() {
                   type="text"
                   value={formData.clinicName}
                   onChange={(e) => setFormData({ ...formData, clinicName: e.target.value })}
+                  className="mt-1 h-9 w-full rounded-lg border px-3"
+                />
+              </label>
+              <label className="block md:col-span-2">
+                Address
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   className="mt-1 h-9 w-full rounded-lg border px-3"
                 />
               </label>
@@ -166,10 +205,10 @@ export default function ReferralDoctorsPage() {
               Active
             </label>
             <div className="flex gap-2">
-              <AttioButton type="submit" variant="primary">
-                {editing ? "Update" : "Add"} doctor
+              <AttioButton type="submit" variant="primary" disabled={busy}>
+                {editing ? "Update" : "Add"} source
               </AttioButton>
-              <AttioButton type="button" variant="secondary" onClick={() => { setShowForm(false); setEditing(null); }}>
+              <AttioButton type="button" variant="secondary" disabled={busy} onClick={resetForm}>
                 Cancel
               </AttioButton>
             </div>
@@ -177,18 +216,18 @@ export default function ReferralDoctorsPage() {
         </Panel>
       )}
 
-      {doctors.length === 0 && !showForm && (
-        <Panel title="No referral doctors">
+      {referralDoctors.length === 0 && !showForm && (
+        <Panel title="No referral sources">
           <p className="text-[13px] text-[var(--attio-text-tertiary)]">
-            No referral doctors have been added yet. Click "Add referral doctor" to get started.
+            No referral sources have been added yet. Click "Add referral source" to get started. The dropdown on the front-desk registration form will show all active sources plus "Other" and "None".
           </p>
         </Panel>
       )}
 
-      {doctors.length > 0 && (
-        <Panel title="Referral doctors">
+      {referralDoctors.length > 0 && (
+        <Panel title="Referral sources">
           <div className="space-y-2">
-            {doctors.map((doctor) => (
+            {referralDoctors.map((doctor) => (
               <div
                 key={doctor.id}
                 className="flex items-center justify-between rounded-lg border p-3 text-[13px]"
@@ -202,17 +241,21 @@ export default function ReferralDoctorsPage() {
                     {doctor.clinicName && `${doctor.clinicName} · `}
                     {doctor.specialization && `${doctor.specialization} · `}
                     {doctor.phone && doctor.phone}
+                    {doctor.address && ` · ${doctor.address}`}
                   </p>
                   <p className="mt-1 text-[var(--attio-accent)]">Commission: {doctor.commissionPercent}%</p>
                 </div>
                 <div className="flex gap-2">
-                  <AttioButton variant="secondary" onClick={() => handleEdit(doctor)}>
+                  <Link href={`/app/admin/referral-doctors/${doctor.id}`}>
+                    <AttioButton variant="secondary">View patients</AttioButton>
+                  </Link>
+                  <AttioButton variant="secondary" onClick={() => handleEdit(doctor)} disabled={busy}>
                     Edit
                   </AttioButton>
-                  <AttioButton variant="secondary" onClick={() => handleToggleActive(doctor.id)}>
+                  <AttioButton variant="secondary" onClick={() => void handleToggleActive(doctor)} disabled={busy}>
                     {doctor.active ? "Deactivate" : "Activate"}
                   </AttioButton>
-                  <AttioButton variant="secondary" onClick={() => handleDelete(doctor.id)}>
+                  <AttioButton variant="secondary" onClick={() => void handleDelete(doctor.id)} disabled={busy}>
                     Delete
                   </AttioButton>
                 </div>

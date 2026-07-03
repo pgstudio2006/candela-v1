@@ -8,7 +8,6 @@ import Link from "next/link";
 const MODULE_LINKS: Record<string, string> = {
   frontdesk: "/app/frontdesk",
   doctor: "/app/doctor",
-  counsellor: "/app/counsellor",
   nurse: "/app/nurse",
 };
 

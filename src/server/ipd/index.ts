@@ -3,13 +3,13 @@ import type {
   IpdAdmissionDetail,
   IpdAdmissionInput,
   IpdAdmissionStatus,
+  IpdBedRow,
   IpdBedSummary,
   IpdBillingMode,
   IpdPatientType,
   IpdSnapshot,
   IpdWard,
 } from "@/design-system/ipd-data";
-import { IPD_WARD_OPTIONS } from "@/design-system/ipd-data";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
 import { branchScope } from "@/server/tenancy";
@@ -24,69 +24,150 @@ import { loadClinicalRoster } from "@/server/clinical/roster";
 
 export type { IpdSnapshot } from "@/design-system/ipd-data";
 
+export async function ensureIpdWardBed(
+  tx: any,
+  ctx: Pick<ServerContext, "tenantId" | "branchId">,
+  wardLabel: string,
+  bedLabel: string,
+  category: string,
+): Promise<{ wardId: string; bedId: string }> {
+  let ward = await tx.ipdWard.findFirst({
+    where: { tenantId: ctx.tenantId, branchId: ctx.branchId, label: wardLabel },
+  });
+  if (!ward) {
+    ward = await tx.ipdWard.create({
+      data: {
+        id: createId("ipdward"),
+        tenantId: ctx.tenantId,
+        branchId: ctx.branchId,
+        label: wardLabel,
+        category,
+      },
+    });
+  }
+  let bed = await tx.ipdBed.findFirst({
+    where: { wardId: ward.id, label: bedLabel },
+  });
+  if (!bed) {
+    bed = await tx.ipdBed.create({
+      data: {
+        id: createId("ipdbed"),
+        tenantId: ctx.tenantId,
+        branchId: ctx.branchId,
+        wardId: ward.id,
+        label: bedLabel,
+      },
+    });
+  }
+  return { wardId: ward.id, bedId: bed.id };
+}
+
+type WardWithBeds = {
+  id: string;
+  label: string;
+  category: string;
+  active: boolean;
+  beds: {
+    id: string;
+    label: string;
+    active: boolean;
+  }[];
+};
+
+function toWardDto(row: {
+  id: string;
+  label: string;
+  category: string;
+  active: boolean;
+  beds: { id: string; label: string; active: boolean }[];
+}): IpdWard {
+  return {
+    id: row.id,
+    label: row.label,
+    category: row.category as IpdWard["category"],
+    beds: row.beds.filter((b) => b.active).map((b) => b.label),
+  };
+}
+
+export async function getIpdWards(ctx: ServerContext): Promise<WardWithBeds[]> {
+  await backfillBranchScope(ctx);
+  const scope = branchScope(ctx);
+  const rows = await prisma.ipdWard.findMany({
+    where: { tenantId: scope.tenantId, branchId: scope.branchId },
+    orderBy: { createdAt: "asc" },
+    include: {
+      beds: { orderBy: { createdAt: "asc" } },
+    },
+  });
+  return rows.map((w) => ({
+    id: w.id,
+    label: w.label,
+    category: w.category,
+    active: w.active,
+    beds: w.beds.map((b) => ({ id: b.id, label: b.label, active: b.active })),
+  }));
+}
+
 export async function getIpdSnapshot(ctx: ServerContext): Promise<IpdSnapshot> {
   await ensureHospitalBootstrap();
   await backfillBranchScope(ctx);
   const scope = branchScope(ctx);
 
-  const admissions = await prisma.ipdAdmission.findMany({
+  const wardRows = await getIpdWards(ctx);
+  const wardIds = wardRows.map((w) => w.id);
+
+  const activeAdmissions = await prisma.ipdAdmission.findMany({
     where: {
       tenantId: scope.tenantId,
       branchId: scope.branchId,
+      wardId: { in: wardIds },
       status: { in: ["admitted", "discharge_planned"] },
     },
+    include: { patient: { select: { id: true, name: true, fullName: true, uhid: true } } },
     orderBy: { createdAt: "desc" },
   });
 
-  const patientIds = admissions.map((a) => a.patientId);
-  const patients = patientIds.length
-    ? await prisma.patient.findMany({
-        where: { id: { in: patientIds }, tenantId: scope.tenantId, branchId: scope.branchId },
-        select: { id: true, name: true, fullName: true, uhid: true },
-      })
-    : [];
-  const patientById = new Map(patients.map((p) => [p.id, p]));
-
-  const doctorIds = admissions.map((a) => a.attendingDoctorId).filter(Boolean);
-  const doctors = doctorIds.length
-    ? await prisma.adminStaff.findMany({
-        where: { id: { in: doctorIds } },
-        select: { id: true, name: true },
-      })
-    : [];
-  const doctorById = new Map(doctors.map((d) => [d.id, d]));
-
-  const occupiedByBed = new Map(
-    admissions.map((a) => [`${a.ward}:${a.bed}`, a]),
+  const admissionByBedId = new Map(
+    activeAdmissions.map((a) => [
+      a.bedId,
+      {
+        id: a.id,
+        patientId: a.patientId,
+        patientName: patientDisplayName(a.patient) ?? a.patientId,
+        doctorName: a.doctorName,
+        diagnosis: a.diagnosis,
+        status: a.status as IpdAdmissionStatus,
+        admittedAt: a.admittedAt.toISOString(),
+        expectedDischarge: a.expectedDischarge?.toISOString() ?? undefined,
+      },
+    ]),
   );
 
-  const wards: IpdBedSummary[] = IPD_WARD_OPTIONS.map((ward) => {
-    const beds = ward.beds.map((bedLabel) => {
-      const admission = occupiedByBed.get(`${ward.label}:${bedLabel}`);
-      const patient = admission ? patientById.get(admission.patientId) : undefined;
-      const doctor = admission ? doctorById.get(admission.attendingDoctorId) : undefined;
+  const allBeds = await prisma.ipdBed.findMany({
+    where: { wardId: { in: wardIds } },
+    orderBy: { createdAt: "asc" },
+  });
+  const bedsByWard = new Map<string, typeof allBeds>();
+  for (const bed of allBeds) {
+    const list = bedsByWard.get(bed.wardId) ?? [];
+    list.push(bed);
+    bedsByWard.set(bed.wardId, list);
+  }
+
+  const wards: IpdBedSummary[] = wardRows.map((ward) => {
+    const beds = (bedsByWard.get(ward.id) ?? []).map((bed) => {
+      const admission = admissionByBedId.get(bed.id);
       return {
-        id: bedLabel,
-        label: bedLabel,
+        id: bed.id,
+        label: bed.label,
         occupied: Boolean(admission),
-        admission: admission
-          ? {
-              id: admission.id,
-              patientId: admission.patientId,
-              patientName: (patient ? patientDisplayName(patient) : undefined) ?? admission.patientId,
-              doctorName: doctor?.name ?? admission.attendingDoctorId,
-              diagnosis: admission.diagnosis,
-              status: admission.status as IpdAdmissionStatus,
-              admittedAt: admission.admittedAt,
-              expectedDischarge: admission.expectedDischarge ?? undefined,
-            }
-          : undefined,
+        admission,
       };
     });
     return {
       wardId: ward.id,
       ward: ward.label,
-      category: ward.category,
+      category: ward.category as IpdWard["category"],
       beds,
     };
   });
@@ -132,28 +213,35 @@ export async function getIpdAdmission(ctx: ServerContext, id: string) {
   const scope = branchScope(ctx);
   const admission = await prisma.ipdAdmission.findFirst({
     where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
+    include: {
+      patient: { select: { id: true, name: true, fullName: true, uhid: true, phone: true, age: true, gender: true } },
+      ward: true,
+      bed: true,
+    },
   });
   if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
 
-  const patient = await prisma.patient.findFirst({
-    where: { id: admission.patientId, tenantId: scope.tenantId, branchId: scope.branchId },
-    select: { id: true, name: true, fullName: true, uhid: true, phone: true, age: true, gender: true },
-  });
-  const doctor = await prisma.adminStaff.findFirst({
-    where: { id: admission.attendingDoctorId },
-    select: { id: true, name: true },
-  });
-
   const detail: IpdAdmissionDetail = {
-    ...admission,
-    patientName: (patient ? patientDisplayName(patient) : undefined) ?? admission.patientId,
-    uhid: patient?.uhid,
-    phone: patient?.phone,
-    age: patient?.age,
-    gender: patient?.gender,
-    doctorName: doctor?.name ?? admission.attendingDoctorId,
+    id: admission.id,
+    visitId: admission.visitId ?? "",
+    patientId: admission.patientId,
+    patientName: patientDisplayName(admission.patient) ?? admission.patientId,
+    uhid: admission.patient.uhid,
+    phone: admission.patient.phone,
+    age: admission.patient.age,
+    gender: admission.patient.gender,
+    ward: admission.ward.label,
+    bed: admission.bed.label,
+    category: admission.ward.category,
     patientType: (admission.patientType ?? "general") as IpdPatientType,
     billingMode: (admission.billingMode ?? "postpaid") as IpdBillingMode,
+    expectedDischarge: admission.expectedDischarge?.toISOString() ?? null,
+    admittedAt: admission.admittedAt.toISOString(),
+    diagnosis: admission.diagnosis,
+    attendingDoctorId: admission.attendingDoctorId,
+    doctorName: admission.doctorName,
+    lastRoundAt: admission.lastRoundAt?.toISOString() ?? null,
+    lastRoundNote: admission.lastRoundNote ?? null,
     status: admission.status as IpdAdmissionStatus,
   };
   return detail;
@@ -163,20 +251,23 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
   await ensureHospitalBootstrap();
   const scope = branchScope(ctx);
 
-  const ward = IPD_WARD_OPTIONS.find((w) => w.id === input.wardId);
-  if (!ward) throw new ServerActionError("VALIDATION", "Ward not found.");
-  if (!ward.beds.includes(input.bed)) throw new ServerActionError("VALIDATION", "Bed is not in selected ward.");
-
   if (!input.patientId?.trim()) throw new ServerActionError("VALIDATION", "Select a registered patient.");
   if (!input.doctorId?.trim()) throw new ServerActionError("VALIDATION", "Select an attending doctor.");
   if (!input.departmentId?.trim()) throw new ServerActionError("VALIDATION", "Select a department.");
+  if (!input.wardId?.trim()) throw new ServerActionError("VALIDATION", "Select a ward.");
+  if (!input.bed?.trim()) throw new ServerActionError("VALIDATION", "Select a bed.");
+
+  const bed = await prisma.ipdBed.findFirst({
+    where: { id: input.bed, wardId: input.wardId, branchId: scope.branchId },
+    include: { ward: true },
+  });
+  if (!bed) throw new ServerActionError("VALIDATION", "Selected bed not found.");
 
   const existingOccupant = await prisma.ipdAdmission.findFirst({
     where: {
       tenantId: scope.tenantId,
       branchId: scope.branchId,
-      ward: ward.label,
-      bed: input.bed,
+      bedId: bed.id,
       status: { in: ["admitted", "discharge_planned"] },
     },
   });
@@ -198,7 +289,6 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
   const visitId = createId("vis");
   const ipdId = `ipd_${visitId}`;
   const now = new Date().toISOString();
-  const admittedAt = now.slice(0, 10);
 
   await prisma.$transaction(async (tx) => {
     await tx.opdVisit.create({
@@ -227,14 +317,14 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
         ...scope,
         visitId,
         patientId: input.patientId,
-        ward: ward.label,
-        bed: input.bed,
-        category: ward.category,
+        wardId: bed.wardId,
+        bedId: bed.id,
+        doctorName,
+        diagnosis: input.diagnosis,
         patientType: input.patientType,
         billingMode: input.billingMode,
-        expectedDischarge: input.expectedDischarge,
-        admittedAt,
-        diagnosis: input.diagnosis,
+        expectedDischarge: input.expectedDischarge ? new Date(input.expectedDischarge) : null,
+        admittedAt: new Date(),
         attendingDoctorId: input.doctorId,
         status: "admitted",
       },
@@ -250,10 +340,10 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
     action: "ipd_admitted",
     entityType: "ipd_admission",
     entityId: ipdId,
-    summary: `Admitted ${patientName} to ${ward.label} bed ${input.bed}`,
+    summary: `Admitted ${patientName} to ${bed.ward.label} bed ${bed.label}`,
     payload: {
-      ward: ward.label,
-      bed: input.bed,
+      ward: bed.ward.label,
+      bed: bed.label,
       patientType: input.patientType,
       billingMode: input.billingMode,
     },
@@ -268,9 +358,8 @@ export async function updateIpdAdmission(
   patch: {
     status?: IpdAdmissionStatus;
     expectedDischarge?: string;
-    bed?: string;
-    ward?: string;
     diagnosis?: string;
+    lastRoundNote?: string;
   },
 ) {
   const scope = branchScope(ctx);
@@ -281,33 +370,14 @@ export async function updateIpdAdmission(
 
   const data: Record<string, unknown> = {};
   if (patch.status) data.status = patch.status;
-  if (patch.expectedDischarge !== undefined) data.expectedDischarge = patch.expectedDischarge;
-  if (patch.diagnosis) data.diagnosis = patch.diagnosis;
-
-  if (patch.bed && patch.ward && (patch.bed !== existing.bed || patch.ward !== existing.ward)) {
-    const ward = IPD_WARD_OPTIONS.find((w) => w.label === patch.ward);
-    if (!ward) throw new ServerActionError("VALIDATION", "Ward not found.");
-    if (!ward.beds.includes(patch.bed)) throw new ServerActionError("VALIDATION", "Bed is not in selected ward.");
-    const occupant = await prisma.ipdAdmission.findFirst({
-      where: {
-        tenantId: scope.tenantId,
-        branchId: scope.branchId,
-        ward: patch.ward,
-        bed: patch.bed,
-        status: { in: ["admitted", "discharge_planned"] },
-        NOT: { id },
-      },
-    });
-    if (occupant) throw new ServerActionError("CONFLICT", "Target bed is already occupied.");
-    data.ward = patch.ward;
-    data.bed = patch.bed;
-    data.category = ward.category;
+  if (patch.expectedDischarge !== undefined) data.expectedDischarge = patch.expectedDischarge ? new Date(patch.expectedDischarge) : null;
+  if (patch.diagnosis !== undefined) data.diagnosis = patch.diagnosis;
+  if (patch.lastRoundNote !== undefined) {
+    data.lastRoundNote = patch.lastRoundNote;
+    data.lastRoundAt = new Date();
   }
 
-  await prisma.ipdAdmission.update({
-    where: { id },
-    data,
-  });
+  await prisma.ipdAdmission.update({ where: { id }, data });
 
   await writePlatformAudit({
     ctx,
@@ -319,5 +389,133 @@ export async function updateIpdAdmission(
     payload: patch,
   });
 
+  return { id };
+}
+
+export async function transferIpdAdmission(
+  ctx: ServerContext,
+  id: string,
+  target: { wardId: string; bedId: string },
+) {
+  const scope = branchScope(ctx);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
+    include: { ward: true, bed: true },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+
+  const targetBed = await prisma.ipdBed.findFirst({
+    where: { id: target.bedId, wardId: target.wardId, branchId: scope.branchId },
+    include: { ward: true },
+  });
+  if (!targetBed) throw new ServerActionError("VALIDATION", "Target bed not found.");
+
+  const occupant = await prisma.ipdAdmission.findFirst({
+    where: {
+      tenantId: scope.tenantId,
+      branchId: scope.branchId,
+      bedId: targetBed.id,
+      status: { in: ["admitted", "discharge_planned"] },
+      NOT: { id },
+    },
+  });
+  if (occupant) throw new ServerActionError("CONFLICT", "Target bed is already occupied.");
+
+  await prisma.ipdAdmission.update({
+    where: { id },
+    data: {
+      wardId: targetBed.wardId,
+      bedId: targetBed.id,
+    },
+  });
+
+  await writePlatformAudit({
+    ctx,
+    module: "frontdesk",
+    action: "ipd_transferred",
+    entityType: "ipd_admission",
+    entityId: id,
+    summary: `Transferred IPD admission from ${admission.ward.label} ${admission.bed.label} to ${targetBed.ward.label} ${targetBed.label}`,
+    payload: { fromWardId: admission.wardId, fromBedId: admission.bedId, toWardId: targetBed.wardId, toBedId: targetBed.id },
+  });
+
+  return { id };
+}
+
+export async function createIpdWard(ctx: ServerContext, input: { label: string; category: string }) {
+  await backfillBranchScope(ctx);
+  const scope = branchScope(ctx);
+  const id = createId("ipdward");
+  const ward = await prisma.ipdWard.create({
+    data: { id, ...scope, label: input.label, category: input.category },
+  });
+  return { id: ward.id, label: ward.label, category: ward.category };
+}
+
+export async function updateIpdWard(ctx: ServerContext, id: string, input: { label?: string; category?: string; active?: boolean }) {
+  const scope = branchScope(ctx);
+  const existing = await prisma.ipdWard.findFirst({
+    where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
+  });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "Ward not found.");
+  const data: Record<string, unknown> = {};
+  if (input.label !== undefined) data.label = input.label;
+  if (input.category !== undefined) data.category = input.category;
+  if (input.active !== undefined) data.active = input.active;
+  await prisma.ipdWard.update({ where: { id }, data });
+  return { id };
+}
+
+export async function deleteIpdWard(ctx: ServerContext, id: string) {
+  const scope = branchScope(ctx);
+  const existing = await prisma.ipdWard.findFirst({
+    where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
+    include: { beds: { where: { active: true } }, admissions: { where: { status: { in: ["admitted", "discharge_planned"] } } } },
+  });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "Ward not found.");
+  if (existing.admissions.length > 0) throw new ServerActionError("CONFLICT", "Cannot delete ward with active admissions.");
+  await prisma.ipdWard.delete({ where: { id } });
+  return { id };
+}
+
+export async function createIpdBed(ctx: ServerContext, wardId: string, input: { label: string }) {
+  const scope = branchScope(ctx);
+  const ward = await prisma.ipdWard.findFirst({
+    where: { id: wardId, tenantId: scope.tenantId, branchId: scope.branchId },
+  });
+  if (!ward) throw new ServerActionError("NOT_FOUND", "Ward not found.");
+  const id = createId("ipdbed");
+  const bed = await prisma.ipdBed.create({
+    data: { id, ...scope, wardId, label: input.label },
+  });
+  return { id: bed.id, label: bed.label };
+}
+
+export async function updateIpdBed(ctx: ServerContext, id: string, input: { label?: string; active?: boolean }) {
+  const scope = branchScope(ctx);
+  const existing = await prisma.ipdBed.findFirst({
+    where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
+    include: { admissions: { where: { status: { in: ["admitted", "discharge_planned"] } } } },
+  });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "Bed not found.");
+  if (input.active === false && existing.admissions.length > 0) {
+    throw new ServerActionError("CONFLICT", "Cannot deactivate an occupied bed.");
+  }
+  const data: Record<string, unknown> = {};
+  if (input.label !== undefined) data.label = input.label;
+  if (input.active !== undefined) data.active = input.active;
+  await prisma.ipdBed.update({ where: { id }, data });
+  return { id };
+}
+
+export async function deleteIpdBed(ctx: ServerContext, id: string) {
+  const scope = branchScope(ctx);
+  const existing = await prisma.ipdBed.findFirst({
+    where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
+    include: { admissions: { where: { status: { in: ["admitted", "discharge_planned"] } } } },
+  });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "Bed not found.");
+  if (existing.admissions.length > 0) throw new ServerActionError("CONFLICT", "Cannot delete an occupied bed.");
+  await prisma.ipdBed.delete({ where: { id } });
   return { id };
 }

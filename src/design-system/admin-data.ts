@@ -146,7 +146,7 @@ export type ExpenseEntry = {
   date: string;
   vendor: string;
   category: string;
-  departmentId: string;
+  departmentId?: string;
   amount: number;
   status: "pending" | "approved" | "rejected";
   notes?: string;
@@ -173,6 +173,19 @@ export type RevenueSharePolicy = {
   ipdDayFixed: number;
   appliesToPartial: boolean;
   active: boolean;
+};
+
+export type ReferralDoctor = {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  clinicName?: string;
+  address?: string;
+  specialization?: string;
+  commissionPercent: number;
+  active: boolean;
+  notes?: string;
 };
 
 export type ShareSimulation = {

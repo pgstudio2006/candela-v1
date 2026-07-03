@@ -9,6 +9,7 @@ import {
   ListOrdered,
   Monitor,
   Stethoscope,
+  Siren,
   UserPlus,
   Users,
   type LucideIcon,
@@ -37,6 +38,7 @@ export const FRONTDESK_NAV: FrontdeskNavItem[] = [
   { id: "registration", label: "Registration", href: "/app/frontdesk/registration", icon: UserPlus, color: "#2563EB" },
   { id: "patients", label: "Patients", href: "/app/frontdesk/patients", icon: Users, color: "#0EA5E9" },
   { id: "ipd", label: "IPD", href: "/app/frontdesk/ipd", icon: BedDouble, color: "#E11D48" },
+  { id: "emergency", label: "Emergency", href: "/app/frontdesk/emergency", icon: Siren, color: "#DC2626" },
   { id: "check-in", label: "Check-in", href: "/app/frontdesk/check-in", icon: ClipboardCheck, color: "#14B8A6" },
   { id: "appointments", label: "Appointments", href: "/app/frontdesk/appointments", icon: Calendar, color: "#F59E0B" },
   { id: "queue", label: "Queue", href: "/app/frontdesk/queue", icon: ListOrdered, color: "#F97316" },
@@ -49,6 +51,7 @@ export const FRONTDESK_NAV: FrontdeskNavItem[] = [
 
 export const FRONTDESK_LISTS: FrontdeskListItem[] = [
   { id: "all-patients", label: "All patients", href: "/app/frontdesk/patients", icon: Users, color: "#3B82F6" },
+  { id: "emergency", label: "Emergency", href: "/app/frontdesk/emergency", icon: Siren, color: "#DC2626" },
   { id: "ipd", label: "IPD ward", href: "/app/frontdesk/ipd", icon: BedDouble, color: "#E11D48" },
   { id: "today-queue", label: "Today's queue", href: "/app/frontdesk/queue", icon: ListOrdered, color: "#F97316" },
   { id: "pending-billing", label: "Pending billing", href: "/app/frontdesk/billing", icon: CreditCard, color: "#10B981" },

@@ -8,6 +8,7 @@ import type {
   GeoCluster,
   MisReport,
   MrdRequest,
+  ReferralDoctor,
   RevenueSharePolicy,
   StaffMember,
 } from "@/design-system/admin-data";
@@ -25,6 +26,7 @@ import {
   computeLiveGeoClusters,
   type DataMiningSnapshot,
 } from "@/lib/admin-analytics";
+import { isPataudiBranch } from "@/lib/auth-types";
 import { doctorIdFromStaffId } from "@/lib/healthcare-roles";
 import { syncDoctorToDepartments, removeDoctorFromAllDepartments } from "@/server/admin/doctor-department-sync";
 import {
@@ -63,6 +65,7 @@ export type AdminSnapshot = {
   geo: GeoCluster[];
   expenses: ExpenseEntry[];
   revenuePolicies: RevenueSharePolicy[];
+  referralDoctors: ReferralDoctor[];
   mrdRequests: MrdRequest[];
   misReports: MisReport[];
   settings: AdminPlatformSettings;
@@ -227,6 +230,7 @@ export async function getAdminSnapshotForContext(
     geo,
     expenses,
     revenuePolicies,
+    referralDoctors,
     mrdRequests,
     misReports,
     auditEvents,
@@ -249,6 +253,7 @@ export async function getAdminSnapshotForContext(
     prisma.adminGeoPin.findMany({ where: branchScope(ctx), orderBy: { patientCount: "desc" } }),
     prisma.adminExpense.findMany({ where: branchScopedWhere(ctx), orderBy: { date: "desc" } }),
     prisma.adminRevenuePolicy.findMany({ where: branchScope(ctx), orderBy: { label: "asc" } }),
+    prisma.referralDoctor.findMany({ where: branchScopedWhere(ctx), orderBy: { name: "asc" } }),
     prisma.adminMrdRequest.findMany({ where: branchScope(ctx), orderBy: { requestedAt: "desc" } }),
     prisma.adminMisReport.findMany({ where: branchScope(ctx), orderBy: { label: "asc" } }),
     prisma.adminAuditLog.findMany({ where: branchScope(ctx), orderBy: { at: "desc" }, take: 300 }),
@@ -348,6 +353,7 @@ export async function getAdminSnapshotForContext(
     submissionRows,
     consultationRows,
     mappedDiseaseMap,
+    ctx.branchName,
   );
   const liveDiseaseClusters = computeLiveDiseaseClusters(
     liveGeo,
@@ -392,23 +398,25 @@ export async function getAdminSnapshotForContext(
     diseaseMap: mappedDiseaseMap,
     diseaseClusters: (liveDiseaseClusters.length
       ? liveDiseaseClusters
-      : diseaseClusters.map((x) => ({
-          id: x.id,
-          locality: x.locality,
-          lat: x.lat,
-          lng: x.lng,
-          caseCount: x.caseCount,
-          severity: x.severity as DiseaseCluster["severity"],
-          topDisease: x.topDisease,
-          surgePercent: x.surgePercent ?? undefined,
-        }))) as DiseaseCluster[],
+      : isPataudiBranch(ctx.branchName)
+        ? []
+        : diseaseClusters.map((x) => ({
+            id: x.id,
+            locality: x.locality,
+            lat: x.lat,
+            lng: x.lng,
+            caseCount: x.caseCount,
+            severity: x.severity as DiseaseCluster["severity"],
+            topDisease: x.topDisease,
+            surgePercent: x.surgePercent ?? undefined,
+          }))) as DiseaseCluster[],
     geo: liveGeo,
     expenses: expenses.map((x) => ({
       id: x.id,
       date: x.date,
       vendor: x.vendor,
       category: x.category,
-      departmentId: x.departmentId,
+      departmentId: x.departmentId ?? undefined,
       amount: Number(x.amount),
       status: x.status as ExpenseEntry["status"],
       notes: x.notes ?? undefined,
@@ -423,6 +431,18 @@ export async function getAdminSnapshotForContext(
       ipdDayFixed: Number(x.ipdDayFixed),
       appliesToPartial: x.appliesToPartial,
       active: x.active,
+    })),
+    referralDoctors: referralDoctors.map((x) => ({
+      id: x.id,
+      name: x.name,
+      phone: x.phone ?? undefined,
+      email: x.email ?? undefined,
+      clinicName: x.clinicName ?? undefined,
+      address: x.address ?? undefined,
+      specialization: x.specialization ?? undefined,
+      commissionPercent: Number(x.commissionPercent),
+      active: x.active,
+      notes: x.notes ?? undefined,
     })),
     mrdRequests: mrdRequests.map((x) => ({
       id: x.id,
@@ -761,7 +781,17 @@ export async function addExpense(
     operator,
     async () => {
       await prisma.adminExpense.create({
-        data: { id: newId, ...input, branchId: ctx.branchId, status: input.status ?? "pending" },
+        data: {
+          id: newId,
+          date: input.date,
+          vendor: input.vendor,
+          category: input.category,
+          departmentId: input.departmentId ?? null,
+          amount: input.amount,
+          status: input.status ?? "pending",
+          notes: input.notes ?? null,
+          branchId: ctx.branchId,
+        },
       });
     },
     {
@@ -844,6 +874,88 @@ export async function addRevenuePolicy(
       entityType: "revenue_policy",
       entityId: newId,
       summary: `Revenue policy added: ${input.label}`,
+    },
+  );
+}
+
+export async function updateReferralDoctor(
+  ctx: ServerContext,
+  operator: AdminOperator,
+  idValue: string,
+  patch: Partial<ReferralDoctor>,
+) {
+  assertConfigAccess(operator);
+  const data: Record<string, unknown> = { ...patch };
+  if (patch.commissionPercent !== undefined) data.commissionPercent = patch.commissionPercent;
+  return auditedMutation(
+    ctx,
+    operator,
+    async () => {
+      await prisma.referralDoctor.update({
+        where: { id: idValue, tenantId: ctx.tenantId, branchId: ctx.branchId },
+        data,
+      });
+    },
+    {
+      module: "admin",
+      action: "referral_doctor_updated",
+      entityType: "referral_doctor",
+      entityId: idValue,
+      summary: `Referral source updated: ${idValue}`,
+      payload: patch,
+    },
+  );
+}
+
+export async function addReferralDoctor(
+  ctx: ServerContext,
+  operator: AdminOperator,
+  input: Omit<ReferralDoctor, "id">,
+) {
+  assertConfigAccess(operator);
+  const newId = createId("refdr");
+  return auditedMutation(
+    ctx,
+    operator,
+    async () => {
+      await prisma.referralDoctor.create({
+        data: {
+          id: newId,
+          ...input,
+          tenantId: ctx.tenantId,
+          branchId: ctx.branchId,
+        },
+      });
+    },
+    {
+      module: "admin",
+      action: "referral_doctor_added",
+      entityType: "referral_doctor",
+      entityId: newId,
+      summary: `Referral source added: ${input.name}`,
+    },
+  );
+}
+
+export async function removeReferralDoctor(
+  ctx: ServerContext,
+  operator: AdminOperator,
+  idValue: string,
+) {
+  assertConfigAccess(operator);
+  return auditedMutation(
+    ctx,
+    operator,
+    async () => {
+      await prisma.referralDoctor.delete({ where: { id: idValue, tenantId: ctx.tenantId, branchId: ctx.branchId } });
+    },
+    {
+      module: "admin",
+      action: "referral_doctor_removed",
+      entityType: "referral_doctor",
+      entityId: idValue,
+      summary: `Referral source removed: ${idValue}`,
+      severity: "warning",
     },
   );
 }

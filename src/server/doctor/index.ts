@@ -23,6 +23,7 @@ import {
   requireDoctorVisit,
 } from "@/server/doctor/guards";
 import { ensureVisitDoctorAssignment } from "@/server/doctor/visit-claim";
+import { ensureIpdWardBed } from "@/server/ipd";
 import { ServerActionError } from "@/server/errors";
 import { notifyPrescriptionWhatsapp } from "@/server/notifications";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
@@ -154,6 +155,7 @@ export async function getDoctorSnapshot(
       }),
       prisma.ipdAdmission.findMany({
         where: { ...branchScope(ctx), attendingDoctorId: doctorId },
+        include: { ward: true, bed: true },
         orderBy: { createdAt: "asc" },
       }),
       prisma.doctorTemplate.findMany({
@@ -217,14 +219,15 @@ export async function getDoctorSnapshot(
       .filter((row) => branchPatientIds.has(row.patientId))
       .map((row) => ({
         id: row.id,
-        visitId: row.visitId,
+        visitId: row.visitId ?? undefined,
         patientId: row.patientId,
-        ward: row.ward,
-        bed: row.bed,
-        admittedAt: row.admittedAt,
+        ward: row.ward.label,
+        bed: row.bed.label,
+        category: row.ward.category,
+        admittedAt: row.admittedAt.toISOString(),
         diagnosis: row.diagnosis,
         attendingDoctorId: row.attendingDoctorId,
-        lastRoundAt: row.lastRoundAt ?? undefined,
+        lastRoundAt: row.lastRoundAt?.toISOString() ?? undefined,
         lastRoundNote: row.lastRoundNote ?? undefined,
         status: row.status as IpdPatient["status"],
       })),
@@ -538,14 +541,17 @@ export async function completeConsultation(
 
     if (opts.treatmentMode === "ipd") {
       ipdAdmissionId = `ipd_${visitId}`;
-      const ward = String(opts.handoff.ward ?? "MSK Ward A");
+      const wardLabel = String(opts.handoff.ward ?? "MSK Ward A");
+      const bedLabel = String(opts.handoff.bed ?? "A-14");
+      const { wardId, bedId } = await ensureIpdWardBed(tx, ctx, wardLabel, bedLabel, "general");
       await tx.ipdAdmission.upsert({
         where: { visitId },
         update: {
           diagnosis: diagnosisSummary,
           attendingDoctorId: doctorId,
           status: "admitted",
-          ward,
+          wardId,
+          bedId,
         },
         create: {
           id: ipdAdmissionId,
@@ -553,12 +559,12 @@ export async function completeConsultation(
           branchId: ctx.branchId,
           visitId,
           patientId: visit.patientId,
-          ward,
-          bed: String(opts.handoff.bed ?? "A-14"),
-          category: "general",
+          wardId,
+          bedId,
+          doctorName: visit.doctorName ?? doctorId,
           patientType: "general",
           billingMode: "prepaid",
-          admittedAt: new Date().toISOString().slice(0, 10),
+          admittedAt: new Date(),
           diagnosis: diagnosisSummary,
           attendingDoctorId: doctorId,
           status: "admitted",
@@ -571,7 +577,7 @@ export async function completeConsultation(
           branchId: ctx.branchId,
           role: "nurse",
           onDuty: true,
-          ...(ward ? { ward: ward as any } : {}),
+          ...(wardLabel ? { ward: wardLabel as any } : {}),
         },
       });
 
@@ -579,7 +585,7 @@ export async function completeConsultation(
         await tx.nursingHandoff.upsert({
           where: { visitId },
           update: {
-            ipdWard: ward,
+            ipdWard: wardLabel,
             ipdBed: String(opts.handoff.bed ?? "A-14"),
           },
           create: {
@@ -600,7 +606,7 @@ export async function completeConsultation(
             commercialConsent: false,
             billingHandoff: opts.handoff,
             consultation: updatedConsult,
-            ipdWard: ward,
+            ipdWard: wardLabel,
             ipdBed: String(opts.handoff.bed ?? "A-14"),
             sentAt: completedAt,
           },
@@ -826,8 +832,9 @@ export async function saveIpdRound(
   note: Record<string, string | number | boolean>,
 ) {
   const doctorId = await resolveDoctorIdForContext(ctx);
-  const ipd = await prisma.ipdAdmission.findFirst({ where: { id: ipdId, ...branchScope(ctx) } });
+  const ipd = await prisma.ipdAdmission.findFirst({ where: { id: ipdId, ...branchScope(ctx) }, include: { ward: true, bed: true } });
   if (!ipd) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  if (!ipd.visitId) throw new ServerActionError("VALIDATION", "IPD admission has no linked visit.");
   await requireDoctorVisit(ctx, ipd.visitId);
   if (ipd.attendingDoctorId !== doctorId && doctorId !== DEMO_DOCTOR_ID) {
     throw new ServerActionError("FORBIDDEN", "You are not the attending doctor for this admission.");
@@ -839,7 +846,7 @@ export async function saveIpdRound(
   await prisma.$transaction([
     prisma.ipdAdmission.update({
       where: { id: ipdId },
-      data: { lastRoundAt: now, lastRoundNote: text },
+      data: { lastRoundAt: new Date(), lastRoundNote: text },
     }),
     prisma.formSubmission.create({
       data: {
@@ -861,13 +868,13 @@ export async function saveIpdRound(
     action: "ipd_round_saved",
     entityType: "ipd_admission",
     entityId: ipdId,
-    summary: `Ward round recorded for ${ipd.ward} bed ${ipd.bed}`,
+    summary: `Ward round recorded for ${ipd.ward.label} bed ${ipd.bed.label}`,
   });
 }
 
 export async function getIpdRoundHistory(ctx: ServerContext, ipdId: string): Promise<IpdRoundRecord[]> {
   const ipd = await prisma.ipdAdmission.findFirst({ where: { id: ipdId, ...branchScope(ctx) } });
-  if (!ipd) return [];
+  if (!ipd || !ipd.visitId) return [];
   await requireDoctorVisit(ctx, ipd.visitId);
 
   const rows = await prisma.formSubmission.findMany({

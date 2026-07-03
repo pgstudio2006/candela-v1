@@ -5,6 +5,15 @@ export type IpdWard = {
   beds: string[];
 };
 
+export type IpdBedRow = {
+  id: string;
+  wardId: string;
+  label: string;
+  active: boolean;
+  occupied: boolean;
+  admission?: IpdBedSummary["beds"][number]["admission"];
+};
+
 export const IPD_WARD_OPTIONS: IpdWard[] = [
   { id: "msk_a", label: "MSK Ward A", category: "general", beds: ["A-12", "A-13", "A-14", "A-15"] },
   { id: "msk_b", label: "MSK Ward B", category: "general", beds: ["B-01", "B-02", "B-03"] },

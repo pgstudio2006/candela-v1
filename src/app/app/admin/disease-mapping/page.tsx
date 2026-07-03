@@ -3,6 +3,8 @@
 import { DiseaseMappingGraph } from "@/components/admin/disease-graph";
 import { AdminLeafletMap, diseaseToMapPoints } from "@/components/admin/leaflet-map";
 import { useAdminStore } from "@/components/admin/admin-store";
+import { useSession } from "@/components/candela/session-provider";
+import { isPataudiBranch } from "@/lib/auth-types";
 import { GroupedBarChart, ChartCard } from "@/components/doctor/analytics-charts";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel } from "@/components/frontdesk/ui";
@@ -18,6 +20,8 @@ const SEVERITY_DOT = {
 } as const;
 
 export default function AdminDiseaseMappingPage() {
+  const { session } = useSession();
+  const pataudi = isPataudiBranch(session?.branchName);
   const { diseaseMap, diseaseClusters, settings, logAdminAction } = useAdminStore();
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [tab, setTab] = useState<"clusters" | "clinical">("clusters");
@@ -115,17 +119,19 @@ export default function AdminDiseaseMappingPage() {
             </Panel>
           </div>
 
-          <ChartCard title="Seasonal disease pattern" subtitle="Reference baseline · anonymized aggregate" className="mt-4">
-            <GroupedBarChart
-              groups={seasonalGroups}
-              legend={[
-                { key: "dengue", label: "Dengue", color: "#dc2626" },
-                { key: "tb", label: "Tuberculosis", color: "#1b1b1b" },
-                { key: "diabetes", label: "Diabetes", color: "#94a3b8" },
-                { key: "hypertension", label: "Hypertension", color: "#f97316" },
-              ]}
-            />
-          </ChartCard>
+          {!pataudi && (
+            <ChartCard title="Seasonal disease pattern" subtitle="Reference baseline · anonymized aggregate" className="mt-4">
+              <GroupedBarChart
+                groups={seasonalGroups}
+                legend={[
+                  { key: "dengue", label: "Dengue", color: "#dc2626" },
+                  { key: "tb", label: "Tuberculosis", color: "#1b1b1b" },
+                  { key: "diabetes", label: "Diabetes", color: "#94a3b8" },
+                  { key: "hypertension", label: "Hypertension", color: "#f97316" },
+                ]}
+              />
+            </ChartCard>
+          )}
         </>
       ) : (
         <>

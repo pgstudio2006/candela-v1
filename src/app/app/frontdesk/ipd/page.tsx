@@ -4,16 +4,16 @@ import {
   admitPatientAction,
   getIpdAdmissionAction,
   getIpdSnapshotAction,
+  transferIpdAdmissionAction,
   updateIpdAdmissionAction,
 } from "@/app/actions/ipd-actions";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, MetricStrip, Panel } from "@/components/frontdesk/ui";
 import { PatientSearchField } from "@/components/frontdesk/patient-search-field";
 import { useToast } from "@/components/ui/toast-provider";
-import { IPD_WARD_OPTIONS } from "@/design-system/ipd-data";
 import type { IpdAdmissionDetail, IpdAdmissionStatus, IpdBillingMode, IpdPatientType, IpdSnapshot } from "@/design-system/ipd-data";
 import { cn } from "@/lib/utils";
-import { BedDouble, Calendar, Loader2, Pencil, Plus, Stethoscope, User } from "lucide-react";
+import { ArrowRightLeft, BedDouble, Calendar, Loader2, Pencil, Plus, Stethoscope, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -24,7 +24,7 @@ export default function FrontdeskIpdPage() {
   const [selectedBed, setSelectedBed] = useState<{ wardId: string; bedId: string } | null>(null);
   const [selectedAdmission, setSelectedAdmission] = useState<IpdAdmissionDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dialog, setDialog] = useState<"admit" | "edit" | null>(null);
+  const [dialog, setDialog] = useState<"admit" | "edit" | "transfer" | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
@@ -32,7 +32,7 @@ export default function FrontdeskIpdPage() {
     if (result.ok) {
       setSnapshot(result.data);
     } else {
-      toast(result.error ?? "Failed to load IPD snapshot", "error");
+      toast((result as any).error ?? "Failed to load IPD snapshot", "error");
     }
     setLoading(false);
   }, [toast]);
@@ -65,12 +65,21 @@ export default function FrontdeskIpdPage() {
   }, [snapshot]);
 
   const [selectedPatient, setSelectedPatient] = useState<NonNullable<IpdSnapshot>["patients"][number] | null>(null);
-  const [admitWardId, setAdmitWardId] = useState(selectedBed?.wardId ?? IPD_WARD_OPTIONS[0].id);
+  const [admitWardId, setAdmitWardId] = useState(selectedBed?.wardId ?? (snapshot?.wards[0]?.wardId ?? ""));
+  const [transferWardId, setTransferWardId] = useState("");
+  const [transferBedId, setTransferBedId] = useState("");
 
   useEffect(() => {
-    setAdmitWardId(selectedBed?.wardId ?? IPD_WARD_OPTIONS[0].id);
+    setAdmitWardId(selectedBed?.wardId ?? (snapshot?.wards[0]?.wardId ?? ""));
     setSelectedPatient(null);
-  }, [selectedBed, dialog]);
+  }, [selectedBed, dialog, snapshot?.wards]);
+
+  useEffect(() => {
+    if (dialog === "transfer" && selectedAdmission) {
+      setTransferWardId("");
+      setTransferBedId("");
+    }
+  }, [dialog, selectedAdmission]);
 
   const handleAdmit = async (formData: FormData) => {
     const patientId = formData.get("patientId") as string;
@@ -78,7 +87,7 @@ export default function FrontdeskIpdPage() {
     const departmentId = formData.get("departmentId") as string;
     const diagnosis = formData.get("diagnosis") as string;
     const wardId = formData.get("wardId") as string;
-    const bed = formData.get("bed") as string;
+    const bedId = formData.get("bedId") as string;
     const patientType = formData.get("patientType") as string;
     const billingMode = formData.get("billingMode") as string;
     const expectedDischarge = formData.get("expectedDischarge") as string;
@@ -89,7 +98,7 @@ export default function FrontdeskIpdPage() {
       departmentId,
       diagnosis,
       wardId,
-      bed,
+      bed: bedId,
       patientType: patientType as IpdPatientType,
       billingMode: billingMode as IpdBillingMode,
       expectedDischarge: expectedDischarge || undefined,
@@ -101,7 +110,7 @@ export default function FrontdeskIpdPage() {
       setSelectedPatient(null);
       setRefreshKey((k) => k + 1);
     } else {
-      toast(result.error ?? "Admission failed", "error");
+      toast((result as any).error ?? "Admission failed", "error");
     }
   };
 
@@ -120,9 +129,29 @@ export default function FrontdeskIpdPage() {
       const updated = await getIpdAdmissionAction(selectedAdmission.id);
       if (updated.ok) setSelectedAdmission(updated.data);
     } else {
-      toast(result.error ?? "Update failed", "error");
+      toast((result as any).error ?? "Update failed", "error");
     }
   };
+
+  const handleTransfer = async (formData: FormData) => {
+    if (!selectedAdmission) return;
+    const wardId = formData.get("transferWardId") as string;
+    const bedId = formData.get("transferBedId") as string;
+    if (!wardId || !bedId) return toast("Select a target ward and bed", "error");
+    const result = await transferIpdAdmissionAction(selectedAdmission.id, { wardId, bedId });
+    if (result.ok) {
+      toast("Patient transferred", "success");
+      setDialog(null);
+      setTransferWardId("");
+      setTransferBedId("");
+      setRefreshKey((k) => k + 1);
+    } else {
+      toast((result as any).error ?? "Transfer failed", "error");
+    }
+  };
+
+  const selectedWard = snapshot?.wards.find((w) => w.wardId === admitWardId);
+  const transferWard = snapshot?.wards.find((w) => w.wardId === transferWardId);
 
   return (
     <PageChrome
@@ -170,7 +199,7 @@ export default function FrontdeskIpdPage() {
                         >
                           <span className="flex items-center gap-1.5 text-[12px] font-medium">
                             <BedDouble className="size-3.5" />
-                            {bed.id}
+                            {bed.label}
                           </span>
                           <span className="text-[11px] text-[var(--attio-text-secondary)]">
                             {bed.occupied ? (
@@ -239,6 +268,10 @@ export default function FrontdeskIpdPage() {
                             <Pencil className="size-3.5" />
                             Edit
                           </AttioButton>
+                          <AttioButton variant="secondary" className="gap-1.5" onClick={() => setDialog("transfer")}>
+                            <ArrowRightLeft className="size-3.5" />
+                            Transfer
+                          </AttioButton>
                           <AttioButton
                             variant="secondary"
                             className="gap-1.5"
@@ -300,11 +333,11 @@ export default function FrontdeskIpdPage() {
           <div className="w-full max-w-lg overflow-hidden rounded-xl border border-[var(--attio-border)] bg-white shadow-xl">
             <div className="border-b border-[var(--attio-border-subtle)] px-4 py-3">
               <h3 className="text-[15px] font-semibold">
-                {dialog === "admit" ? "Admit patient" : "Update admission"}
+                {dialog === "admit" ? "Admit patient" : dialog === "transfer" ? "Transfer patient" : "Update admission"}
               </h3>
             </div>
             <form
-              action={dialog === "admit" ? handleAdmit : handleUpdate}
+              action={dialog === "admit" ? handleAdmit : dialog === "transfer" ? handleTransfer : handleUpdate}
               className="max-h-[80vh] overflow-y-auto p-4"
             >
               {dialog === "admit" ? (
@@ -363,9 +396,9 @@ export default function FrontdeskIpdPage() {
                         onChange={(e) => setAdmitWardId(e.target.value)}
                         className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3"
                       >
-                        {IPD_WARD_OPTIONS.map((w) => (
-                          <option key={w.id} value={w.id}>
-                            {w.label}
+                        {snapshot?.wards.map((w) => (
+                          <option key={w.wardId} value={w.wardId}>
+                            {w.ward}
                           </option>
                         ))}
                       </select>
@@ -373,13 +406,13 @@ export default function FrontdeskIpdPage() {
                     <label className="block text-[12px]">
                       <span className="mb-1 block text-[var(--attio-text-tertiary)]">Bed</span>
                       <select
-                        name="bed"
+                        name="bedId"
                         defaultValue={selectedBed?.bedId}
                         className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3"
                       >
-                        {IPD_WARD_OPTIONS.find((w) => w.id === admitWardId)?.beds.map((b) => (
-                          <option key={b} value={b}>
-                            {b}
+                        {selectedWard?.beds.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.label}
                           </option>
                         ))}
                       </select>
@@ -410,6 +443,54 @@ export default function FrontdeskIpdPage() {
                       type="date"
                       className="h-9 w-full rounded-lg border border-[var(--attio-border)] px-3"
                     />
+                  </label>
+                </div>
+              ) : dialog === "transfer" ? (
+                <div className="space-y-3">
+                  <p className="text-[13px] text-[var(--attio-text-secondary)]">
+                    Transfer {selectedAdmission?.patientName} to a new ward and bed.
+                  </p>
+                  <label className="block text-[12px]">
+                    <span className="mb-1 block text-[var(--attio-text-tertiary)]">Target ward</span>
+                    <select
+                      name="transferWardId"
+                      value={transferWardId}
+                      onChange={(e) => {
+                        setTransferWardId(e.target.value);
+                        setTransferBedId("");
+                      }}
+                      required
+                      className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3"
+                    >
+                      <option value="">Select ward</option>
+                      {snapshot?.wards.map((w) => (
+                        <option key={w.wardId} value={w.wardId}>
+                          {w.ward}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-[12px]">
+                    <span className="mb-1 block text-[var(--attio-text-tertiary)]">Target bed</span>
+                    <select
+                      name="transferBedId"
+                      value={transferBedId}
+                      onChange={(e) => setTransferBedId(e.target.value)}
+                      required
+                      className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3"
+                    >
+                      <option value="">Select bed</option>
+                      {transferWard?.beds
+                        .filter((b) => !b.occupied || b.id === selectedBed?.bedId)
+                        .map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.label}
+                          </option>
+                        ))}
+                    </select>
+                    {transferWardId && transferWard?.beds.every((b) => b.occupied && b.id !== selectedBed?.bedId) && (
+                      <p className="mt-1 text-[11px] text-amber-600">No free beds in this ward.</p>
+                    )}
                   </label>
                 </div>
               ) : (
@@ -443,7 +524,7 @@ export default function FrontdeskIpdPage() {
                   Cancel
                 </AttioButton>
                 <AttioButton type="submit" variant="primary">
-                  {dialog === "admit" ? "Admit" : "Save"}
+                  {dialog === "admit" ? "Admit" : dialog === "transfer" ? "Transfer" : "Save"}
                 </AttioButton>
               </div>
             </form>

@@ -122,6 +122,8 @@ model Branch {
   adminAuditLogs     AdminAuditLog[]
   doctorTemplates    DoctorTemplate[]
   formSubmissions    FormSubmission[]
+  ipdWards           IpdWard[]
+  ipdBeds            IpdBed[]
   ipdAdmissions      IpdAdmission[]
   referralDoctors    ReferralDoctor[]
   slots             Slot[]
@@ -264,6 +266,7 @@ model Patient {
   appointments    Appointment[]
   opdVisits       OpdVisit[]
   visits          Visit[]
+  ipdAdmissions   IpdAdmission[]
   queues          Queue[]
   consents        Consent[]
   counsellorLogs  CounsellorSession[]
@@ -1373,31 +1376,6 @@ model DoctorTemplate {
   @@index([tenantId, branchId, doctorId])
 }
 
-model IpdAdmission {
-  id                String   @id
-  tenantId          String?
-  branchId          String?
-  visitId           String   @unique
-  patientId         String
-  ward              String
-  bed               String
-  category          String?
-  patientType       String?
-  billingMode       String?
-  expectedDischarge String?
-  admittedAt        String
-  diagnosis         String
-  attendingDoctorId String
-  lastRoundAt       String?
-  lastRoundNote     String?
-  status            String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  branch            Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
-
-  @@index([tenantId, branchId, status])
-}
-
 model NursingHandoff {
   id                 String   @id
   visitId            String   @unique
@@ -1769,7 +1747,7 @@ model AdminExpense {
   date         String
   vendor       String
   category     String
-  departmentId String
+  departmentId String?
   amount       Float
   status       String
   notes        String?
@@ -1953,6 +1931,69 @@ model WhatsAppTemplate {
 
   @@unique([branchId, trigger])
   @@index([branchId, trigger, enabled])
+}
+
+model IpdWard {
+  id          String         @id
+  tenantId    String
+  branchId    String
+  label       String
+  category    String
+  active      Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  branch      Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  beds        IpdBed[]
+  admissions  IpdAdmission[]
+
+  @@index([tenantId, branchId, active])
+}
+
+model IpdBed {
+  id         String         @id
+  tenantId   String
+  branchId   String
+  wardId     String
+  label      String
+  active     Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  branch     Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  ward       IpdWard        @relation(fields: [wardId], references: [id], onDelete: Cascade)
+  admissions IpdAdmission[]
+
+  @@index([tenantId, branchId, wardId, active])
+  @@unique([wardId, label])
+}
+
+model IpdAdmission {
+  id                 String   @id
+  tenantId           String
+  branchId           String
+  patientId          String
+  visitId            String?  @unique
+  wardId             String
+  bedId              String
+  attendingDoctorId  String
+  doctorName         String
+  diagnosis          String
+  patientType        String
+  billingMode        String
+  status             String   @default("admitted")
+  admittedAt         DateTime @default(now())
+  expectedDischarge  DateTime?
+  lastRoundAt        DateTime?
+  lastRoundNote      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  branch             Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  patient            Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  ward               IpdWard  @relation(fields: [wardId], references: [id], onDelete: Cascade)
+  bed                IpdBed   @relation(fields: [bedId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId, status])
+  @@index([branchId, wardId, bedId])
+  @@index([branchId, patientId])
 }
 
 model WhatsAppLog {

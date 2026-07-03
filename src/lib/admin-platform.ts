@@ -25,14 +25,9 @@ export function computeHawkEye(visits: Visit[]): DepartmentHawkEye[] {
 
   const doctorQueue = visits.filter((v) => ["queued", "junior_exam", "with_doctor"].includes(v.stage)).length;
 
-  const counselQueue = visits.filter((v) => v.stage === "awaiting_counsellor").length;
-
   const nurseQueue = visits.filter((v) => v.stage === "nursing_queue" || v.stage === "nursing_active").length;
 
   const collected = visits.reduce((s, v) => s + (v.amountPaid ?? (v.billing === "paid" ? v.billAmount ?? 0 : 0)), 0);
-  const counselRevenue = visits
-    .filter((v) => v.counselPackageLabel)
-    .reduce((s, v) => s + (v.amountPaid ?? v.billAmount ?? 0), 0);
 
   return [
     {
@@ -52,15 +47,6 @@ export function computeHawkEye(visits: Visit[]): DepartmentHawkEye[] {
       slaBreaches: 0,
       revenueToday: 0,
       blockers: doctorQueue ? [`${doctorQueue} in clinical queue`] : [],
-    },
-    {
-      moduleId: "counsellor",
-      label: "Counsellor",
-      status: counselQueue > 2 ? "watch" : "healthy",
-      queue: counselQueue,
-      slaBreaches: 0,
-      revenueToday: counselRevenue,
-      blockers: counselQueue ? [`${counselQueue} counsel pending`] : [],
     },
     {
       moduleId: "nurse",

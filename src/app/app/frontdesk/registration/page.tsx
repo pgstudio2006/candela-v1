@@ -7,7 +7,9 @@ import { useFrontdeskFormSchema } from "@/components/frontdesk/use-frontdesk-for
 import { AttioButton, Panel } from "@/components/frontdesk/ui";
 import { useToast } from "@/components/ui/toast-provider";
 import { useSession } from "@/components/candela/session-provider";
-import { canOverrideDuplicateAction, checkDuplicatePatientAction } from "@/app/actions/clinical-actions";
+import type { ReferralDoctor } from "@/design-system/admin-data";
+import { isPataudiBranch } from "@/lib/auth-types";
+import { canOverrideDuplicateAction, checkDuplicatePatientAction, getActiveReferralDoctorsAction } from "@/app/actions/clinical-actions";
 import { detectLeadByMobileAction, assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
 import { schemaFingerprint } from "@/lib/schema-field-utils";
 import { AlertTriangle, LogIn, UserCheck } from "lucide-react";
@@ -41,11 +43,18 @@ export default function RegistrationPage() {
   const [counsellorName, setCounsellorName] = useState("");
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
   const [isEmergency, setIsEmergency] = useState(false);
+  const [referralDoctors, setReferralDoctors] = useState<ReferralDoctor[]>([]);
 
-  const isPataudiBranch =
-    (session as any)?.branchId?.toLowerCase().includes("pataudi") ||
-    (session as any)?.branchName?.toLowerCase().includes("pataudi") ||
-    false;
+  const pataudi = isPataudiBranch(session.session?.branchName);
+  const initialValues: Record<string, string | number | boolean> = pataudi
+    ? {
+        country: "India",
+        state: "Haryana",
+        district: "Gurugram",
+        city: "Pataudi",
+        appointmentCentre: "Pataudi Center",
+      }
+    : {};
 
   useEffect(() => {
     void canOverrideDuplicateAction().then(setCanOverrideDuplicate);
@@ -54,6 +63,12 @@ export default function RegistrationPage() {
         const res = await fetch("/api/crm/counsellors", { credentials: "include" });
         const json = await res.json();
         if (json.ok) setCounsellors(json.data);
+      } catch {}
+    })();
+    void (async () => {
+      try {
+        const res = await getActiveReferralDoctorsAction();
+        if (res.ok && res.data) setReferralDoctors(res.data);
       } catch {}
     })();
   }, []);
@@ -82,7 +97,23 @@ export default function RegistrationPage() {
     return () => clearTimeout(timer);
   }, [draft.phone, checkPhone]);
 
-  const schema = useFrontdeskFormSchema("registration", roster);
+  const schema = useFrontdeskFormSchema("registration", roster, undefined, referralDoctors);
+
+  const normalizeReferralDoctor = (
+    data: Record<string, string | number | boolean>,
+  ): Record<string, string | number | boolean> => {
+    const selection = String(data.referralDoctor ?? "").trim();
+    if (!selection || selection === "none") {
+      return { ...data, referralDoctor: "none", referralDoctorName: "" };
+    }
+    const doctor = referralDoctors.find((d) => d.id === selection);
+    if (doctor) {
+      return { ...data, referralDoctor: doctor.id, referralDoctorName: doctor.name };
+    }
+    // "Other" selected; detail field is named referralDoctor__other_detail by the schema helper
+    const otherName = String(data.referralDoctor__other_detail ?? "").trim();
+    return { ...data, referralDoctor: "other", referralDoctorName: otherName };
+  };
 
   const submitRegistration = async (
     data: Record<string, string | number | boolean>,
@@ -93,8 +124,9 @@ export default function RegistrationPage() {
       return;
     }
 
+    const payload = normalizeReferralDoctor(data);
     setSubmitting(true);
-    const result = await registerPatientAsync(data, { forceDuplicate: opts?.forceDuplicate || isEmergency });
+    const result = await registerPatientAsync(payload, { forceDuplicate: opts?.forceDuplicate || isEmergency });
     setSubmitting(false);
 
     if (!result.ok) {
@@ -142,7 +174,7 @@ export default function RegistrationPage() {
       meta="New capture · duplicate phone guard · billing-first routing"
     >
       <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
-        {isPataudiBranch && (
+        {pataudi && (
           <Panel title="Emergency mode">
             <label className="flex items-center gap-2 text-[12px]">
               <input
@@ -164,6 +196,7 @@ export default function RegistrationPage() {
           <PublishedSchemaForm
             schema={schema}
             formKey={`registration-${schemaFingerprint(schema)}`}
+            initialValues={initialValues}
             submitLabel={
               submitting
                 ? "Saving…"

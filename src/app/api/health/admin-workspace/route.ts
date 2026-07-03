@@ -8,6 +8,7 @@ const PROBE_CTX: ServerContext = {
   userId: "health_probe",
   tenantId: "tenant_navayu",
   branchId: "branch_gurgaon",
+  branchName: "Gurgaon",
   role: "admin",
   sessionToken: "",
 };

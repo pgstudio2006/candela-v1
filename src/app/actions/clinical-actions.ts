@@ -9,7 +9,9 @@ import {
   checkInVisit,
   completeJuniorExam,
   fetchVisitReceipt,
+  getActiveReferralDoctors,
   getClinicalSnapshot,
+  getReferralDoctorWithPatients,
   listFrontdeskAuditLogs,
   processBilling,
   processCounselBilling,
@@ -27,6 +29,20 @@ export async function getClinicalSnapshotAction(): Promise<ActionResult<Clinical
   return runAction(async () => {
     const ctx = await requireModule("frontdesk");
     return getClinicalSnapshot(ctx);
+  });
+}
+
+export async function getActiveReferralDoctorsAction() {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return getActiveReferralDoctors(ctx);
+  });
+}
+
+export async function getReferralDoctorWithPatientsAction(referralDoctorId: string) {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return getReferralDoctorWithPatients(ctx, referralDoctorId);
   });
 }
 

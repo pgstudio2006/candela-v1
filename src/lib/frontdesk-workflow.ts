@@ -130,6 +130,8 @@ type PrismaPatientRow = PatientNameSource & {
   balance?: unknown;
   lastVisit?: string | null;
   referrer?: string | null;
+  referralDoctorId?: string | null;
+  referralDoctorName?: string | null;
   meta?: unknown;
 };
 
@@ -151,6 +153,8 @@ export function mapPrismaPatientRow(row: PrismaPatientRow): Patient {
     referrer: row.referrer ?? reg.referrerName ?? undefined,
     referrerSource: reg.referrerSource,
     corporateId: reg.corporateId,
+    referralDoctorId: row.referralDoctorId ?? undefined,
+    referralDoctorName: row.referralDoctorName ?? undefined,
     registrationNotes: reg.registrationNotes,
     consentTreatment: reg.consentTreatment,
     consentData: reg.consentData,

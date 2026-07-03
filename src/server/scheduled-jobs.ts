@@ -189,6 +189,7 @@ export async function runAllScheduledJobs() {
         userId: "system_cron",
         tenantId: tenant.id,
         branchId: branch.id,
+        branchName: branch.name,
         role: "admin",
         sessionToken: "",
       };
