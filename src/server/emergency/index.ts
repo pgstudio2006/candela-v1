@@ -108,7 +108,7 @@ export async function registerEmergency(
       await tx.vitals.create({
         data: {
           id: createId("vit"),
-          ...scope,
+          branchId: ctx.branchId,
           visitId,
           bpSystolic: typeof input.vitals.bpSystolic === "number" ? input.vitals.bpSystolic : null,
           bpDiastolic: typeof input.vitals.bpDiastolic === "number" ? input.vitals.bpDiastolic : null,
