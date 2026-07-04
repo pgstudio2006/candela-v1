@@ -33,7 +33,7 @@ apply_schema() {
   # on existing Coolify databases (missing wardId/bedId on IpdAdmission, missing tables, etc.).
   if [ -n "$DATABASE_URL" ] && [ -f "/app/prisma/migrate-ipd-schema.sql" ]; then
     echo "Applying IPD schema migration SQL..."
-    psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -f /app/prisma/migrate-ipd-schema.sql || true
+    npx prisma db execute --schema /app/prisma/schema.prisma --file /app/prisma/migrate-ipd-schema.sql || echo "WARNING: IPD schema migration SQL failed or partially applied."
   fi
 
   attempt=1
