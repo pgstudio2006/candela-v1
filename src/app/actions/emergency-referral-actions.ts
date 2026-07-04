@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { createId } from "@/lib/id";
 import { runAction, type ActionResult } from "@/server/action-result";
-import { requireModule } from "@/server/auth";
+import { requireAnyModule } from "@/server/auth";
 import { branchScope } from "@/server/tenancy";
 import { writePlatformAudit } from "@/server/platform-audit";
 
@@ -31,7 +31,7 @@ export type EmergencyReferralItem = {
 
 export async function createEmergencyReferralAction(input: EmergencyReferralInput): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const ctx = await requireModule("frontdesk");
+    const ctx = await requireAnyModule("admin", "frontdesk");
     const scope = branchScope(ctx);
     const id = createId("eref");
     await prisma.emergencyReferral.create({
@@ -65,7 +65,7 @@ export async function createEmergencyReferralAction(input: EmergencyReferralInpu
 
 export async function listEmergencyReferralsAction(patientId?: string): Promise<ActionResult<EmergencyReferralItem[]>> {
   return runAction(async () => {
-    const ctx = await requireModule("frontdesk");
+    const ctx = await requireAnyModule("admin", "frontdesk");
     const rows = await prisma.emergencyReferral.findMany({
       where: { ...branchScope(ctx), ...(patientId ? { patientId } : {}) },
       orderBy: { createdAt: "desc" },
@@ -86,14 +86,14 @@ export async function listEmergencyReferralsAction(patientId?: string): Promise<
 
 export async function updateEmergencyReferralStatusAction(id: string, status: string): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireModule("frontdesk");
+    await requireAnyModule("admin", "frontdesk");
     await prisma.emergencyReferral.update({ where: { id }, data: { status } });
   });
 }
 
 export async function deleteEmergencyReferralAction(id: string): Promise<ActionResult<void>> {
   return runAction(async () => {
-    await requireModule("frontdesk");
+    await requireAnyModule("admin", "frontdesk");
     await prisma.emergencyReferral.delete({ where: { id } });
   });
 }
