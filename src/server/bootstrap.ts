@@ -202,21 +202,22 @@ async function backfillAdminBranchScope() {
   });
   if (!firstBranch) return;
 
-  const where = { tenantId: null, branchId: null };
+  const adminWhere = { tenantId: null, branchId: null };
+  const ipdWhere = { tenantId: "", branchId: "" };
   await Promise.all([
-    prisma.adminDepartment.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.adminDiseaseNode.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.adminDiseaseCluster.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.adminGeoPin.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.adminRevenuePolicy.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.adminMrdRequest.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.adminMisReport.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.adminAuditLog.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.formSubmission.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
-    prisma.doctorTemplate.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.adminDepartment.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.adminDiseaseNode.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.adminDiseaseCluster.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.adminGeoPin.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.adminRevenuePolicy.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.adminMrdRequest.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.adminMisReport.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.adminAuditLog.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.formSubmission.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.doctorTemplate.updateMany({ where: adminWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
     prisma.documentTemplate.updateMany({ where: { tenantId: null, branchId: null }, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
     prisma.adminExpense.updateMany({ where: { branchId: null }, data: { branchId: firstBranch.id } }),
-    prisma.ipdAdmission.updateMany({ where, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
+    prisma.ipdAdmission.updateMany({ where: ipdWhere, data: { tenantId: firstTenant.id, branchId: firstBranch.id } }),
   ]);
 }
 
