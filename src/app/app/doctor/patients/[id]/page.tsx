@@ -173,6 +173,24 @@ export default function DoctorPatientDetailPage() {
             </ul>
           </Panel>
 
+          <Panel title="Address">
+            <dl className="space-y-2 text-[13px]">
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Country</dt><dd>{patient.country || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">State</dt><dd>{patient.state || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">District</dt><dd>{patient.district || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">City</dt><dd>{patient.city || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Society / colony</dt><dd>{patient.society || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">House / building</dt><dd>{patient.houseNumber || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Street / road</dt><dd>{patient.street || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Locality / area</dt><dd>{patient.locality || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Landmark</dt><dd>{patient.landmark || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Pincode</dt><dd>{patient.pincode || "—"}</dd></div>
+              {patient.address && (
+                <div><dt className="text-[var(--attio-text-tertiary)]">Full address</dt><dd>{patient.address}</dd></div>
+              )}
+            </dl>
+          </Panel>
+
           <Panel title="Summary" className="lg:col-span-2">
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="rounded-lg bg-[var(--attio-surface)] py-4">

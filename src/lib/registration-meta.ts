@@ -15,6 +15,10 @@ export type PatientRegistrationMeta = {
   district?: string;
   city?: string;
   society?: string;
+  houseNumber?: string;
+  street?: string;
+  locality?: string;
+  landmark?: string;
   address?: string;
   pincode?: string;
 };
@@ -52,6 +56,10 @@ export function buildPatientRegistrationPayload(data: RegistrationInput) {
     registrationNotes: data.notes ? String(data.notes) : undefined,
     city: data.city ? String(data.city) : undefined,
     society: data.society ? String(data.society) : undefined,
+    houseNumber: data.houseNumber ? String(data.houseNumber) : undefined,
+    street: data.street ? String(data.street) : undefined,
+    locality: data.locality ? String(data.locality) : undefined,
+    landmark: data.landmark ? String(data.landmark) : undefined,
     address: data.address ? String(data.address) : undefined,
     pincode: data.pincode ? String(data.pincode) : undefined,
   };
@@ -81,6 +89,10 @@ export function parsePatientRegistrationMeta(meta: unknown): PatientRegistration
     registrationNotes: row.registrationNotes ? String(row.registrationNotes) : undefined,
     city: row.city ? String(row.city) : undefined,
     society: row.society ? String(row.society) : undefined,
+    houseNumber: row.houseNumber ? String(row.houseNumber) : undefined,
+    street: row.street ? String(row.street) : undefined,
+    locality: row.locality ? String(row.locality) : undefined,
+    landmark: row.landmark ? String(row.landmark) : undefined,
     address: row.address ? String(row.address) : undefined,
     pincode: row.pincode ? String(row.pincode) : undefined,
   };

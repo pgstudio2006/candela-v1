@@ -158,6 +158,17 @@ export function mapPrismaPatientRow(row: PrismaPatientRow): Patient {
     registrationNotes: reg.registrationNotes,
     consentTreatment: reg.consentTreatment,
     consentData: reg.consentData,
+    country: reg.country,
+    state: reg.state,
+    district: reg.district,
+    city: reg.city,
+    society: reg.society,
+    houseNumber: reg.houseNumber,
+    street: reg.street,
+    locality: reg.locality,
+    landmark: reg.landmark,
+    address: reg.address,
+    pincode: reg.pincode,
   };
 }
 

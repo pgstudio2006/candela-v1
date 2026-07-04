@@ -38,6 +38,17 @@ export type Patient = {
   registrationNotes?: string;
   consentTreatment?: boolean;
   consentData?: boolean;
+  country?: string;
+  state?: string;
+  district?: string;
+  city?: string;
+  society?: string;
+  houseNumber?: string;
+  street?: string;
+  locality?: string;
+  landmark?: string;
+  address?: string;
+  pincode?: string;
 };
 
 export type Visit = {
