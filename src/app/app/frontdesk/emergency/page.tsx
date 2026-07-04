@@ -4,6 +4,7 @@ import { getEmergencyVisitsAction, registerEmergencyAction } from "@/app/actions
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel } from "@/components/frontdesk/ui";
 import { useToast } from "@/components/ui/toast-provider";
+import { EmergencyReferralForm } from "@/components/emergency-referral";
 import { getIpdSnapshotAction } from "@/app/actions/ipd-actions";
 import type { IpdSnapshot } from "@/design-system/ipd-data";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,7 @@ export default function EmergencyPage() {
   const [snapshot, setSnapshot] = useState<IpdSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [referralVisit, setReferralVisit] = useState<EmergencyVisit | null>(null);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -321,6 +323,9 @@ export default function EmergencyPage() {
                       View IPD
                     </AttioButton>
                   )}
+                  <AttioButton variant="secondary" onClick={() => setReferralVisit(v)}>
+                    Referral
+                  </AttioButton>
                   <AttioButton variant="secondary" onClick={() => router.push(`/app/frontdesk/patients/${v.patientId}`)}>
                     Patient
                   </AttioButton>
@@ -330,6 +335,16 @@ export default function EmergencyPage() {
           </div>
         )}
       </Panel>
+
+      {referralVisit && (
+        <Panel title={`Emergency referral · ${referralVisit.patientName}`}>
+          <EmergencyReferralForm
+            patientId={referralVisit.patientId}
+            visitId={referralVisit.id}
+            onCreated={() => setReferralVisit(null)}
+          />
+        </Panel>
+      )}
     </PageChrome>
   );
 }

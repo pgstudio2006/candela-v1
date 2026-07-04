@@ -9,13 +9,19 @@ import {
   createIpdWard,
   deleteIpdBed,
   deleteIpdWard,
+  generateDischargeSummary,
+  generateDeathSummary,
   getIpdAdmission,
   getIpdSnapshot,
   getIpdWards,
+  saveDischargeSummary,
+  saveDeathSummary,
   transferIpdAdmission,
   updateIpdAdmission,
   updateIpdBed,
   updateIpdWard,
+  type DischargeSummaryPayload,
+  type DeathSummaryPayload,
   type IpdSnapshot,
 } from "@/server/ipd";
 
@@ -108,5 +114,33 @@ export async function deleteIpdBedAction(id: string) {
   return runAction(async () => {
     const ctx = await requireModule("frontdesk");
     return deleteIpdBed(ctx, id);
+  });
+}
+
+export async function generateDischargeSummaryAction(id: string): Promise<ActionResult<DischargeSummaryPayload>> {
+  return runAction(async () => {
+    const ctx = await requireModule("doctor");
+    return generateDischargeSummary(ctx, id);
+  });
+}
+
+export async function saveDischargeSummaryAction(id: string, summary: DischargeSummaryPayload): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await requireModule("doctor");
+    return saveDischargeSummary(ctx, id, summary);
+  });
+}
+
+export async function generateDeathSummaryAction(id: string): Promise<ActionResult<DeathSummaryPayload>> {
+  return runAction(async () => {
+    const ctx = await requireModule("doctor");
+    return generateDeathSummary(ctx, id);
+  });
+}
+
+export async function saveDeathSummaryAction(id: string, summary: DeathSummaryPayload): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await requireModule("doctor");
+    return saveDeathSummary(ctx, id, summary);
   });
 }

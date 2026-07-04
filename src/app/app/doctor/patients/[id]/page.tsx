@@ -3,6 +3,8 @@
 import { useDoctorStore } from "@/components/doctor/doctor-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { PatientDocumentsPanel } from "@/components/patient-documents";
+import { PatientConsentsPanel } from "@/components/patient-consents";
 import { consultPrimaryDiagnosis, formatConsultDate } from "@/lib/doctor-records";
 import { parseScribeSessions } from "@/lib/scribe-transcript";
 import { formatStageStatus } from "@/lib/frontdesk-workflow";
@@ -52,6 +54,7 @@ export default function DoctorPatientDetailPage() {
         { id: "scribe", label: "AI Scribe" },
         { id: "overview", label: "Overview" },
         { id: "documents", label: "Documents" },
+        { id: "consents", label: "Consents" },
       ]}
       activeTab={tab}
       onTabChange={setTab}
@@ -247,45 +250,11 @@ export default function DoctorPatientDetailPage() {
       )}
 
       {tab === "documents" && (
-        <Panel title="Printable documents">
-          <ul className="divide-y divide-[var(--attio-border-subtle)]">
-            {history.length === 0 && (
-              <li className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No documents yet</li>
-            )}
-            {history.map((c) => {
-              const v = getVisit(c.visitId);
-              if (!v) return null;
-              return (
-                <li key={c.visitId} className="flex items-center justify-between py-3">
-                  <div className="flex items-center gap-2">
-                    <FileText className="size-4 text-[var(--attio-accent)]" />
-                    <div>
-                      <p className="text-[13px] font-medium">
-                        {formatConsultDate(c.completedAt ?? c.startedAt)} — {consultPrimaryDiagnosis(c)}
-                      </p>
-                      <p className="text-[11px] text-[var(--attio-text-tertiary)]">
-                        Prescription · Invoice · Full record
-                      </p>
-                    </div>
-                  </div>
-                  <AttioButton
-                    variant="secondary"
-                    className="h-8 text-[12px]"
-                    onClick={() => router.push(`/app/doctor/patients/${patientId}/records/${c.visitId}`)}
-                  >
-                    Open & print
-                  </AttioButton>
-                </li>
-              );
-            })}
-          </ul>
-          <Link
-            href="/app/doctor/documents"
-            className="mt-4 inline-block text-[12px] text-[var(--attio-accent)]"
-          >
-            Manage document templates →
-          </Link>
-        </Panel>
+        <PatientDocumentsPanel patientId={patientId} />
+      )}
+
+      {tab === "consents" && (
+        <PatientConsentsPanel patientId={patientId} />
       )}
     </PageChrome>
   );

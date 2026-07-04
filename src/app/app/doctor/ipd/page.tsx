@@ -6,6 +6,7 @@ import { useDoctorStore } from "@/components/doctor/doctor-store";
 import { useDoctorFormSchema } from "@/components/doctor/use-doctor-form-schema";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { IpdDischargeSummaryPanel } from "@/components/ipd-discharge-summary";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -136,6 +137,8 @@ export default function DoctorIpdPage() {
                 }}
               />
             </Panel>
+
+            <IpdDischargeSummaryPanel admissionId={selected.id} />
 
             {roundHistory.length > 0 && (
               <Panel title="Round history">

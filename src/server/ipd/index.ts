@@ -519,3 +519,141 @@ export async function deleteIpdBed(ctx: ServerContext, id: string) {
   await prisma.ipdBed.delete({ where: { id } });
   return { id };
 }
+
+export type DischargeSummaryPayload = {
+  admissionDate: string;
+  dischargeDate: string;
+  diagnosis: string;
+  procedures: string;
+  medications: string;
+  followUp: string;
+  notes: string;
+  preparedBy: string;
+  preparedAt: string;
+};
+
+export type DeathSummaryPayload = {
+  admissionDate: string;
+  deathDate: string;
+  diagnosis: string;
+  causeOfDeath: string;
+  contributingConditions: string;
+  procedures: string;
+  medications: string;
+  notes: string;
+  preparedBy: string;
+  preparedAt: string;
+};
+
+async function loadAdmissionForSummary(ctx: ServerContext, id: string) {
+  const scope = branchScope(ctx);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
+    include: {
+      patient: { select: { id: true, name: true, fullName: true, uhid: true, phone: true, age: true, gender: true } },
+      ward: true,
+      bed: true,
+    },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  return admission;
+}
+
+export async function generateDischargeSummary(ctx: ServerContext, id: string): Promise<DischargeSummaryPayload> {
+  const admission = await loadAdmissionForSummary(ctx, id);
+  const patientName = patientDisplayName(admission.patient) ?? admission.patientId;
+  const today = new Date().toISOString();
+  return {
+    admissionDate: admission.admittedAt.toISOString(),
+    dischargeDate: today,
+    diagnosis: admission.diagnosis,
+    procedures: "",
+    medications: "",
+    followUp: "",
+    notes: `Discharge summary for ${patientName} admitted under ${admission.doctorName} in ${admission.ward.label} bed ${admission.bed.label}.`,
+    preparedBy: ctx.userId ?? "",
+    preparedAt: today,
+  };
+}
+
+export async function saveDischargeSummary(
+  ctx: ServerContext,
+  id: string,
+  summary: DischargeSummaryPayload,
+): Promise<{ id: string }> {
+  const scope = branchScope(ctx);
+  const existing = await prisma.ipdAdmission.findFirst({ where: { id, tenantId: scope.tenantId, branchId: scope.branchId } });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  const summaryId = createId("dsum");
+  await prisma.ipdAdmission.update({
+    where: { id },
+    data: {
+      dischargeSummary: summary as unknown as object,
+      dischargeSummaryId: summaryId,
+      status: "discharged",
+      dischargedAt: new Date(),
+      dischargedBy: ctx.userId ?? null,
+    },
+  });
+  await writePlatformAudit({
+    ctx,
+    module: "ipd",
+    action: "discharge_summary_saved",
+    entityType: "ipd_admission",
+    entityId: id,
+    summary: `Discharge summary saved for IPD admission ${id}`,
+  });
+  return { id: summaryId };
+}
+
+export async function generateDeathSummary(ctx: ServerContext, id: string): Promise<DeathSummaryPayload> {
+  const admission = await loadAdmissionForSummary(ctx, id);
+  const patientName = patientDisplayName(admission.patient) ?? admission.patientId;
+  const today = new Date().toISOString();
+  return {
+    admissionDate: admission.admittedAt.toISOString(),
+    deathDate: today,
+    diagnosis: admission.diagnosis,
+    causeOfDeath: "",
+    contributingConditions: "",
+    procedures: "",
+    medications: "",
+    notes: `Death summary for ${patientName} admitted under ${admission.doctorName} in ${admission.ward.label} bed ${admission.bed.label}.`,
+    preparedBy: ctx.userId ?? "",
+    preparedAt: today,
+  };
+}
+
+export async function saveDeathSummary(
+  ctx: ServerContext,
+  id: string,
+  summary: DeathSummaryPayload,
+): Promise<{ id: string }> {
+  const scope = branchScope(ctx);
+  const existing = await prisma.ipdAdmission.findFirst({ where: { id, tenantId: scope.tenantId, branchId: scope.branchId } });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  const summaryId = createId("dths");
+  await prisma.ipdAdmission.update({
+    where: { id },
+    data: {
+      deathSummary: summary as unknown as object,
+      deathSummaryId: summaryId,
+      status: "deceased",
+      deathDeclaredAt: new Date(),
+      deathDeclaredBy: ctx.userId ?? null,
+    },
+  });
+  await prisma.patient.update({
+    where: { id: existing.patientId },
+    data: { status: "deceased" },
+  });
+  await writePlatformAudit({
+    ctx,
+    module: "ipd",
+    action: "death_summary_saved",
+    entityType: "ipd_admission",
+    entityId: id,
+    summary: `Death summary saved for IPD admission ${id}`,
+  });
+  return { id: summaryId };
+}

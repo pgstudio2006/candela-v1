@@ -6,6 +6,8 @@ import { useFrontdeskStore } from "@/components/frontdesk/frontdesk-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PatientDocumentsPanel } from "@/components/patient-documents";
+import { PatientConsentsPanel } from "@/components/patient-consents";
 import { formatStageStatus } from "@/lib/frontdesk-workflow";
 import { ArrowLeft, CreditCard, ListOrdered, Pencil, Printer, UserCog } from "lucide-react";
 import Link from "next/link";
@@ -148,6 +150,8 @@ export default function PatientRecordPage() {
           <TabsTrigger value="visits">Visits</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="counsellor">Counsellor</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="consents">Consents</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -305,6 +309,14 @@ export default function PatientRecordPage() {
               </AttioButton>
             </div>
           </Panel>
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <PatientDocumentsPanel patientId={patient.id} />
+        </TabsContent>
+
+        <TabsContent value="consents" className="mt-4">
+          <PatientConsentsPanel patientId={patient.id} />
         </TabsContent>
       </Tabs>
 

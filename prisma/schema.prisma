@@ -129,6 +129,7 @@ model Branch {
   slots             Slot[]
   whatsappTemplates WhatsAppTemplate[]
   whatsappLogs      WhatsAppLog[]
+  emergencyReferrals EmergencyReferral[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -273,6 +274,8 @@ model Patient {
   leads           Lead[]
   invoices        Invoice[]
   billingHandoffs BillingHandoff[]
+  documents       PatientDocument[]
+  emergencyReferrals EmergencyReferral[]
   assignedCounsellorId String?
   assignedCounsellorName String?
   leadSourceId    String?
@@ -412,6 +415,8 @@ model Visit {
   approvals          Approval[]
   billingHandoffs    BillingHandoff[]
   invoice            Invoice?
+  documents          PatientDocument[]
+  emergencyReferrals EmergencyReferral[]
 
   @@index([tenantId, branchId, stage])
 }
@@ -463,7 +468,7 @@ model NursingTask {
 
 model Consent {
   id              String    @id
-  visitId         String
+  visitId         String?
   branchId        String
   patientId       String
   templateId      String
@@ -474,7 +479,7 @@ model Consent {
   captureMode     String?
   signerRole      String?
   signerName      String?
-  witnessName     String?
+  witnessName      String?
   language        String?
   signedAt        DateTime?
   verifiedAt      DateTime?
@@ -483,7 +488,7 @@ model Consent {
   consentData     Json?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  visit           Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  visit           Visit?    @relation(fields: [visitId], references: [id], onDelete: SetNull)
   patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   branch          Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
@@ -1984,6 +1989,14 @@ model IpdAdmission {
   expectedDischarge  DateTime?
   lastRoundAt        DateTime?
   lastRoundNote      String?
+  dischargeSummary   Json?
+  dischargeSummaryId String?
+  dischargedAt       DateTime?
+  dischargedBy       String?
+  deathSummary       Json?
+  deathSummaryId     String?
+  deathDeclaredAt    DateTime?
+  deathDeclaredBy    String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   branch             Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
@@ -1994,6 +2007,54 @@ model IpdAdmission {
   @@index([tenantId, branchId, status])
   @@index([branchId, wardId, bedId])
   @@index([branchId, patientId])
+}
+
+model PatientDocument {
+  id          String   @id
+  tenantId    String?
+  branchId    String?
+  patientId   String
+  visitId     String?
+  category    String
+  label       String?
+  fileUrl     String
+  fileName    String
+  mimeType    String?
+  size        Int?
+  uploadedBy  String?
+  uploadedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visit       Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+
+  @@index([patientId, category])
+  @@index([branchId, category])
+  @@index([tenantId, branchId])
+}
+
+model EmergencyReferral {
+  id                 String   @id
+  tenantId           String
+  branchId           String
+  patientId          String
+  visitId            String?
+  fromDoctorId       String?
+  fromDoctorName     String?
+  referredToType     String   // hospital | department | doctor | specialist
+  referredToId       String?
+  referredToName     String
+  referralReason     String
+  referralNotes      String?
+  status             String   @default("pending")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  patient            Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  branch             Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  visit              Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, branchId, status])
+  @@index([patientId, status])
 }
 
 model WhatsAppLog {
