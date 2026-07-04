@@ -265,6 +265,37 @@ export function corruptSchemaOverrideMessage(schemaId: string): string {
   return `This ${label} form still looks like patient registration (wrong sections or fields). Click Reset to default, edit the correct form, then publish again.`;
 }
 
+function mergeWithDefaultRegistrationSchema(
+  override: FormSchema,
+  defaultSchema: FormSchema,
+): FormSchema {
+  const overrideSectionMap = new Map(override.sections.map((s) => [s.id, s]));
+  const mergedSections = defaultSchema.sections.map((defaultSection) => {
+    const overrideSection = overrideSectionMap.get(defaultSection.id);
+    if (!overrideSection) return defaultSection;
+
+    const overrideFieldMap = new Map(overrideSection.fields.map((f) => [f.id, f]));
+    const mergedFields = defaultSection.fields.map((field) => overrideFieldMap.get(field.id) ?? field);
+
+    // Append any override fields that do not exist in the default section.
+    for (const field of overrideSection.fields) {
+      if (!defaultSection.fields.some((f) => f.id === field.id)) {
+        mergedFields.push(field);
+      }
+    }
+    return { ...defaultSection, fields: mergedFields };
+  });
+
+  // Append any override sections that do not exist in the default schema.
+  for (const overrideSection of override.sections) {
+    if (!defaultSchema.sections.some((s) => s.id === overrideSection.id)) {
+      mergedSections.push(overrideSection);
+    }
+  }
+
+  return { ...defaultSchema, sections: mergedSections };
+}
+
 export function getAnyFormSchema(id: string): FormSchema {
   const override = schemaOverrides[id];
   const fallback = ALL_DEFAULT_SCHEMAS[id];
@@ -276,7 +307,11 @@ export function getAnyFormSchema(id: string): FormSchema {
     schema.id = id;
     return schema;
   }
-  const schema = structuredClone(override ?? fallback!);
+  const base = structuredClone(fallback!);
+  const overrideClone = override ? structuredClone(override) : null;
+  const schema = id === "registration" && overrideClone
+    ? mergeWithDefaultRegistrationSchema(overrideClone, base)
+    : overrideClone ?? base;
   schema.id = id;
   return schema;
 }
