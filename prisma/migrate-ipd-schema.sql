@@ -133,3 +133,60 @@ ALTER TABLE "IpdAdmission" DROP CONSTRAINT IF EXISTS "IpdAdmission_wardId_fkey";
 ALTER TABLE "IpdAdmission" ADD CONSTRAINT "IpdAdmission_wardId_fkey" FOREIGN KEY ("wardId") REFERENCES "IpdWard"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "IpdAdmission" DROP CONSTRAINT IF EXISTS "IpdAdmission_bedId_fkey";
 ALTER TABLE "IpdAdmission" ADD CONSTRAINT "IpdAdmission_bedId_fkey" FOREIGN KEY ("bedId") REFERENCES "IpdBed"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Discharge / death summary columns on IpdAdmission
+ALTER TABLE "IpdAdmission" ADD COLUMN IF NOT EXISTS "dischargeSummary" JSONB;
+ALTER TABLE "IpdAdmission" ADD COLUMN IF NOT EXISTS "dischargeSummaryId" TEXT;
+ALTER TABLE "IpdAdmission" ADD COLUMN IF NOT EXISTS "dischargedAt" TIMESTAMP(3);
+ALTER TABLE "IpdAdmission" ADD COLUMN IF NOT EXISTS "dischargedBy" TEXT;
+ALTER TABLE "IpdAdmission" ADD COLUMN IF NOT EXISTS "deathSummary" JSONB;
+ALTER TABLE "IpdAdmission" ADD COLUMN IF NOT EXISTS "deathSummaryId" TEXT;
+ALTER TABLE "IpdAdmission" ADD COLUMN IF NOT EXISTS "deathDeclaredAt" TIMESTAMP(3);
+ALTER TABLE "IpdAdmission" ADD COLUMN IF NOT EXISTS "deathDeclaredBy" TEXT;
+
+-- Patient document upload table
+CREATE TABLE IF NOT EXISTS "PatientDocument" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT,
+    "branchId" TEXT,
+    "patientId" TEXT NOT NULL,
+    "visitId" TEXT,
+    "category" TEXT NOT NULL,
+    "label" TEXT,
+    "fileUrl" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "mimeType" TEXT,
+    "size" INTEGER,
+    "uploadedBy" TEXT,
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "PatientDocument_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "PatientDocument_patientId_category_idx" ON "PatientDocument"("patientId", "category");
+CREATE INDEX IF NOT EXISTS "PatientDocument_branchId_category_idx" ON "PatientDocument"("branchId", "category");
+
+-- Emergency referral table
+CREATE TABLE IF NOT EXISTS "EmergencyReferral" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "patientId" TEXT NOT NULL,
+    "visitId" TEXT,
+    "fromDoctorId" TEXT,
+    "fromDoctorName" TEXT,
+    "referredToType" TEXT NOT NULL,
+    "referredToId" TEXT,
+    "referredToName" TEXT NOT NULL,
+    "referralReason" TEXT NOT NULL,
+    "referralNotes" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "EmergencyReferral_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "EmergencyReferral_tenantId_branchId_status_idx" ON "EmergencyReferral"("tenantId", "branchId", "status");
+CREATE INDEX IF NOT EXISTS "EmergencyReferral_patientId_status_idx" ON "EmergencyReferral"("patientId", "status");
+
+-- Consent.visitId must be nullable for patient-level consents
+ALTER TABLE "Consent" ALTER COLUMN "visitId" DROP NOT NULL;
