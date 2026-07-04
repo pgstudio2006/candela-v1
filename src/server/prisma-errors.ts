@@ -32,12 +32,16 @@ export function throwIfPrismaError(error: unknown): never {
           prismaCode: error.code,
           meta: error.meta,
         });
-      case "P2003":
+      case "P2003": {
+        const meta = error.meta as { field_name?: string; model_name?: string } | undefined;
+        const field = meta?.field_name ?? "unknown field";
+        const model = meta?.model_name ?? "unknown table";
         throw new ServerActionError(
           "INTERNAL_ERROR",
-          "Branch or tenant reference is invalid. Sign out, pick Gurgaon branch again, and retry.",
+          `Database reference error on ${model} → ${field}. Production database schema may be out of date. Sign out, pick your branch again, and retry. If it persists, run \`npx prisma db push\` against the production DATABASE_URL.`,
           { prismaCode: error.code, meta: error.meta },
         );
+      }
       case "P2002":
         throw new ServerActionError("CONFLICT", "A record with this identifier already exists.");
       default:

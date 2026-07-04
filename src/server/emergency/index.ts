@@ -14,8 +14,8 @@ import { resolveDoctorName } from "@/lib/clinical-roster";
 export async function registerEmergency(
   ctx: ServerContext,
   input: {
-    name: string;
-    phone: string;
+    name?: string;
+    phone?: string;
     age?: number;
     gender?: string;
     complaint: string;
@@ -38,7 +38,8 @@ export async function registerEmergency(
 
   const branchPatientCounter = await maxUhidCounterInBranch(ctx);
   const uhid = nextUhid(branchPatientCounter + 1, ctx.branchId);
-  const patientName = input.name.trim();
+  const patientName = input.name?.trim() || "Unknown";
+  const patientPhone = input.phone?.trim() || "Unknown";
   const now = new Date().toISOString();
 
   const roster = input.attendingDoctorId ? await loadClinicalRoster(ctx) : null;
@@ -52,7 +53,7 @@ export async function registerEmergency(
         uhid,
         name: patientName,
         fullName: patientName,
-        phone: input.phone,
+        phone: patientPhone,
         age: input.age ?? null,
         gender: input.gender ?? null,
         status: "active",

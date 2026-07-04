@@ -54,6 +54,7 @@ export default function EmergencyPage() {
     pulse: "",
     spo2: "",
     temperature: "",
+    unknownPatient: false,
   });
 
   const load = useCallback(async () => {
@@ -70,8 +71,8 @@ export default function EmergencyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.phone.trim() || !form.complaint.trim()) {
-      return toast("Name, phone and complaint are required", "error");
+    if (!form.complaint.trim()) {
+      return toast("Complaint is required", "error");
     }
     setBusy(true);
     const vitals: Record<string, string | number | boolean> = {};
@@ -82,8 +83,8 @@ export default function EmergencyPage() {
     if (form.temperature) vitals.temperature = Number(form.temperature);
 
     const res = await registerEmergencyAction({
-      name: form.name,
-      phone: form.phone,
+      name: form.unknownPatient ? undefined : form.name,
+      phone: form.unknownPatient ? undefined : form.phone,
       age: form.age ? Number(form.age) : undefined,
       gender: form.gender || undefined,
       complaint: form.complaint,
@@ -119,6 +120,7 @@ export default function EmergencyPage() {
         pulse: "",
         spo2: "",
         temperature: "",
+        unknownPatient: false,
       });
       load();
     } else {
@@ -141,20 +143,33 @@ export default function EmergencyPage() {
       {showForm && (
         <Panel title="Emergency registration">
           <form onSubmit={handleSubmit} className="space-y-3 text-[13px]">
+            <label className="flex items-center gap-2 font-medium text-[var(--attio-text-secondary)]">
+              <input
+                type="checkbox"
+                checked={form.unknownPatient}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    unknownPatient: e.target.checked,
+                    name: e.target.checked ? "Unknown" : "",
+                    phone: e.target.checked ? "Unknown" : "",
+                  })
+                }
+              />
+              Unknown patient
+            </label>
             <div className="grid gap-3 sm:grid-cols-3">
               <input
                 className="rounded-md border px-3 py-2"
-                placeholder="Patient name *"
+                placeholder="Patient name"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                required
               />
               <input
                 className="rounded-md border px-3 py-2"
-                placeholder="Phone *"
+                placeholder="Phone"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                required
               />
               <input
                 className="rounded-md border px-3 py-2"
