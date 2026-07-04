@@ -29,10 +29,11 @@ apply_schema() {
     return 0
   fi
   attempt=1
-  accept_flag=""
-  if [ "$PRISMA_ACCEPT_DATA_LOSS" = "true" ]; then
-    accept_flag="--accept-data-loss"
-    echo "WARNING: PRISMA_ACCEPT_DATA_LOSS=true — destructive schema changes may delete data."
+  accept_flag="--accept-data-loss"
+  if [ "$PRISMA_ACCEPT_DATA_LOSS" = "false" ]; then
+    accept_flag=""
+  else
+    echo "WARNING: applying schema with --accept-data-loss. Set PRISMA_ACCEPT_DATA_LOSS=false to disable."
   fi
   while [ "$attempt" -le 5 ]; do
     if npx prisma db push --skip-generate $accept_flag; then
