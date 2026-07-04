@@ -81,6 +81,12 @@ export async function registerEmergency(
       },
     });
 
+    // Sync the canonical Visit row so vitals and other visit-scoped records can reference it.
+    const opd = await tx.opdVisit.findUnique({ where: { id: visitId } });
+    if (opd) {
+      await syncVisitFromOpdVisit(ctx, opd, tx);
+    }
+
     if (input.mlc) {
       await tx.formSubmission.create({
         data: {
@@ -101,7 +107,7 @@ export async function registerEmergency(
       });
     }
 
-    if (input.vitals) {
+    if (input.vitals && Object.keys(input.vitals).length > 0) {
       const vitalPayload: Record<string, string | number | boolean> = {};
       for (const [key, value] of Object.entries(input.vitals)) {
         if (value !== undefined) vitalPayload[key] = value as string | number | boolean;
@@ -153,9 +159,6 @@ export async function registerEmergency(
       });
     }
   });
-
-  const opd = await prisma.opdVisit.findUnique({ where: { id: visitId } });
-  if (opd) await syncVisitFromOpdVisit(ctx, opd);
 
   await writePlatformAudit({
     ctx,

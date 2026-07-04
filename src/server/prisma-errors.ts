@@ -36,9 +36,10 @@ export function throwIfPrismaError(error: unknown): never {
         const meta = error.meta as { field_name?: string; model_name?: string } | undefined;
         const field = meta?.field_name ?? "unknown field";
         const model = meta?.model_name ?? "unknown table";
+        const detail = error.message.replace(/\n/g, " ");
         throw new ServerActionError(
           "INTERNAL_ERROR",
-          `Database reference error on ${model} → ${field}. Production database schema may be out of date. Sign out, pick your branch again, and retry. If it persists, run \`npx prisma db push\` against the production DATABASE_URL.`,
+          `DB reference error on ${model} → ${field}: ${detail}. Schema may be out of date — run \`npx prisma db push\` on the production DATABASE_URL.`,
           { prismaCode: error.code, meta: error.meta },
         );
       }
