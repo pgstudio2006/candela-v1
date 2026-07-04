@@ -61,13 +61,32 @@ CREATE TABLE IF NOT EXISTS "IpdAdmission" (
 );
 
 -- Default fallback ward/bed so existing rows can be assigned a valid reference.
-INSERT INTO "IpdWard" ("id", "tenantId", "branchId", "label", "category", "updatedAt")
-VALUES ('ward_emergency_default', 'tenant_navayu', 'branch_gurgaon', 'Emergency Ward', 'general', CURRENT_TIMESTAMP)
-ON CONFLICT ("id") DO NOTHING;
+-- Pick tenant/branch from existing IpdAdmission rows if possible, otherwise from the first Branch row.
+DO $$
+DECLARE
+  default_tenant_id TEXT;
+  default_branch_id TEXT;
+BEGIN
+  SELECT "tenantId" INTO default_tenant_id FROM "IpdAdmission" LIMIT 1;
+  SELECT "branchId" INTO default_branch_id FROM "IpdAdmission" LIMIT 1;
 
-INSERT INTO "IpdBed" ("id", "tenantId", "branchId", "wardId", "label", "updatedAt")
-VALUES ('bed_emergency_default', 'tenant_navayu', 'branch_gurgaon', 'ward_emergency_default', 'EB-1', CURRENT_TIMESTAMP)
-ON CONFLICT ("id") DO NOTHING;
+  IF default_tenant_id IS NULL THEN
+    SELECT "tenantId" INTO default_tenant_id FROM "Branch" LIMIT 1;
+  END IF;
+  IF default_branch_id IS NULL THEN
+    SELECT "id" INTO default_branch_id FROM "Branch" LIMIT 1;
+  END IF;
+
+  IF default_tenant_id IS NOT NULL AND default_branch_id IS NOT NULL THEN
+    INSERT INTO "IpdWard" ("id", "tenantId", "branchId", "label", "category", "updatedAt")
+    VALUES ('ward_emergency_default', default_tenant_id, default_branch_id, 'Emergency Ward', 'general', CURRENT_TIMESTAMP)
+    ON CONFLICT ("id") DO NOTHING;
+
+    INSERT INTO "IpdBed" ("id", "tenantId", "branchId", "wardId", "label", "updatedAt")
+    VALUES ('bed_emergency_default', default_tenant_id, default_branch_id, 'ward_emergency_default', 'EB-1', CURRENT_TIMESTAMP)
+    ON CONFLICT ("id") DO NOTHING;
+  END IF;
+END $$;
 
 -- Add missing wardId/bedId columns to an existing IpdAdmission table
 DO $$
