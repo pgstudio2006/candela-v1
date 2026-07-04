@@ -1,6 +1,15 @@
 -- One-time migration to bring the Coolify database IPD schema in sync.
 -- Run automatically from docker-entrypoint.sh before prisma db push.
 
+-- If an old IpdAdmission table exists without wardId/bedId, drop it so it can be recreated with the new schema.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'IpdAdmission')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'IpdAdmission' AND column_name = 'wardId') THEN
+    DROP TABLE "IpdAdmission" CASCADE;
+  END IF;
+END $$;
+
 -- IpdWard
 CREATE TABLE IF NOT EXISTS "IpdWard" (
     "id" TEXT NOT NULL,
