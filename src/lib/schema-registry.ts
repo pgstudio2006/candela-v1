@@ -265,35 +265,58 @@ export function corruptSchemaOverrideMessage(schemaId: string): string {
   return `This ${label} form still looks like patient registration (wrong sections or fields). Click Reset to default, edit the correct form, then publish again.`;
 }
 
-function mergeWithDefaultRegistrationSchema(
-  override: FormSchema,
-  defaultSchema: FormSchema,
-): FormSchema {
-  const overrideSectionMap = new Map(override.sections.map((s) => [s.id, s]));
-  const mergedSections = defaultSchema.sections.map((defaultSection) => {
-    const overrideSection = overrideSectionMap.get(defaultSection.id);
-    if (!overrideSection) return defaultSection;
+const SEMANTIC_FIELD_ALIASES: Record<string, string[]> = {
+  fullName: ["firstName", "lastName"],
+  phone: ["mobile"],
+};
 
-    const overrideFieldMap = new Map(overrideSection.fields.map((f) => [f.id, f]));
-    const mergedFields = defaultSection.fields.map((field) => overrideFieldMap.get(field.id) ?? field);
+function isEquivalentField(fieldId: string, existingIds: Set<string>): boolean {
+  if (existingIds.has(fieldId)) return true;
+  const aliases = SEMANTIC_FIELD_ALIASES[fieldId];
+  if (aliases) return aliases.some((alias) => existingIds.has(alias));
+  return false;
+}
 
-    // Append any override fields that do not exist in the default section.
-    for (const field of overrideSection.fields) {
-      if (!defaultSection.fields.some((f) => f.id === field.id)) {
-        mergedFields.push(field);
+function mergeRegistrationOverride(override: FormSchema, defaultSchema: FormSchema): FormSchema {
+  const matchedDefaultSectionIds = new Set<string>();
+  const mergedSections = override.sections.map((overrideSection) => {
+    const existingIds = new Set(overrideSection.fields.map((f) => f.id));
+
+    // Find the default section that best matches this override section.
+    let bestMatch: { defaultSection: (typeof defaultSchema.sections)[0] | null; overlap: number } = {
+      defaultSection: null,
+      overlap: 0,
+    };
+    for (const defaultSection of defaultSchema.sections) {
+      const overlap = defaultSection.fields.filter((f) =>
+        overrideSection.fields.some((of) => of.id === f.id || isEquivalentField(f.id, existingIds)),
+      ).length;
+      if (overlap > bestMatch.overlap) {
+        bestMatch = { defaultSection, overlap };
       }
     }
-    return { ...defaultSection, fields: mergedFields };
+
+    if (!bestMatch.defaultSection) return overrideSection;
+    matchedDefaultSectionIds.add(bestMatch.defaultSection.id);
+
+    const additionalFields = bestMatch.defaultSection.fields.filter((field) => {
+      if (isEquivalentField(field.id, existingIds)) return false;
+      existingIds.add(field.id);
+      return true;
+    });
+
+    if (additionalFields.length === 0) return overrideSection;
+    return { ...overrideSection, fields: [...overrideSection.fields, ...additionalFields] };
   });
 
-  // Append any override sections that do not exist in the default schema.
-  for (const overrideSection of override.sections) {
-    if (!defaultSchema.sections.some((s) => s.id === overrideSection.id)) {
-      mergedSections.push(overrideSection);
+  // Append any default sections that did not overlap with an override section.
+  for (const defaultSection of defaultSchema.sections) {
+    if (!matchedDefaultSectionIds.has(defaultSection.id)) {
+      mergedSections.push(defaultSection);
     }
   }
 
-  return { ...defaultSchema, sections: mergedSections };
+  return { ...override, sections: mergedSections };
 }
 
 export function getAnyFormSchema(id: string): FormSchema {
@@ -310,7 +333,7 @@ export function getAnyFormSchema(id: string): FormSchema {
   const base = structuredClone(fallback!);
   const overrideClone = override ? structuredClone(override) : null;
   const schema = id === "registration" && overrideClone
-    ? mergeWithDefaultRegistrationSchema(overrideClone, base)
+    ? mergeRegistrationOverride(overrideClone, base)
     : overrideClone ?? base;
   schema.id = id;
   return schema;
