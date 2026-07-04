@@ -25,6 +25,7 @@ type ActionBody = {
   visitId?: string;
   startVisit?: boolean;
   forceDuplicate?: boolean;
+  emergency?: boolean;
   // checkInVisit
   existingVisitId?: string;
   newVisitId?: string;
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
           visitId: body.visitId,
           startVisit: body.startVisit,
           forceDuplicate: body.forceDuplicate,
+          emergency: body.emergency,
         });
         break;
       }

@@ -126,7 +126,7 @@ export default function RegistrationPage() {
 
     const payload = normalizeReferralDoctor(data);
     setSubmitting(true);
-    const result = await registerPatientAsync(payload, { forceDuplicate: opts?.forceDuplicate || isEmergency });
+    const result = await registerPatientAsync(payload, { forceDuplicate: opts?.forceDuplicate, emergency: isEmergency });
     setSubmitting(false);
 
     if (!result.ok) {
@@ -173,25 +173,32 @@ export default function RegistrationPage() {
       title="Patient registration"
       meta="New capture · duplicate phone guard · billing-first routing"
     >
-      <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
-        {pataudi && (
-          <Panel title="Emergency mode">
-            <label className="flex items-center gap-2 text-[12px]">
-              <input
-                type="checkbox"
-                checked={isEmergency}
-                onChange={(e) => setIsEmergency(e.target.checked)}
-                className="size-4 rounded border-[var(--attio-border)]"
-              />
-              <span className="font-medium text-red-700">Emergency registration</span>
+      {pataudi && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <input
+              id="emergency-mode"
+              type="checkbox"
+              checked={isEmergency}
+              onChange={(e) => setIsEmergency(e.target.checked)}
+              className="size-4 rounded border-red-300"
+            />
+            <label htmlFor="emergency-mode" className="text-[13px] font-medium text-red-700">
+              Emergency registration
             </label>
-            <p className="mt-2 text-[11px] text-[var(--attio-text-tertiary)]">
-              {isEmergency
-                ? "Duplicate phone check disabled. Use for urgent cases requiring immediate care."
-                : "Enable to skip duplicate phone validation for emergency cases."}
-            </p>
-          </Panel>
-        )}
+            <span className="text-[11px] text-red-600">
+              {isEmergency ? "Duplicate phone check is disabled." : "Enable to skip duplicate phone validation for urgent cases."}
+            </span>
+          </div>
+          {isEmergency && (
+            <span className="rounded bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">
+              Urgent mode active
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
         <Panel title="Patient details">
           <PublishedSchemaForm
             schema={schema}
@@ -200,9 +207,11 @@ export default function RegistrationPage() {
             submitLabel={
               submitting
                 ? "Saving…"
-                : phoneWarning
+                : phoneWarning && !isEmergency
                   ? "Blocked — use check-in"
-                  : "Save & continue to check-in"
+                  : isEmergency
+                    ? "Emergency save & continue"
+                    : "Save & continue to check-in"
             }
             onValuesChange={setDraft}
             roster={roster}

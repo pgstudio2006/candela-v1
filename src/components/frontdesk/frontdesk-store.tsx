@@ -84,7 +84,7 @@ type FrontdeskStoreValue = FrontdeskState & {
   getBillingHandoff: (visitId: string) => BillingHandoffPayload | undefined;
   registerPatientAsync: (
     data: RegisterInput,
-    opts?: { startVisit?: boolean; forceDuplicate?: boolean },
+    opts?: { startVisit?: boolean; forceDuplicate?: boolean; emergency?: boolean },
   ) => Promise<RegisterPatientResult>;
   checkInVisit: (
     data: CheckInInput,
@@ -306,7 +306,7 @@ export function FrontdeskStoreProvider({ children }: { children: ReactNode }) {
   const registerPatientAsync = useCallback(
     async (
       data: RegisterInput,
-      opts?: { startVisit?: boolean; forceDuplicate?: boolean },
+      opts?: { startVisit?: boolean; forceDuplicate?: boolean; emergency?: boolean },
     ): Promise<RegisterPatientResult> => {
       const patientId = randomId("p");
       const visitId = opts?.startVisit === false ? "" : randomId("v");
@@ -320,6 +320,7 @@ export function FrontdeskStoreProvider({ children }: { children: ReactNode }) {
           visitId: visitId || undefined,
           startVisit: opts?.startVisit,
           forceDuplicate: opts?.forceDuplicate,
+          emergency: opts?.emergency,
         });
         if (!serverResult.ok) {
           return { ok: false, error: serverResult.error!, code: "INTERNAL_ERROR" };

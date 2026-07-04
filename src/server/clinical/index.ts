@@ -545,15 +545,16 @@ export async function registerPatient(
     visitId?: string;
     startVisit?: boolean;
     forceDuplicate?: boolean;
+    emergency?: boolean;
   },
 ) {
   await ensureHospitalBootstrap();
   await ensureClinicalSeed();
-  const { data: rawData, patientId, visitId, startVisit = true, forceDuplicate = false } = input;
+  const { data: rawData, patientId, visitId, startVisit = true, forceDuplicate = false, emergency = false } = input;
   const data = normalizeRegisterPatientInput(rawData);
   validateFrontdeskInput(registerPatientSchema, data);
   const scope = branchScope(ctx);
-  if (forceDuplicate && !canOverrideDuplicate(ctx.role)) {
+  if (forceDuplicate && !emergency && !canOverrideDuplicate(ctx.role)) {
     throw new ServerActionError(
       "FORBIDDEN",
       "Supervisor approval required to register a duplicate patient.",
@@ -567,7 +568,7 @@ export async function registerPatient(
   const name = `${first} ${last}`.trim() || "New Patient";
   const phone = String(data.phone ?? "");
 
-  await assertNoDuplicatePatient(ctx, phone, uhid, patientId, forceDuplicate);
+  await assertNoDuplicatePatient(ctx, phone, uhid, patientId, forceDuplicate || emergency);
 
   const registration = buildPatientRegistrationPayload(data);
 
@@ -649,13 +650,15 @@ export async function registerPatient(
   await writePlatformAudit({
     ctx,
     module: "frontdesk",
-    action: forceDuplicate ? "patient_registered_override" : "patient_registered",
+    action: emergency ? "patient_registered_emergency" : forceDuplicate ? "patient_registered_override" : "patient_registered",
     entityType: "patient",
     entityId: patientId,
-    summary: forceDuplicate
-      ? `Duplicate override: registered ${name} (${uhid})`
-      : `Registered ${name} (${uhid})`,
-    payload: forceDuplicate ? { forceDuplicate: true, phone, uhid } : undefined,
+    summary: emergency
+      ? `Emergency registration: ${name} (${uhid})`
+      : forceDuplicate
+        ? `Duplicate override: registered ${name} (${uhid})`
+        : `Registered ${name} (${uhid})`,
+    payload: emergency || forceDuplicate ? { emergency, forceDuplicate, phone, uhid } : undefined,
   });
 
   return { patientId, visitId: visitId ?? "", uhid };
