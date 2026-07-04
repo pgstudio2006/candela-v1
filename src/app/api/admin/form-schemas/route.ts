@@ -6,6 +6,7 @@ import {
   saveFormSchemaOverride,
 } from "@/server/admin/form-schemas";
 import { resolveAdminOperator } from "@/server/module-operator";
+import { requireAuth } from "@/server/auth";
 import { ServerActionError } from "@/server/errors";
 import { serializeForClient } from "@/server/serialize";
 import { NextResponse, type NextRequest } from "next/server";
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { ctx } = await resolveAdminOperator();
+    const ctx = await requireAuth();
     const purge = request.nextUrl.searchParams.get("purge") !== "0";
     const data = await listFormSchemaOverrides(ctx, purge);
     return NextResponse.json({ ok: true, data: serializeForClient(data) });
