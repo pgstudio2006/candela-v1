@@ -28,6 +28,14 @@ apply_schema() {
     echo "Skipping prisma db push (PRISMA_DB_PUSH=false)."
     return 0
   fi
+
+  # Apply one-time raw SQL migration for the IPD schema drift that prisma db push can struggle with
+  # on existing Coolify databases (missing wardId/bedId on IpdAdmission, missing tables, etc.).
+  if [ -n "$DATABASE_URL" ] && [ -f "/app/prisma/migrate-ipd-schema.sql" ]; then
+    echo "Applying IPD schema migration SQL..."
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -f /app/prisma/migrate-ipd-schema.sql || true
+  fi
+
   attempt=1
   accept_flag="--accept-data-loss"
   if [ "$PRISMA_ACCEPT_DATA_LOSS" = "false" ]; then
