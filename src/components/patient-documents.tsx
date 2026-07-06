@@ -7,8 +7,8 @@ import {
   uploadPatientDocumentAction,
   deletePatientDocumentAction,
   type PatientDocumentListItem,
-  PATIENT_DOCUMENT_CATEGORIES,
 } from "@/app/actions/patient-document-actions";
+import { PATIENT_DOCUMENT_CATEGORIES } from "@/lib/patient-documents";
 import { FileText, Upload, Trash2, X } from "lucide-react";
 import {
   Select,

@@ -7,17 +7,7 @@ import { requireAuth } from "@/server/auth";
 import { branchScope } from "@/server/tenancy";
 import { writePlatformAudit } from "@/server/platform-audit";
 
-export const PATIENT_DOCUMENT_CATEGORIES = [
-  "medical_history",
-  "insurance",
-  "report",
-  "id_proof",
-  "consent",
-  "discharge",
-  "other",
-] as const;
-
-export type PatientDocumentCategory = (typeof PATIENT_DOCUMENT_CATEGORIES)[number];
+export { PATIENT_DOCUMENT_CATEGORIES, type PatientDocumentCategory } from "@/lib/patient-documents";
 
 export type PatientDocumentListItem = {
   id: string;
