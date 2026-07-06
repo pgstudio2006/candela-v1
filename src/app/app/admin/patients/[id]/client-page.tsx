@@ -114,7 +114,7 @@ export default function AdminPatientDetailClientPage({
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
 
       <div className="mb-4 flex flex-wrap gap-1">
-        {patient.tags.map((t) => (
+        {Array.isArray(patient.tags) && patient.tags.map((t) => (
           <StatusBadge key={t} label={t} variant="neutral" />
         ))}
       </div>

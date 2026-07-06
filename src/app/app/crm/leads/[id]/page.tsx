@@ -347,7 +347,7 @@ export default function OnlineCounsellorLeadDetailPage({ params }: { params: Pro
                   <dd className="tabular-nums">₹{lead.valueEstimate.toLocaleString("en-IN")}</dd>
                 </div>
               )}
-              {lead.tags.length > 0 && (
+              {Array.isArray(lead.tags) && lead.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 pt-1">
                   {lead.tags.map((t) => (
                     <span key={t} className="rounded bg-[var(--attio-surface)] px-1.5 py-0.5 text-[10px] text-[var(--attio-text-tertiary)]">

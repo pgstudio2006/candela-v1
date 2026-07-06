@@ -139,7 +139,7 @@ export default function PatientRecordPage() {
       </Link>
 
       <div className="mb-4 flex flex-wrap gap-1">
-        {patient.tags.map((t) => (
+        {Array.isArray(patient.tags) && patient.tags.map((t) => (
           <StatusBadge key={t} label={t} variant="neutral" />
         ))}
       </div>
