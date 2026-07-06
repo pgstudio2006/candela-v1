@@ -112,7 +112,6 @@ export const REGISTRATION_SCHEMA: FormSchema = {
           ],
         },
         { id: "dob", type: "date", label: "Date of birth", placeholder: "dd-mm-yyyy" },
-        { id: "age", type: "number", label: "Age", placeholder: "Optional" },
         {
           id: "appointmentCentre",
           type: "select",

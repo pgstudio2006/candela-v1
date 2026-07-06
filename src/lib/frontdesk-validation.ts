@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ageFromDob } from "@/lib/frontdesk-workflow";
 import { ServerActionError } from "@/server/errors";
 
 const phoneSchema = z
@@ -50,7 +51,10 @@ export function normalizeRegisterPatientInput(
     landmark: asString(data.landmark),
     country: asString(data.country) || "India",
     appointmentCentre: asString(data.appointmentCentre),
-    age: data.age === undefined || data.age === "" ? 0 : Number(data.age),
+    age:
+      data.age === undefined || data.age === ""
+        ? (asString(data.dob) ? ageFromDob(asString(data.dob)) : 0)
+        : Number(data.age),
   };
 }
 

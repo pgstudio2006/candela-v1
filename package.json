@@ -6,7 +6,7 @@
     "dev": "next dev",
     "dev:webpack": "next dev --webpack",
     "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev --webpack",
-    "build": "next build",
+    "build": "next build && npm run import:navayu-csv",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
@@ -15,7 +15,8 @@
     "db:push": "prisma db push",
     "db:health": "node scripts/db-health.mjs",
     "db:seed-admin": "node scripts/seed-admin-only.mjs",
-    "db:reset-admin-password": "node scripts/reset-admin-password.mjs"
+    "db:reset-admin-password": "node scripts/reset-admin-password.mjs",
+    "import:navayu-csv": "tsx scripts/import-navayu-csv.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

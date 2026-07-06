@@ -1246,6 +1246,24 @@ export async function cancelAppointment(ctx: ServerContext, appointmentId: strin
       : []),
   ]);
 
+  // Release slot capacity when an appointment is cancelled.
+  if (appt.date && appt.time) {
+    const slot = await prisma.slot.findFirst({
+      where: {
+        ...scope,
+        doctorId: appt.doctorId ?? undefined,
+        date: appt.date,
+        startTime: appt.time,
+      },
+    });
+    if (slot && slot.booked > 0) {
+      await prisma.slot.update({
+        where: { id: slot.id },
+        data: { booked: { decrement: 1 } },
+      });
+    }
+  }
+
   await writePlatformAudit({
     ctx,
     module: "frontdesk",
@@ -1287,6 +1305,10 @@ export async function rescheduleAppointment(
 
   await assertSlotAvailable(ctx, doctorId, input.date, input.time, appointmentId);
 
+  const oldDate = appt.date;
+  const oldTime = appt.time;
+  const oldDoctorId = appt.doctorId;
+
   await prisma.$transaction([
     prisma.appointment.update({
       where: { id: appointmentId },
@@ -1312,6 +1334,25 @@ export async function rescheduleAppointment(
         ]
       : []),
   ]);
+
+  // Move slot capacity from old time to new time.
+  if (oldDate && oldTime) {
+    const oldSlot = await prisma.slot.findFirst({
+      where: { ...scope, doctorId: oldDoctorId ?? undefined, date: oldDate, startTime: oldTime },
+    });
+    if (oldSlot && oldSlot.booked > 0) {
+      await prisma.slot.update({ where: { id: oldSlot.id }, data: { booked: { decrement: 1 } } });
+    }
+  }
+  const newSlot = await prisma.slot.findFirst({
+    where: { ...scope, doctorId, date: input.date, startTime: input.time },
+  });
+  if (newSlot) {
+    await prisma.slot.update({
+      where: { id: newSlot.id },
+      data: { booked: { increment: 1 } },
+    });
+  }
 
   if (appt.visitId) {
     const opd = await prisma.opdVisit.findUnique({ where: { id: appt.visitId } });
@@ -1448,7 +1489,7 @@ export async function bookAppointment(
         billing: "pending",
         exam: "not_started",
         appointment: true,
-        appointmentTime: String(data.time ?? ""),
+        appointmentTime: apptTime,
         waitMin: 0,
       },
       create: {
@@ -1462,7 +1503,7 @@ export async function bookAppointment(
         billing: "pending",
         exam: "not_started",
         appointment: true,
-        appointmentTime: String(data.time ?? ""),
+        appointmentTime: apptTime,
         waitMin: 0,
       },
     }),
@@ -1475,8 +1516,8 @@ export async function bookAppointment(
         departmentId: deptId,
         doctorId,
         doctorName: resolvedDoctorName,
-        date: String(data.date ?? ""),
-        time: String(data.time ?? ""),
+        date: apptDate,
+        time: apptTime,
         durationMin: Number(data.duration ?? 20),
         notes: String(data.notes ?? "") || null,
         status: "booked",
@@ -1489,14 +1530,26 @@ export async function bookAppointment(
         departmentId: deptId,
         doctorId,
         doctorName: resolvedDoctorName,
-        date: String(data.date ?? ""),
-        time: String(data.time ?? ""),
+        date: apptDate,
+        time: apptTime,
         durationMin: Number(data.duration ?? 20),
         notes: String(data.notes ?? "") || null,
         status: "booked",
       },
     }),
   ]);
+
+  // Keep slot capacity live with appointment bookings.
+  await prisma.slot.updateMany({
+    where: {
+      ...scope,
+      doctorId,
+      date: apptDate,
+      startTime: apptTime,
+      status: "available",
+    },
+    data: { booked: { increment: 1 } },
+  });
 
   const opd = await prisma.opdVisit.findUnique({ where: { id: visitId } });
   if (opd) await syncVisitFromOpdVisit(ctx, opd);
