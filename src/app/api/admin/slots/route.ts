@@ -1,3 +1,4 @@
+import { doctorIdVariants } from "@/lib/clinical-roster";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/server/auth";
 import { branchScope } from "@/server/tenancy";
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
 
     const where: any = { ...scope };
     if (date) where.date = date;
-    if (doctorId) where.doctorId = doctorId;
+    if (doctorId) where.doctorId = { in: doctorIdVariants(doctorId) };
 
     const slots = await prisma.slot.findMany({
       where,
@@ -74,7 +75,7 @@ export async function DELETE(req: NextRequest) {
 
     const where: any = { ...scope };
     if (date) where.date = date;
-    if (doctorId) where.doctorId = doctorId;
+    if (doctorId) where.doctorId = { in: doctorIdVariants(doctorId) };
     if (!clearAll && !date) {
       return NextResponse.json({ ok: false, error: "Specify date or all=true" }, { status: 400 });
     }

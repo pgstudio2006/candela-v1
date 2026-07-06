@@ -20,6 +20,16 @@ export function staffIdFromDoctorId(doctorId: string) {
   return doctorId.startsWith("dr_") ? `st_${doctorId.slice(3)}` : null;
 }
 
+export function doctorIdVariants(doctorId: string): string[] {
+  const variants = [doctorId];
+  if (doctorId.startsWith("dr_")) {
+    variants.push(doctorId.replace("dr_", "st_"));
+  } else if (doctorId.startsWith("st_")) {
+    variants.push(doctorId.replace("st_", "dr_"));
+  }
+  return variants;
+}
+
 export function resolveDoctorName(doctorId: string, roster?: ClinicalRoster | null) {
   if (roster?.doctorNames[doctorId]) return roster.doctorNames[doctorId];
   const staffId = staffIdFromDoctorId(doctorId);

@@ -3,6 +3,7 @@
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useAdminStore } from "@/components/admin/admin-store";
+import { doctorIdFromStaffId } from "@/lib/clinical-roster";
 import { useState, useEffect } from "react";
 import { Calendar, Clock, Plus, Trash2, Copy, Filter, Timer } from "lucide-react";
 
@@ -155,12 +156,16 @@ export default function SlotManagementPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const slotPayload = {
+        ...formData,
+        doctorId: formData.doctorId ? doctorIdFromStaffId(formData.doctorId) : formData.doctorId,
+      };
       if (editing) {
         const res = await fetch(`/api/admin/slots/${editing.id}`, {
           method: "PUT",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(slotPayload),
         });
         const json = await res.json();
         if (json.ok) {
@@ -172,7 +177,7 @@ export default function SlotManagementPage() {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(slotPayload),
         });
         const json = await res.json();
         if (json.ok) {
@@ -362,6 +367,7 @@ export default function SlotManagementPage() {
 
     const doctor = staff.find((s) => s.id === doctorId);
     const doctorName = doctor?.name || "";
+    const normalizedDoctorId = doctorId ? doctorIdFromStaffId(doctorId) : doctorId;
 
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -399,7 +405,7 @@ export default function SlotManagementPage() {
           const slotEndStr = `${String(Math.floor(slotEnd / 60)).padStart(2, "0")}:${String(slotEnd % 60).padStart(2, "0")}`;
 
           slotsToCreate.push({
-            doctorId,
+            doctorId: normalizedDoctorId,
             doctorName,
             date: current.toISOString().slice(0, 10),
             startTime: slotStart,

@@ -33,7 +33,7 @@ import { backfillBranchScope } from "@/server/branch-scope";
 import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 import { loadClinicalRoster } from "@/server/clinical/roster";
 import { withPrismaError } from "@/server/prisma-errors";
-import { resolveDoctorName, staffIdFromDoctorId } from "@/lib/clinical-roster";
+import { doctorIdVariants, resolveDoctorName, staffIdFromDoctorId } from "@/lib/clinical-roster";
 import { ensureIpdWardBed } from "@/server/ipd";
 import { createId } from "@/lib/id";
 import type { ClinicalRoster } from "@/lib/clinical-roster";
@@ -1203,7 +1203,7 @@ async function assertSlotAvailable(
   const slot = await prisma.slot.findFirst({
     where: {
       ...scope,
-      doctorId,
+      doctorId: { in: doctorIdVariants(doctorId) },
       date,
       startTime: time,
     },
@@ -1251,7 +1251,7 @@ export async function cancelAppointment(ctx: ServerContext, appointmentId: strin
     const slot = await prisma.slot.findFirst({
       where: {
         ...scope,
-        doctorId: appt.doctorId ?? undefined,
+        doctorId: appt.doctorId ? { in: doctorIdVariants(appt.doctorId) } : undefined,
         date: appt.date,
         startTime: appt.time,
       },
@@ -1338,14 +1338,14 @@ export async function rescheduleAppointment(
   // Move slot capacity from old time to new time.
   if (oldDate && oldTime) {
     const oldSlot = await prisma.slot.findFirst({
-      where: { ...scope, doctorId: oldDoctorId ?? undefined, date: oldDate, startTime: oldTime },
+      where: { ...scope, doctorId: oldDoctorId ? { in: doctorIdVariants(oldDoctorId) } : undefined, date: oldDate, startTime: oldTime },
     });
     if (oldSlot && oldSlot.booked > 0) {
       await prisma.slot.update({ where: { id: oldSlot.id }, data: { booked: { decrement: 1 } } });
     }
   }
   const newSlot = await prisma.slot.findFirst({
-    where: { ...scope, doctorId, date: input.date, startTime: input.time },
+    where: { ...scope, doctorId: { in: doctorIdVariants(doctorId) }, date: input.date, startTime: input.time },
   });
   if (newSlot) {
     await prisma.slot.update({
@@ -1543,7 +1543,7 @@ export async function bookAppointment(
   await prisma.slot.updateMany({
     where: {
       ...scope,
-      doctorId,
+      doctorId: { in: doctorIdVariants(doctorId) },
       date: apptDate,
       startTime: apptTime,
       status: "available",
