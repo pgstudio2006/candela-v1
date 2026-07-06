@@ -105,7 +105,7 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
   }
 
   const existingCount = await prisma.patient.count({
-    where: { tenantId: ctx.tenantId, branchId: ctx.branchId },
+    where: { tenantId: ctx.tenantId },
   });
   let counter = existingCount;
 
@@ -145,8 +145,21 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
     if (existingPatient) {
       patientId = existingPatient.id;
     } else {
-      counter++;
-      const uhid = nextUhid(counter, ctx.branchId);
+      let uhid = "";
+      let attempts = 0;
+      while (attempts < 1000) {
+        counter++;
+        const candidate = nextUhid(counter, ctx.branchId);
+        const existing = await prisma.patient.findUnique({
+          where: { tenantId_uhid: { tenantId: ctx.tenantId, uhid: candidate } },
+        });
+        if (!existing) {
+          uhid = candidate;
+          break;
+        }
+        attempts++;
+      }
+      if (!uhid) throw new Error("Could not generate a unique UHID after 1000 attempts.");
       const name = row.Name.trim() || "Unknown";
       const age = Number(row.Age);
       const gender = normalizeGender(row.Gender);
