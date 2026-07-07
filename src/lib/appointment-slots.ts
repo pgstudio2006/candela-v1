@@ -14,8 +14,8 @@ export function generateDaySlots(
 ): SlotInfo[] {
   const config = APPOINTMENT_SLOTS[deptId as keyof typeof APPOINTMENT_SLOTS] ?? APPOINTMENT_SLOTS.dept_spine;
   const slots: SlotInfo[] = [];
-  let cursor = 9 * 60;
-  const end = 17 * 60;
+  let cursor = 15 * 60;
+  const end = 20 * 60 + 30;
   const step = config.durationMin + config.bufferMin;
 
   while (cursor + config.durationMin <= end) {

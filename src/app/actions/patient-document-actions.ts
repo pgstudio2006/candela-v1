@@ -7,8 +7,6 @@ import { requireAuth } from "@/server/auth";
 import { branchScope } from "@/server/tenancy";
 import { writePlatformAudit } from "@/server/platform-audit";
 
-export { PATIENT_DOCUMENT_CATEGORIES, type PatientDocumentCategory } from "@/lib/patient-documents";
-
 export type PatientDocumentListItem = {
   id: string;
   patientId: string;
