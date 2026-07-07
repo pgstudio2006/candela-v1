@@ -192,6 +192,7 @@ export default function PatientRecordPage() {
                 <div><dt className="text-[var(--attio-text-tertiary)]">State</dt><dd>{patient.state ?? "—"}</dd></div>
                 <div><dt className="text-[var(--attio-text-tertiary)]">District</dt><dd>{patient.district ?? "—"}</dd></div>
                 <div><dt className="text-[var(--attio-text-tertiary)]">City</dt><dd>{patient.city ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Area</dt><dd>{patient.area ?? "—"}</dd></div>
                 <div><dt className="text-[var(--attio-text-tertiary)]">Society / colony</dt><dd>{patient.society ?? "—"}</dd></div>
                 <div><dt className="text-[var(--attio-text-tertiary)]">House / building</dt><dd>{patient.houseNumber ?? "—"}</dd></div>
                 <div><dt className="text-[var(--attio-text-tertiary)]">Street / road</dt><dd>{patient.street ?? "—"}</dd></div>
@@ -200,6 +201,37 @@ export default function PatientRecordPage() {
                 <div><dt className="text-[var(--attio-text-tertiary)]">Pincode</dt><dd>{patient.pincode ?? "—"}</dd></div>
                 {patient.address && (
                   <div className="col-span-2"><dt className="text-[var(--attio-text-tertiary)]">Full address</dt><dd>{patient.address}</dd></div>
+                )}
+              </dl>
+            </Panel>
+            <Panel title="Imported details" className="lg:col-span-2">
+              <dl className="grid grid-cols-2 gap-3 text-[13px] md:grid-cols-3 lg:grid-cols-4">
+                <div><dt className="text-[var(--attio-text-tertiary)]">Lead ID</dt><dd>{patient.leadId ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">User name</dt><dd>{patient.userName ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Campaign</dt><dd>{patient.campaignName ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Source</dt><dd>{patient.source ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Source detail</dt><dd>{patient.sourceDetail ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Lead status</dt><dd>{patient.leadStatus ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Action status</dt><dd>{patient.actionStatus ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Lost reason</dt><dd>{patient.lostReason ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Follow-up date</dt><dd>{patient.followUpDate ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Date of birth</dt><dd>{patient.dateOfBirth ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Anniversary</dt><dd>{patient.anniversaryDate ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Alternate phone</dt><dd>{patient.alternatePhone ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Disease</dt><dd>{patient.disease ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Doctor (appointment)</dt><dd>{patient.doctorName ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Appointment centre</dt><dd>{patient.appointmentCentre ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Referral type</dt><dd>{patient.referralType ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Referral doctor</dt><dd>{patient.referralDoctorName ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Assignee</dt><dd>{patient.assigneeName ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Assignee email</dt><dd>{patient.assigneeEmail ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Action created by</dt><dd>{patient.actionCreatedBy ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Action created by email</dt><dd>{patient.actionCreatedByEmail ?? "—"}</dd></div>
+                {patient.userNote && (
+                  <div className="col-span-2 md:col-span-3 lg:col-span-4"><dt className="text-[var(--attio-text-tertiary)]">User note</dt><dd>{patient.userNote}</dd></div>
+                )}
+                {patient.notes && (
+                  <div className="col-span-2 md:col-span-3 lg:col-span-4"><dt className="text-[var(--attio-text-tertiary)]">Notes</dt><dd>{patient.notes}</dd></div>
                 )}
               </dl>
             </Panel>

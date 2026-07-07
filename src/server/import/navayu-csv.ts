@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createId } from "@/lib/id";
 import { nextUhid, normalizePhone } from "@/lib/frontdesk-workflow";
@@ -10,29 +11,44 @@ import { doctorIdFromStaffId } from "@/lib/clinical-roster";
 export const NAVAYU_CSV_FILENAME = "databackup-29-Jun-2026_17_30_27.csv";
 
 export type NavayuCsvRow = {
-  "User Note": string;
-  "Campaign Name": string;
-  "Action Created By name": string;
-  "Action Created By emailid": string;
-  "Action Created At": string;
-  Status: string;
-  "Lost Reason": string;
-  "Assignee name": string;
-  "Assignee emailid": string;
-  Name: string;
-  Phone: string;
-  "Alternate Number": string;
-  Age: string;
-  Gender: string;
-  City: string;
-  "District Name": string;
-  "State and Union Territories": string;
-  Country: string;
-  Disease: string;
-  "Doctor Name Appointment for": string;
-  "Appointment Date Date": string;
-  "Appointment Date Time": string;
-  "Appointment Centre": string;
+  "Lead ID"?: string;
+  "User Name"?: string;
+  "User Note"?: string;
+  "Campaign Name"?: string;
+  "Action Created By name"?: string;
+  "Action Created By emailid"?: string;
+  "Action Created At"?: string;
+  Status?: string;
+  "Lost Reason"?: string;
+  "Follow-Up Date"?: string;
+  Notes?: string;
+  "Assignee name"?: string;
+  "Assignee emailid"?: string;
+  Name?: string;
+  Phone?: string;
+  "Alternate Number"?: string;
+  Email?: string;
+  "Date of Birth"?: string;
+  "Anniversary Date"?: string;
+  Age?: string;
+  Gender?: string;
+  City?: string;
+  "District Name"?: string;
+  "State and Union Territories"?: string;
+  Country?: string;
+  Area?: string;
+  Tags?: string;
+  Source?: string;
+  "Source Details"?: string;
+  "Lead Status"?: string;
+  UHID?: string;
+  Disease?: string;
+  "Referral Type"?: string;
+  "Referral Doctor Name"?: string;
+  "Doctor Name Appointment for"?: string;
+  "Appointment Date Date"?: string;
+  "Appointment Date Time"?: string;
+  "Appointment Centre"?: string;
 };
 
 function parseCsvRows(content: string): NavayuCsvRow[] {
@@ -93,6 +109,47 @@ function normalizeStatus(value: string): string {
   return v || "scheduled";
 }
 
+function normalizeLeadStatus(value: string): string {
+  const v = value.trim().toLowerCase();
+  if (v === "visit done") return "converted";
+  if (v === "converted") return "converted";
+  if (v === "lost") return "lost";
+  if (v === "follow up" || v === "followup") return "follow_up";
+  return v || "fresh";
+}
+
+function buildPatientMeta(row: NavayuCsvRow, baseMeta?: Record<string, unknown>): Record<string, unknown> {
+  const source = row.Source?.trim() || "navayu_backup";
+  const sourceDetail = row["Source Details"]?.trim() || row["Campaign Name"]?.trim() || null;
+  const meta: Record<string, unknown> = {
+    ...(typeof baseMeta === "object" && baseMeta !== null ? baseMeta : {}),
+    leadId: row["Lead ID"]?.trim() || null,
+    userNote: row["User Note"]?.trim() || null,
+    campaignName: row["Campaign Name"]?.trim() || null,
+    actionCreatedBy: row["Action Created By name"]?.trim() || null,
+    actionCreatedByEmail: row["Action Created By emailid"]?.trim() || null,
+    status: row.Status?.trim() || null,
+    lostReason: row["Lost Reason"]?.trim() || null,
+    followUpDate: parseDate(row["Follow-Up Date"] ?? ""),
+    notes: row.Notes?.trim() || null,
+    assigneeName: row["Assignee name"]?.trim() || null,
+    assigneeEmail: row["Assignee emailid"]?.trim() || null,
+    alternatePhone: parsePhoneNumber(row["Alternate Number"] ?? ""),
+    disease: row.Disease?.trim() || null,
+    doctorName: row["Doctor Name Appointment for"]?.trim() || null,
+    appointmentCentre: row["Appointment Centre"]?.trim() || null,
+    source,
+    sourceDetail,
+    referralType: row["Referral Type"]?.trim() || null,
+    referralDoctorName: row["Referral Doctor Name"]?.trim() || null,
+    leadStatus: row["Lead Status"]?.trim() || null,
+    userName: row["User Name"]?.trim() || null,
+    area: row.Area?.trim() || null,
+    anniversaryDate: parseDate(row["Anniversary Date"] ?? ""),
+  };
+  return Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== null && v !== undefined && v !== ""));
+}
+
 function cleanDoctorName(value: string): string {
   return value
     .replace(/\s+/g, " ")
@@ -124,6 +181,21 @@ function buildTags(row: NavayuCsvRow): string[] {
   if (campaign && campaign !== "-") tags.add(campaign);
   const doctor = cleanDoctorName(row["Doctor Name Appointment for"]?.trim() || "");
   if (doctor) tags.add(`Dr: ${doctor}`);
+  const rawTags = row.Tags?.trim();
+  if (rawTags) {
+    rawTags.split(/[,|;/]\s*/).forEach((t) => {
+      const trimmed = t.trim();
+      if (trimmed) tags.add(trimmed);
+    });
+  }
+  const source = row.Source?.trim();
+  if (source) tags.add(source);
+  const sourceDetail = row["Source Details"]?.trim();
+  if (sourceDetail) tags.add(sourceDetail);
+  const referralType = row["Referral Type"]?.trim();
+  if (referralType) tags.add(referralType);
+  const area = row.Area?.trim();
+  if (area) tags.add(area);
   return Array.from(tags);
 }
 
@@ -201,7 +273,7 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const phone = parsePhoneNumber(row.Phone);
+    const phone = parsePhoneNumber(row.Phone ?? "");
     if (!phone) {
       console.log(`[navayu-csv] Row ${i + 1}: skipped, no phone`);
       continue;
@@ -211,15 +283,15 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
     const apptTime = row["Appointment Date Time"]?.trim() || "";
     const doctorNameRaw = row["Doctor Name Appointment for"]?.trim() || "";
     const assigneeNameRaw = row["Assignee name"]?.trim() || "";
-    const actionCreatedAt = parseDate(row["Action Created At"]) ?? new Date();
+    const actionCreatedAt = parseDate(row["Action Created At"] ?? "") ?? new Date();
     const actionCreatedByName = row["Action Created By name"]?.trim() || null;
     const actionCreatedByEmail = row["Action Created By emailid"]?.trim() || null;
     const disease = row.Disease?.trim() || "";
     const appointmentCentre = row["Appointment Centre"]?.trim() || "";
     const status = row.Status?.trim() || "";
-    const name = row.Name.trim() || "Unknown";
-    const age = Number(row.Age);
-    const gender = normalizeGender(row.Gender);
+    const name = row.Name?.trim() || "Unknown";
+    const age = Number(row.Age ?? "");
+    const gender = normalizeGender(row.Gender ?? "");
     const tags = buildTags(row);
     const dept = doctorDepartment(doctorNameRaw) ?? doctorDepartment(disease);
     const resolved = await resolveDoctorAndAssignee(ctx, doctorNameRaw, assigneeNameRaw);
@@ -228,24 +300,29 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
     const departmentId = dept?.id ?? null;
     const departmentLabel = dept?.label ?? null;
 
-    const existingAppointment = await prisma.appointment.findFirst({
-      where: {
-        tenantId: ctx.tenantId,
-        branchId: ctx.branchId,
-        date: apptDate,
-        time: apptTime,
-        doctorName,
-        patient: { phone },
-      },
-    });
-    if (existingAppointment) {
-      console.log(`[navayu-csv] Row ${i + 1}: skipped, existing appointment ${existingAppointment.id}`);
-      continue;
-    }
+    const existingAppointment = apptDate
+      ? await prisma.appointment.findFirst({
+          where: {
+            tenantId: ctx.tenantId,
+            branchId: ctx.branchId,
+            date: apptDate,
+            time: apptTime,
+            doctorName,
+            patient: { phone },
+          },
+        })
+      : null;
 
     const existingPatient = await prisma.patient.findFirst({
       where: { tenantId: ctx.tenantId, branchId: ctx.branchId, phone },
     });
+
+    const parsedEmail = row.Email?.trim() || null;
+    const parsedDateOfBirth = parseDate(row["Date of Birth"] ?? "");
+    const parsedArea = row.Area?.trim() || null;
+    const parsedUhid = row.UHID?.trim() || null;
+    const parsedReferralType = row["Referral Type"]?.trim() || null;
+    const parsedReferralDoctorName = row["Referral Doctor Name"]?.trim() || null;
 
     let patientId: string;
     let patientUhid: string;
@@ -255,7 +332,10 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
       await prisma.patient.update({
         where: { id: patientId },
         data: {
+          name,
           fullName: name,
+          email: parsedEmail ?? existingPatient.email,
+          dateOfBirth: parsedDateOfBirth ?? existingPatient.dateOfBirth,
           age: Number.isFinite(age) && age > 0 ? age : existingPatient.age,
           gender: gender ?? existingPatient.gender,
           department: departmentLabel ?? existingPatient.department,
@@ -264,46 +344,41 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
           tags: { set: Array.from(new Set([...existingPatient.tags, ...tags])) },
           assignedCounsellorId: resolved.assigneeId ?? existingPatient.assignedCounsellorId,
           assignedCounsellorName: resolved.assigneeName ?? existingPatient.assignedCounsellorName,
+          referralDoctorName: parsedReferralDoctorName ?? existingPatient.referralDoctorName,
           address: {
             ...(typeof existingPatient.address === "object" && existingPatient.address !== null ? existingPatient.address : {}),
             city: row.City?.trim() || null,
             district: row["District Name"]?.trim() || null,
             state: row["State and Union Territories"]?.trim() || null,
             country: row.Country?.trim() || "India",
+            area: parsedArea,
           },
-          meta: {
-            ...(typeof existingPatient.meta === "object" && existingPatient.meta !== null ? existingPatient.meta : {}),
-            alternatePhone: parsePhoneNumber(row["Alternate Number"]),
-            disease: disease || null,
-            doctorName: doctorNameRaw || null,
-            appointmentCentre: appointmentCentre || null,
-            userNote: row["User Note"]?.trim() || null,
-            campaignName: row["Campaign Name"]?.trim() || null,
-            actionCreatedBy: actionCreatedByName,
-            actionCreatedByEmail: actionCreatedByEmail,
-            status: status || null,
-            lostReason: row["Lost Reason"]?.trim() || null,
-            assigneeName: resolved.assigneeName,
-            assigneeEmail: row["Assignee emailid"]?.trim() || null,
-            source: "navayu_backup",
-          },
+          meta: buildPatientMeta(row, typeof existingPatient.meta === "object" && existingPatient.meta !== null ? (existingPatient.meta as Record<string, unknown>) : undefined) as unknown as Prisma.InputJsonValue,
           updatedAt: new Date(),
         },
       });
     } else {
       let uhid = "";
-      let attempts = 0;
-      while (attempts < 1000) {
-        counter++;
-        const candidate = nextUhid(counter, ctx.branchId);
-        const existing = await prisma.patient.findUnique({
-          where: { tenantId_uhid: { tenantId: ctx.tenantId, uhid: candidate } },
+      if (parsedUhid) {
+        const existingUhid = await prisma.patient.findUnique({
+          where: { tenantId_uhid: { tenantId: ctx.tenantId, uhid: parsedUhid } },
         });
-        if (!existing) {
-          uhid = candidate;
-          break;
+        if (!existingUhid) uhid = parsedUhid;
+      }
+      if (!uhid) {
+        let attempts = 0;
+        while (attempts < 1000) {
+          counter++;
+          const candidate = nextUhid(counter, ctx.branchId);
+          const existing = await prisma.patient.findUnique({
+            where: { tenantId_uhid: { tenantId: ctx.tenantId, uhid: candidate } },
+          });
+          if (!existing) {
+            uhid = candidate;
+            break;
+          }
+          attempts++;
         }
-        attempts++;
       }
       if (!uhid) throw new Error("Could not generate a unique UHID after 1000 attempts.");
       patientUhid = uhid;
@@ -316,6 +391,8 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
           name,
           fullName: name,
           phone,
+          email: parsedEmail,
+          dateOfBirth: parsedDateOfBirth,
           age: Number.isFinite(age) && age > 0 ? age : null,
           gender,
           status: "active",
@@ -325,38 +402,35 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
           tags,
           assignedCounsellorId: resolved.assigneeId,
           assignedCounsellorName: resolved.assigneeName,
+          referralDoctorName: parsedReferralDoctorName,
           address: {
             city: row.City?.trim() || null,
             district: row["District Name"]?.trim() || null,
             state: row["State and Union Territories"]?.trim() || null,
             country: row.Country?.trim() || "India",
+            area: parsedArea,
           },
-          meta: {
-            alternatePhone: parsePhoneNumber(row["Alternate Number"]),
-            disease: disease || null,
-            doctorName: doctorNameRaw || null,
-            appointmentCentre: appointmentCentre || null,
-            userNote: row["User Note"]?.trim() || null,
-            campaignName: row["Campaign Name"]?.trim() || null,
-            actionCreatedBy: actionCreatedByName,
-            actionCreatedByEmail: actionCreatedByEmail,
-            status: status || null,
-            lostReason: row["Lost Reason"]?.trim() || null,
-            assigneeName: resolved.assigneeName,
-            assigneeEmail: row["Assignee emailid"]?.trim() || null,
-            source: "navayu_backup",
-          },
+          meta: buildPatientMeta(row) as unknown as Prisma.InputJsonValue,
           createdAt: actionCreatedAt,
         },
       });
       patientId = created.id;
     }
 
+    if (existingAppointment) {
+      console.log(`[navayu-csv] Row ${i + 1}: patient ${patientId} updated, existing appointment ${existingAppointment.id}`);
+      results.push({ row: i + 1, patientId, opdVisitId: existingAppointment.visitId ?? "", appointmentId: existingAppointment.id });
+      continue;
+    }
+
     const opdVisitId = createId("opd");
     const appointmentId = createId("apt");
     const leadId = createId("lead");
     const appointmentDate = parseDateTime(apptDate, apptTime);
-    const leadStatus = status.toLowerCase() === "visit done" ? "converted" : "fresh";
+    const leadStatus = normalizeLeadStatus(row["Lead Status"] ?? status);
+    const followUpDate = parseDate(row["Follow-Up Date"] ?? "");
+    const leadSource = row.Source?.trim() || "navayu_backup";
+    const leadSourceDetail = row["Source Details"]?.trim() || row["Campaign Name"]?.trim() || null;
 
     await prisma.$transaction([
       prisma.opdVisit.create({
@@ -404,7 +478,8 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
           patientId,
           fullName: name,
           phone,
-          alternatePhone: parsePhoneNumber(row["Alternate Number"]) || null,
+          email: parsedEmail,
+          alternatePhone: parsePhoneNumber(row["Alternate Number"] ?? "") || null,
           age: Number.isFinite(age) && age > 0 ? age : null,
           gender: gender ?? null,
           city: row.City?.trim() || null,
@@ -415,14 +490,16 @@ export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
           appointmentDate: appointmentDate,
           appointmentTime: apptTime,
           appointmentCentre: appointmentCentre || null,
-          source: "navayu_backup",
-          sourceDetail: row["Campaign Name"]?.trim() || null,
-          notes: row["User Note"]?.trim() || null,
+          source: leadSource,
+          sourceDetail: leadSourceDetail,
+          notes: row.Notes?.trim() || row["User Note"]?.trim() || null,
           tags: Array.from(tags),
           leadStatus,
           lostReason: row["Lost Reason"]?.trim() || null,
           assigneeId: resolved.assigneeId,
           uhid: patientUhid,
+          integrationId: row["Lead ID"]?.trim() || null,
+          nextFollowUpAt: followUpDate,
           createdAt: actionCreatedAt,
           updatedAt: actionCreatedAt,
         },

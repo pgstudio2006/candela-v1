@@ -49,6 +49,30 @@ export type Patient = {
   landmark?: string;
   address?: string;
   pincode?: string;
+  // Navayu CSV import metadata
+  dateOfBirth?: string;
+  anniversaryDate?: string;
+  area?: string;
+  alternatePhone?: string;
+  disease?: string;
+  doctorName?: string;
+  appointmentCentre?: string;
+  userNote?: string;
+  campaignName?: string;
+  actionCreatedBy?: string;
+  actionCreatedByEmail?: string;
+  actionStatus?: string;
+  lostReason?: string;
+  followUpDate?: string;
+  notes?: string;
+  assigneeName?: string;
+  assigneeEmail?: string;
+  source?: string;
+  sourceDetail?: string;
+  leadStatus?: string;
+  leadId?: string;
+  referralType?: string;
+  userName?: string;
 };
 
 export type Visit = {

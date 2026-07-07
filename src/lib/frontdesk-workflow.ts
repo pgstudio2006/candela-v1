@@ -123,6 +123,7 @@ type PrismaPatientRow = PatientNameSource & {
   phone: string;
   email?: string | null;
   age?: number | null;
+  dateOfBirth?: Date | string | null;
   gender?: string | null;
   department?: string | null;
   departmentId?: string | null;
@@ -135,8 +136,25 @@ type PrismaPatientRow = PatientNameSource & {
   meta?: unknown;
 };
 
+function formatDateValue(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return value.toISOString().split("T")[0];
+  if (typeof value === "string") return value;
+  return undefined;
+}
+
+function metaString(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const str = String(value).trim();
+  return str || undefined;
+}
+
 export function mapPrismaPatientRow(row: PrismaPatientRow): Patient {
   const reg = parsePatientRegistrationMeta(row.meta);
+  const meta =
+    typeof row.meta === "object" && row.meta !== null
+      ? (row.meta as Record<string, unknown>)
+      : {};
   return {
     id: row.id,
     uhid: row.uhid,
@@ -144,6 +162,7 @@ export function mapPrismaPatientRow(row: PrismaPatientRow): Patient {
     phone: row.phone,
     email: row.email ?? undefined,
     age: row.age ?? 0,
+    dateOfBirth: formatDateValue(row.dateOfBirth) ?? metaString(meta.dateOfBirth),
     gender: (row.gender ?? "O") as Patient["gender"],
     department: row.department ?? "",
     departmentId: row.departmentId ?? "",
@@ -154,14 +173,15 @@ export function mapPrismaPatientRow(row: PrismaPatientRow): Patient {
     referrerSource: reg.referrerSource,
     corporateId: reg.corporateId,
     referralDoctorId: row.referralDoctorId ?? undefined,
-    referralDoctorName: row.referralDoctorName ?? undefined,
+    referralDoctorName: row.referralDoctorName ?? metaString(meta.referralDoctorName) ?? undefined,
     registrationNotes: reg.registrationNotes,
     consentTreatment: reg.consentTreatment,
     consentData: reg.consentData,
-    country: reg.country,
-    state: reg.state,
-    district: reg.district,
-    city: reg.city,
+    country: reg.country ?? metaString(meta.country),
+    state: reg.state ?? metaString(meta.state),
+    district: reg.district ?? metaString(meta.district),
+    city: reg.city ?? metaString(meta.city),
+    area: metaString(meta.area),
     society: reg.society,
     houseNumber: reg.houseNumber,
     street: reg.street,
@@ -169,6 +189,27 @@ export function mapPrismaPatientRow(row: PrismaPatientRow): Patient {
     landmark: reg.landmark,
     address: reg.address,
     pincode: reg.pincode,
+    anniversaryDate: formatDateValue(meta.anniversaryDate),
+    alternatePhone: metaString(meta.alternatePhone),
+    disease: metaString(meta.disease),
+    doctorName: metaString(meta.doctorName),
+    appointmentCentre: metaString(meta.appointmentCentre),
+    userNote: metaString(meta.userNote),
+    campaignName: metaString(meta.campaignName),
+    actionCreatedBy: metaString(meta.actionCreatedBy),
+    actionCreatedByEmail: metaString(meta.actionCreatedByEmail),
+    actionStatus: metaString(meta.status ?? meta.actionStatus),
+    lostReason: metaString(meta.lostReason),
+    followUpDate: formatDateValue(meta.followUpDate),
+    notes: metaString(meta.notes),
+    assigneeName: metaString(meta.assigneeName),
+    assigneeEmail: metaString(meta.assigneeEmail),
+    source: metaString(meta.source),
+    sourceDetail: metaString(meta.sourceDetail),
+    leadStatus: metaString(meta.leadStatus),
+    leadId: metaString(meta.leadId),
+    referralType: metaString(meta.referralType),
+    userName: metaString(meta.userName),
   };
 }
 
