@@ -102,6 +102,14 @@ export async function uploadPatientDocumentAction(payload: {
 export async function deletePatientDocumentAction(id: string): Promise<ActionResult<void>> {
   return runAction(async () => {
     await requireAuth();
+    if (!id || typeof id !== "string") {
+      throw new Error("Document ID is required.");
+    }
+    const existing = await prisma.patientDocument.findUnique({ where: { id } });
+    if (!existing) {
+      console.warn(`[patient-documents] Document ${id} was already deleted or not found.`);
+      return;
+    }
     await prisma.patientDocument.delete({ where: { id } });
   });
 }
