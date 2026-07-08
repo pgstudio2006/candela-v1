@@ -16,7 +16,8 @@ export default function PharmacyDashboardPage() {
       const d = daysToExpiry(s.expiry);
       const drug = getDrug(s.drugId);
       const low = s.qtyOnHand <= (drug?.reorderLevel ?? 0);
-      return (d >= 0 && d <= 30) || low;
+      const out = s.qtyOnHand === 0;
+      return (d >= 0 && d <= 30) || low || out;
     })
     .slice(0, 6);
 
@@ -52,17 +53,21 @@ export default function PharmacyDashboardPage() {
             {alerts.map((s) => {
               const drug = getDrug(s.drugId);
               const d = daysToExpiry(s.expiry);
+              const low = s.qtyOnHand <= (drug?.reorderLevel ?? 0);
+              const out = s.qtyOnHand === 0;
               return (
                 <li key={s.id} className="py-2 text-[12px]">
                   <p className="font-medium">{drug?.brandName}</p>
                   <p className="text-[var(--attio-text-tertiary)]">
                     Batch {s.batchNo} · {s.qtyOnHand} units
                     {d <= 30 ? ` · expires in ${d}d` : ""}
-                    {s.qtyOnHand <= (drug?.reorderLevel ?? 0) ? " · low stock" : ""}
+                    {out ? " · OUT OF STOCK" : ""}
+                    {low && !out ? " · low stock" : ""}
                   </p>
                 </li>
               );
             })}
+            {alerts.length === 0 && <li className="py-4 text-[13px] text-[var(--attio-text-tertiary)]">No stock alerts</li>}
           </ul>
         </Panel>
       </div>
@@ -85,6 +90,9 @@ export default function PharmacyDashboardPage() {
               <StatusBadge label={p.status} variant="neutral" />
             </li>
           ))}
+          {purchaseOrders.filter((p) => !["received", "cancelled"].includes(p.status)).length === 0 && (
+            <li className="py-4 text-[13px] text-[var(--attio-text-tertiary)]">No open purchase orders</li>
+          )}
         </ul>
       </Panel>
     </PageChrome>

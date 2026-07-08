@@ -46,19 +46,31 @@ export function computePharmacyKpis(
     const d = daysToExpiry(s.expiry);
     return d >= 0 && d <= 30 && !s.quarantined;
   }).length;
+  const outOfStock = drugs.filter((d) => {
+    const onHand = stock.filter((s) => s.drugId === d.id && !s.quarantined).reduce((n, s) => n + s.qtyOnHand, 0);
+    return onHand === 0;
+  }).length;
   const revenueToday = bills
     .filter((b) => b.createdAt.startsWith(today) && b.paid)
     .reduce((s, b) => s + b.total, 0);
+  const billsToday = bills.filter((b) => b.createdAt.startsWith(today)).length;
+  const salesToday = bills
+    .filter((b) => b.createdAt.startsWith(today))
+    .reduce((s, b) => s + b.lines.reduce((ls, l) => ls + l.qty, 0), 0);
   const openPo = purchaseOrders.filter((p) => ["submitted", "approved", "partial"].includes(p.status)).length;
+  const pendingReturns = bills.filter((b) => b.createdAt.startsWith(today) && !b.paid).length;
 
   return [
-    { label: "Pending verify", value: String(pending), delta: "Awaiting pharmacist", trend: pending ? "down" : "neutral" },
-    { label: "Ready to dispense", value: String(verified), delta: "Verified queue", trend: "neutral" },
-    { label: "Dispensed today", value: String(dispensedToday), delta: "Fulfillment", trend: "up" },
-    { label: "Counter revenue", value: `₹${revenueToday.toLocaleString("en-IN")}`, delta: "Today", trend: "up" },
-    { label: "Low stock SKUs", value: String(lowStock), delta: "At/below reorder", trend: lowStock ? "down" : "neutral" },
-    { label: "Near expiry", value: String(nearExpiry), delta: "≤30 days", trend: nearExpiry ? "down" : "neutral" },
-    { label: "Open POs", value: String(openPo), delta: "Procurement", trend: "neutral" },
+    { label: "Today's Sales", value: String(salesToday), delta: "Units dispensed", trend: "up" },
+    { label: "Today's Bills", value: String(billsToday), delta: "Counter transactions", trend: "up" },
+    { label: "Today's Revenue", value: `₹${revenueToday.toLocaleString("en-IN")}`, delta: "Gross collection", trend: "up" },
+    { label: "Pending Orders", value: String(pending), delta: "Awaiting verify", trend: pending ? "down" : "neutral" },
+    { label: "Pending Returns", value: String(pendingReturns), delta: "Unpaid bills", trend: pendingReturns ? "down" : "neutral" },
+    { label: "Low Stock", value: String(lowStock), delta: "At/below reorder", trend: lowStock ? "down" : "neutral" },
+    { label: "Near Expiry", value: String(nearExpiry), delta: "≤30 days", trend: nearExpiry ? "down" : "neutral" },
+    { label: "Out of Stock", value: String(outOfStock), delta: "Zero inventory", trend: outOfStock ? "down" : "neutral" },
+    { label: "Open POs", value: String(openPo), delta: "Procurement pending", trend: "neutral" },
+    { label: "Supplier Payments", value: "₹0", delta: "Finance module", trend: "neutral" },
   ];
 }
 
