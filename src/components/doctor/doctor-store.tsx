@@ -79,6 +79,7 @@ type DoctorStoreValue = {
   getOpdQueue: (doctorId?: string, includeDept?: boolean) => Visit[];
   getConsultation: (visitId: string) => ConsultationRecord | undefined;
   startConsultation: (visitId: string) => Promise<ConsultationRecord | undefined>;
+  skipConsultation: (visitId: string) => Promise<{ ok: boolean; token?: number }>;
   updateConsultation: (visitId: string, patch: Partial<ConsultationRecord>) => void;
   saveConsultSection: (
     visitId: string,
@@ -355,6 +356,36 @@ export function DoctorStoreProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const skipConsultation = async (visitId: string) => {
+      const visit = getVisit(visitId);
+      if (!visit) throw new Error("Visit not found");
+
+      try {
+        const res = await doctorMutate({ op: "skipConsultation", visitId });
+        if (!res.ok) {
+          setError(res.error!);
+          throw new Error(res.error);
+        }
+        syncDoctor((prev) => {
+          const maxToken = prev.visits.reduce((max, v) => Math.max(max, v.token ?? 0), 0);
+          return {
+            ...prev,
+            visits: prev.visits.map((v) =>
+              v.id === visitId
+                ? { ...v, token: maxToken + 1, routingNote: `Skipped by ${doctor.profile.name}` }
+                : v,
+            ),
+          };
+        });
+        scheduleRefresh();
+        return { ok: true, token: res.data?.token as number | undefined };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Something went wrong.";
+        setError(msg);
+        throw err;
+      }
+    };
+
     const updateConsultation = (visitId: string, patch: Partial<ConsultationRecord>) => {
       syncDoctor((prev) => ({
         ...prev,
@@ -607,6 +638,7 @@ export function DoctorStoreProvider({ children }: { children: ReactNode }) {
       getOpdQueue,
       getConsultation,
       startConsultation,
+      skipConsultation,
       updateConsultation,
       saveConsultSection,
       patchConsultSectionLocal,

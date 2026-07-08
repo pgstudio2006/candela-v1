@@ -13,6 +13,7 @@ import {
   saveDocumentTemplate,
   saveIpdRound,
   setPrescription,
+  skipConsultation,
   startConsultation,
   updateConsultation,
   updateDoctorTemplate,
@@ -70,6 +71,9 @@ export async function POST(request: Request) {
     switch (op) {
       case "startConsultation":
         result = await startConsultation(ctx, body.visitId!);
+        break;
+      case "skipConsultation":
+        result = await skipConsultation(ctx, body.visitId!);
         break;
       case "updateConsultation":
         result = await updateConsultation(ctx, body.visitId!, body.patch as Parameters<typeof updateConsultation>[2]);

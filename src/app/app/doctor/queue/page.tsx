@@ -14,8 +14,9 @@ import { useState } from "react";
 export default function DoctorQueuePage() {
   useDoctorPoll();
   const router = useRouter();
-  const { getOpdQueue, getPatient, getConsultation, startConsultation } = useDoctorStore();
+  const { getOpdQueue, getPatient, getConsultation, startConsultation, skipConsultation } = useDoctorStore();
   const [deptView, setDeptView] = useState(false);
+  const [skippingId, setSkippingId] = useState<string | null>(null);
   const queue = deptView ? getOpdQueue(undefined, true) : getOpdQueue();
 
   const callNext = async () => {
@@ -108,6 +109,16 @@ export default function DoctorQueuePage() {
                     }}
                   >
                     Consult
+                  </AttioButton>
+                  <AttioButton
+                    variant="secondary"
+                    disabled={skippingId === v.id}
+                    onClick={() => {
+                      setSkippingId(v.id);
+                      void skipConsultation(v.id).finally(() => setSkippingId(null));
+                    }}
+                  >
+                    Skip
                   </AttioButton>
                 </div>
               </li>

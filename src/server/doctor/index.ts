@@ -12,7 +12,7 @@ import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { DocumentTemplate } from "@/design-system/document-templates";
 import { validateCompleteConsultation } from "@/lib/doctor-validation";
 import { visitVisibleInDoctorWorkspace } from "@/lib/doctor-queue";
-import { isRedFlagVisit } from "@/lib/frontdesk-workflow";
+import { isInReceptionQueue, isRedFlagVisit } from "@/lib/frontdesk-workflow";
 import { prisma } from "@/lib/prisma";
 import { getClinicalSnapshot } from "@/server/clinical";
 import { resolveDoctorIdForContext, resolveDoctorProfile } from "@/server/clinical/roster";
@@ -367,6 +367,48 @@ export async function startConsultation(ctx: ServerContext, visitId: string) {
   });
 
   return mapConsultation(created);
+}
+
+export async function skipConsultation(ctx: ServerContext, visitId: string) {
+  const doctorId = await resolveDoctorIdForContext(ctx);
+  const visit = await assertDoctorOwnsVisit(ctx, visitId, doctorId);
+
+  if (!isInReceptionQueue(visit)) {
+    throw new ServerActionError("VALIDATION", "Visit is not in the active queue.");
+  }
+
+  const maxToken = await prisma.opdVisit.aggregate({
+    where: { ...branchScope(ctx), token: { not: null } },
+    _max: { token: true },
+  });
+  const nextToken = (maxToken._max.token ?? 0) + 1;
+
+  const profile = await resolveDoctorProfile(ctx);
+  const routingNote = visit.routingNote
+    ? `${visit.routingNote} · Skipped by ${profile.name}`
+    : `Skipped by ${profile.name}`;
+
+  await prisma.opdVisit.update({
+    where: { id: visitId },
+    data: {
+      token: nextToken,
+      routingNote,
+    },
+  });
+
+  const updated = await prisma.opdVisit.findUnique({ where: { id: visitId } });
+  if (updated) await syncVisitFromOpdVisit(ctx, updated);
+
+  await writePlatformAudit({
+    ctx,
+    module: "doctor",
+    action: "consult_skipped",
+    entityType: "visit",
+    entityId: visitId,
+    summary: `Dr. ${profile.name} skipped consultation for visit ${visitId}`,
+  });
+
+  return { ok: true, token: nextToken };
 }
 
 export async function updateConsultation(
