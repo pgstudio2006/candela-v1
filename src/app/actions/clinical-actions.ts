@@ -144,7 +144,7 @@ export async function saveSubmissionAction(
 }
 
 export async function getVisitReceiptAction(visitId: string) {
-  const ctx = await requireModule("frontdesk");
+  const ctx = await requireAuth();
   try {
     const receipt = await fetchVisitReceipt(ctx, visitId);
     return { receipt };
