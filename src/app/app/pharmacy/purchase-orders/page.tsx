@@ -17,6 +17,9 @@ export default function PharmacyPurchaseOrdersPage() {
   const [notes, setNotes] = useState("");
   const [poLines, setPoLines] = useState<Array<{ drugId: string; qty: string; rate: string; gst: string }>>([{ drugId: "", qty: "", rate: "", gst: "12" }]);
   const [grn, setGrn] = useState<Record<string, { batchNo: string; expiry: string; qty: string }>>({});
+  const [supplierBillFile, setSupplierBillFile] = useState<File | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "transfer" | "credit">("credit");
 
   if (!isManager() && !isPurchase()) {
     return (
@@ -55,6 +58,9 @@ export default function PharmacyPurchaseOrdersPage() {
       initial[l.drugId] = { batchNo: "", expiry: "", qty: String(l.qtyOrdered - l.qtyReceived) };
     });
     setGrn(initial);
+    setSupplierBillFile(null);
+    setPaymentAmount("");
+    setPaymentMode("credit");
     setReceiveId(poId);
   };
 
@@ -192,27 +198,62 @@ export default function PharmacyPurchaseOrdersPage() {
       )}
 
       {receiveId && (
-        <PharmacyDialog open={!!receiveId} title="Goods receipt" subtitle={receiveId} onClose={() => { setReceiveId(null); setGrn({}); }}>
+        <PharmacyDialog open={!!receiveId} title="Goods receipt & Delivery" subtitle={receiveId} onClose={() => { setReceiveId(null); setGrn({}); setSupplierBillFile(null); setPaymentAmount(""); setPaymentMode("credit"); }} width="max-w-xl">
           <div className="space-y-4 text-[13px]">
-            <p className="text-[12px] text-[var(--attio-text-secondary)]">Enter batch and expiry for each line received.</p>
-            {purchaseOrders
-              .find((p) => p.id === receiveId)
-              ?.lines.map((l) => {
-                const drug = drugs.find((d) => d.id === l.drugId);
-                return (
-                  <div key={l.drugId} className="rounded-lg border p-3">
-                    <p className="mb-2 text-[13px] font-medium">{drug?.brandName ?? l.drugId}</p>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <PharmacyInput placeholder="Batch no" value={grn[l.drugId]?.batchNo ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, batchNo: e.target.value } })} />
-                      <PharmacyInput type="date" value={grn[l.drugId]?.expiry ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, expiry: e.target.value } })} />
-                      <PharmacyInput type="number" placeholder={`Qty (pending ${l.qtyOrdered - l.qtyReceived})`} value={grn[l.drugId]?.qty ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, qty: e.target.value } })} />
+            <Panel title="Batch & Expiry Details">
+              <p className="mb-2 text-[12px] text-[var(--attio-text-secondary)]">Enter batch and expiry for each line received.</p>
+              {purchaseOrders
+                .find((p) => p.id === receiveId)
+                ?.lines.map((l) => {
+                  const drug = drugs.find((d) => d.id === l.drugId);
+                  return (
+                    <div key={l.drugId} className="rounded-lg border p-3">
+                      <p className="mb-2 text-[13px] font-medium">{drug?.brandName ?? l.drugId}</p>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <PharmacyInput placeholder="Batch no" value={grn[l.drugId]?.batchNo ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, batchNo: e.target.value } })} />
+                        <PharmacyInput type="date" value={grn[l.drugId]?.expiry ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, expiry: e.target.value } })} />
+                        <PharmacyInput type="number" placeholder={`Qty (pending ${l.qtyOrdered - l.qtyReceived})`} value={grn[l.drugId]?.qty ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, qty: e.target.value } })} />
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+            </Panel>
+
+            <Panel title="Supplier Bill Upload">
+              <FormRow label="Upload Supplier Bill">
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => setSupplierBillFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-[11px] text-[var(--attio-text-tertiary)] file:mr-4 file:rounded file:border-0 file:bg-[var(--attio-hover)] file:px-3 file:py-1 file:text-[11px] file:font-medium"
+                />
+              </FormRow>
+              {supplierBillFile && (
+                <p className="text-[11px] text-[var(--attio-accent)]">Selected: {supplierBillFile.name}</p>
+              )}
+            </Panel>
+
+            <Panel title="Payment Details">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormRow label="Payment Mode">
+                  <PharmacySelect value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as any)}>
+                    <option value="credit">Credit (as per terms)</option>
+                    <option value="cash">Cash</option>
+                    <option value="upi">UPI</option>
+                    <option value="transfer">Bank Transfer</option>
+                  </PharmacySelect>
+                </FormRow>
+                {paymentMode !== "credit" && (
+                  <FormRow label="Payment Amount (₹)">
+                    <PharmacyInput type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} placeholder="Enter amount" />
+                  </FormRow>
+                )}
+              </div>
+            </Panel>
+
             <div className="flex justify-end gap-2">
-              <AttioButton variant="secondary" onClick={() => { setReceiveId(null); setGrn({}); }}>Cancel</AttioButton>
-              <AttioButton variant="primary" onClick={submitReceive}>Confirm GRN</AttioButton>
+              <AttioButton variant="secondary" onClick={() => { setReceiveId(null); setGrn({}); setSupplierBillFile(null); setPaymentAmount(""); setPaymentMode("credit"); }}>Cancel</AttioButton>
+              <AttioButton variant="primary" onClick={submitReceive}>Mark Delivered & Pay</AttioButton>
             </div>
           </div>
         </PharmacyDialog>
