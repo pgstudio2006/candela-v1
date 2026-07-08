@@ -147,12 +147,20 @@ export async function upsertVisitInvoice(
   }
 }
 
+const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "cheque", "wallet", "other"]);
+
 export async function getVisitReceipt(ctx: ServerContext, visitId: string): Promise<OpdReceiptPayload> {
   const visit = await prisma.opdVisit.findFirst({
     where: { id: visitId, ...branchScope(ctx) },
   });
   if (!visit) {
-    throw new ServerActionError("NOT_FOUND", "Visit not found in your branch.");
+    throw new ServerActionError(
+      "NOT_FOUND",
+      `Receipt visit not found in your branch (visit ${visitId}, branch ${ctx.branchId}).`,
+    );
+  }
+  if (!visit.patientId) {
+    throw new ServerActionError("NOT_FOUND", "Visit is not linked to a patient.");
   }
 
   const patient = await prisma.patient.findUnique({ where: { id: visit.patientId } });
@@ -176,6 +184,8 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string): Prom
   const amountPaid = Number(invoice?.amountPaid ?? visit.amountPaid ?? 0);
   const balanceDue = Number(invoice?.balanceAmount ?? visit.balanceDue ?? 0);
   const latestPayment = invoice?.payments[0];
+  const rawPaymentMode = String(latestPayment?.mode ?? "").toLowerCase();
+  const normalizedPaymentMode = VALID_PAYMENT_MODES.has(rawPaymentMode) ? rawPaymentMode : "cash";
 
   const base = {
     invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
@@ -190,7 +200,7 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string): Prom
     token: visit.token ?? undefined,
     billingStatus: visit.billing ?? "pending",
     paymentScope: invoice?.paymentScope ?? undefined,
-    paymentMode: latestPayment?.mode ?? visit.billing ?? "cash",
+    paymentMode: normalizedPaymentMode,
     amountPaid,
     balanceDue,
     routingNote: visit.routingNote ?? undefined,

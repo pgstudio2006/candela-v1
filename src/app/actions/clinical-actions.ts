@@ -150,7 +150,8 @@ export async function getVisitReceiptAction(visitId: string) {
     return { receipt };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not load receipt.";
-    return { error: message };
+    console.error("[getVisitReceiptAction] failed for visit", visitId, "branch", ctx.branchId, err);
+    return { error: message || "Could not load receipt." };
   }
 }
 
