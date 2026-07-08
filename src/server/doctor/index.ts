@@ -371,11 +371,19 @@ export async function startConsultation(ctx: ServerContext, visitId: string) {
 
 export async function skipConsultation(ctx: ServerContext, visitId: string) {
   const doctorId = await resolveDoctorIdForContext(ctx);
-  const visit = await assertDoctorOwnsVisit(ctx, visitId, doctorId);
+  const visit = await requireDoctorVisit(ctx, visitId);
 
   if (!isInReceptionQueue(visit)) {
     throw new ServerActionError("VALIDATION", "Visit is not in the active queue.");
   }
+
+  // If visit is not assigned to this doctor, assign it first
+  if (visit.doctorId && visit.doctorId !== doctorId) {
+    throw new ServerActionError("FORBIDDEN", "This visit is assigned to another doctor.");
+  }
+
+  const profile = await resolveDoctorProfile(ctx);
+  const needsAssignment = !visit.doctorId;
 
   const maxToken = await prisma.opdVisit.aggregate({
     where: { ...branchScope(ctx), token: { not: null } },
@@ -383,7 +391,6 @@ export async function skipConsultation(ctx: ServerContext, visitId: string) {
   });
   const nextToken = (maxToken._max.token ?? 0) + 1;
 
-  const profile = await resolveDoctorProfile(ctx);
   const routingNote = visit.routingNote
     ? `${visit.routingNote} · Skipped by ${profile.name}`
     : `Skipped by ${profile.name}`;
@@ -393,6 +400,7 @@ export async function skipConsultation(ctx: ServerContext, visitId: string) {
     data: {
       token: nextToken,
       routingNote,
+      ...(needsAssignment ? { doctorId, doctorName: profile.name } : {}),
     },
   });
 
