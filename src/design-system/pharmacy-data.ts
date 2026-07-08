@@ -163,6 +163,7 @@ export type ReturnRecord = {
   qty: number;
   reason: string;
   patientName?: string;
+  billId?: string;
   status: "pending" | "approved" | "restocked" | "rejected";
   createdAt: string;
 };
