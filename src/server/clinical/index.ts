@@ -838,6 +838,10 @@ export async function processBilling(
   const lineLabel =
     payload.packageLines.map((l) => l.label).join(" · ") || String(data.customLine ?? "OPD consultation");
 
+  // Assign a doctor if the visit doesn't have one and the billing form specifies one
+  const assignedDoctorId = data.doctorId ? String(data.doctorId) : undefined;
+  const assignedDoctorName = data.doctorName ? String(data.doctorName) : undefined;
+
   await prisma.$transaction(async (tx) => {
     await tx.patient.update({
       where: { id: visit.patientId },
@@ -861,6 +865,7 @@ export async function processBilling(
         waitMin: computeWaitMinutes(visit.checkInAt),
         tenantId: ctx.tenantId,
         branchId: ctx.branchId,
+        ...(assignedDoctorId ? { doctorId: assignedDoctorId, doctorName: assignedDoctorName } : {}),
       },
     });
     if (payload.packageLines.length > 0 || collected > 0) {

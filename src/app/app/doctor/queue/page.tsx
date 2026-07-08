@@ -117,7 +117,15 @@ export default function DoctorQueuePage() {
                     disabled={skippingId === v.id}
                     onClick={() => {
                       setSkippingId(v.id);
-                      void skipConsultation(v.id).finally(() => setSkippingId(null));
+                      skipConsultation(v.id)
+                        .then((res) => {
+                          console.log("[DoctorQueue] skip result:", res);
+                        })
+                        .catch((err) => {
+                          console.error("[DoctorQueue] skip error:", err);
+                          alert(err instanceof Error ? err.message : "Failed to skip");
+                        })
+                        .finally(() => setSkippingId(null));
                     }}
                   >
                     Skip

@@ -44,6 +44,7 @@ type OpdBillingFormProps = {
   patient?: Patient;
   visit?: Visit;
   patients: Patient[];
+  doctors?: { id: string; name: string }[];
   onSelectPatient: (patient: Patient, visit?: Visit) => void;
   onClearPatient: () => void;
   onSubmit: (data: Record<string, string | number | boolean>) => void;
@@ -66,6 +67,7 @@ export function OpdBillingForm({
   patient,
   visit,
   patients,
+  doctors = [],
   onSelectPatient,
   onClearPatient,
   onSubmit,
@@ -77,6 +79,7 @@ export function OpdBillingForm({
   const [packageSearch, setPackageSearch] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
   const [tab, setTab] = useState<"packages" | "services">("services");
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
 
   useEffect(() => {
     const loadData = async () => {
@@ -152,6 +155,8 @@ export function OpdBillingForm({
     if (!patient || !visit) return;
     if (!skipBilling && !lines.length) return;
 
+    const selectedDoctor = doctors.find((d) => d.id === selectedDoctorId);
+
     const payload: Record<string, string | number | boolean> = {
       packageLines: JSON.stringify(lines),
       discount: discountAmount,
@@ -172,6 +177,7 @@ export function OpdBillingForm({
       amount: subtotal,
       collectedAmount: splitTotal,
       mode: paymentSplits.length > 1 ? "split" : (paymentSplits[0]?.mode ?? "cash"),
+      ...(selectedDoctor ? { doctorId: selectedDoctor.id, doctorName: selectedDoctor.name } : {}),
       ...billingMeta,
     };
     onSubmit(payload);

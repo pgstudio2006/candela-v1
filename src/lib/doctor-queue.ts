@@ -59,7 +59,10 @@ export function filterDoctorOpdQueue(
   const filtered = visits.filter((v) => {
     if (!isInReceptionQueue(v)) return false;
     if (includeDept || !doctorId) return true;
-    return visitAssignedToDoctor(v, doctorId, doctorName, departmentIds);
+    // Doctor-specific view: only show patients explicitly assigned to this doctor
+    if (v.doctorId === doctorId) return true;
+    if (doctorName && v.doctorName && v.doctorName === doctorName) return true;
+    return false;
   });
   return sortDoctorOpdQueue(filtered);
 }
