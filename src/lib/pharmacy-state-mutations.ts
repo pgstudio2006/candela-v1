@@ -169,6 +169,47 @@ export function mutateDispensePrescription(
   const newStatus = allDone ? "dispensed" : partial ? "partially_dispensed" : rx.status;
   const now = new Date().toISOString();
   const totals = calcBillTotals(lines);
+
+  // For IPD, don't create a pharmacy bill - charges go to IPD cart
+  if (rx.source === "ipd") {
+    const nextState: PharmacyStateShape = {
+      ...state,
+      stock,
+      scheduleH: scheduleEntries,
+      prescriptions: state.prescriptions.map((r) =>
+        r.id === rxId
+          ? {
+              ...r,
+              lines: updatedLines,
+              status: newStatus,
+              dispensedAt: allDone ? now : r.dispensedAt,
+              updatedAt: now,
+              witnessName,
+              assigneeId: operator.id,
+            }
+          : r,
+      ),
+      activities: appendPharmacyActivity(
+        state.activities,
+        operator.name,
+        "dispense_ipd",
+        `IPD dispensed for ${rx.patientName} — ${rx.encounterId} — ₹${totals.total.toFixed(0)}`,
+        rxId,
+      ),
+    };
+    return {
+      state: nextState,
+      result: {
+        billId: `IPD_CART_${rx.encounterId}`,
+        total: totals.total,
+        allDone,
+        visitId: rx.encounterId,
+        patientName: rx.patientName,
+      },
+    };
+  }
+
+  // For OPD/Walk-in, create pharmacy bill
   const billId = `bill_${Date.now()}`;
 
   const bill: PharmacyBill = {

@@ -208,11 +208,15 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                 onClick={() => {
                   void dispensePrescription(rx.id, qtys, witness || undefined).then((result) => {
                     if (!result.ok) setMsg(result.error ?? "Dispense failed");
-                    else setMsg(`Dispensed — bill ${result.billId} created. Collect payment in Billing.`);
+                    else if (rx.source === "ipd") {
+                      setMsg(`Dispensed — charges added to IPD cart for ${rx.patientName}. Payment at discharge.`);
+                    } else {
+                      setMsg(`Dispensed — bill ${result.billId} created. Collect payment in Billing.`);
+                    }
                   });
                 }}
               >
-                Dispense & create bill
+                {rx.source === "ipd" ? "Dispense to IPD cart" : "Dispense & create bill"}
               </AttioButton>
             </div>
           )}
