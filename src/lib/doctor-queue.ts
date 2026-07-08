@@ -59,12 +59,9 @@ export function filterDoctorOpdQueue(
   const filtered = visits.filter((v) => {
     if (!isInReceptionQueue(v)) return false;
     if (includeDept || !doctorId) return true;
-    // Doctor-specific view: show patients assigned to this doctor OR unassigned patients in their department
+    // Doctor-specific view: only show patients explicitly assigned to this doctor
     if (v.doctorId === doctorId) return true;
     if (doctorName && v.doctorName && v.doctorName === doctorName) return true;
-    // Also show unassigned patients in the doctor's department so they can be claimed
-    const deptSet = new Set(departmentIds);
-    if (!v.doctorId && (deptSet.size === 0 || deptSet.has(v.departmentId))) return true;
     return false;
   });
   return sortDoctorOpdQueue(filtered);

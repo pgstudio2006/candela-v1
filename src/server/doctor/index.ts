@@ -373,6 +373,8 @@ export async function skipConsultation(ctx: ServerContext, visitId: string) {
   const doctorId = await resolveDoctorIdForContext(ctx);
   const visit = await requireDoctorVisit(ctx, visitId);
 
+  console.log("[skipConsultation] doctorId:", doctorId, "visitId:", visitId, "visit.doctorId:", visit.doctorId, "visit.stage:", visit.stage, "visit.billing:", visit.billing);
+
   if (!isInReceptionQueue(visit)) {
     throw new ServerActionError("VALIDATION", "Visit is not in the active queue.");
   }
