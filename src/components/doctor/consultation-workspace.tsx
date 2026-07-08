@@ -94,6 +94,11 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [notes, setNotes] = useState("");
   const [completed, setCompleted] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
+  const [savingExam, setSavingExam] = useState(false);
+  const [savingDx, setSavingDx] = useState(false);
+  const [savingTx, setSavingTx] = useState(false);
+  const [savingHandoff, setSavingHandoff] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   const visit = getVisit(visitId);
   const patient = visit ? getPatient(visit.patientId) : undefined;
@@ -164,6 +169,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   }
 
   const finishConsult = async () => {
+    setCompleting(true);
     const consultData = getConsultation(visitId);
     const examErrors = validateFormValues(examSchema, consultData?.examination ?? {});
     const dxErrors = validateFormValues(dxSchema, consultData?.diagnosis ?? {});
@@ -174,6 +180,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       Object.values(handoffErrors)[0];
     if (firstError) {
       toast(firstError, "error");
+      setCompleting(false);
       return;
     }
 
@@ -186,6 +193,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     });
     if (!result.ok) {
       toast(result.error ?? "Could not complete consultation", "error");
+      setCompleting(false);
       return;
     }
     setCompleted(true);
@@ -222,9 +230,18 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       onTabChange={(id) => setTab(id as TabId)}
       actions={
         !completed && (
-          <AttioButton variant="primary" className="gap-1.5" onClick={finishConsult}>
-            <Send className="size-3.5" />
-            Complete consult
+          <AttioButton variant="primary" className="gap-1.5" onClick={finishConsult} disabled={completing}>
+            {completing ? (
+              <>
+                <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Completing...
+              </>
+            ) : (
+              <>
+                <Send className="size-3.5" />
+                Complete consult
+              </>
+            )}
           </AttioButton>
         )
       }
@@ -345,8 +362,12 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               formKey={`exam-${visitId}-${consult?.startedAt ?? ""}`}
               initialValues={consult?.examination}
               onValuesChange={(data) => patchConsultSectionLocal(visitId, "examination", data)}
-              submitLabel="Save examination"
-              onSubmit={(data) => saveConsultSection(visitId, "examination", data)}
+              submitLabel={savingExam ? "Saving..." : "Save examination"}
+              onSubmit={async (data) => {
+                setSavingExam(true);
+                await saveConsultSection(visitId, "examination", data);
+                setSavingExam(false);
+              }}
             />
           </Panel>
           <AiScribePanel
@@ -401,8 +422,12 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               formKey={`dx-${visitId}-${consult?.startedAt ?? ""}`}
               initialValues={consult?.diagnosis}
               onValuesChange={(data) => patchConsultSectionLocal(visitId, "diagnosis", data)}
-              submitLabel="Save diagnosis"
-              onSubmit={(data) => saveConsultSection(visitId, "diagnosis", data)}
+              submitLabel={savingDx ? "Saving..." : "Save diagnosis"}
+              onSubmit={async (data) => {
+                setSavingDx(true);
+                await saveConsultSection(visitId, "diagnosis", data);
+                setSavingDx(false);
+              }}
             />
           </Panel>
           <Panel title="Templates">
@@ -443,8 +468,12 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               formKey={`tx-${visitId}-${consult?.startedAt ?? ""}`}
               initialValues={consult?.treatment}
               onValuesChange={(data) => patchConsultSectionLocal(visitId, "treatment", data)}
-              submitLabel="Save treatment"
-              onSubmit={(data) => saveConsultSection(visitId, "treatment", data)}
+              submitLabel={savingTx ? "Saving..." : "Save treatment"}
+              onSubmit={async (data) => {
+                setSavingTx(true);
+                await saveConsultSection(visitId, "treatment", data);
+                setSavingTx(false);
+              }}
             />
           </Panel>
           <Panel title="Care packages">
@@ -504,10 +533,12 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               schema={handoffSchema}
               formKey={`handoff-${visitId}`}
               initialValues={handoffValues}
-              submitLabel="Save handoff notes"
-              onSubmit={(data) => {
+              submitLabel={savingHandoff ? "Saving..." : "Save handoff notes"}
+              onSubmit={async (data) => {
+                setSavingHandoff(true);
                 setHandoffValues(data);
-                updateConsultation(visitId, { handoff: data });
+                await updateConsultation(visitId, { handoff: data });
+                setSavingHandoff(false);
               }}
             />
           </Panel>
@@ -533,8 +564,13 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 placeholder="Private consult notes…"
                 className="w-full resize-none rounded-lg border border-[var(--attio-border)] px-3 py-2 text-[13px] outline-none"
               />
-              <AttioButton variant="primary" className="w-full gap-1.5" onClick={finishConsult}>
-                {recommendCounsellor && !skipCounsellor ? (
+              <AttioButton variant="primary" className="w-full gap-1.5" onClick={finishConsult} disabled={completing}>
+                {completing ? (
+                  <>
+                    <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    {recommendCounsellor && !skipCounsellor ? "Sending..." : "Completing..."}
+                  </>
+                ) : recommendCounsellor && !skipCounsellor ? (
                   <>
                     <Send className="size-3.5" />
                     Send to counsellor
@@ -550,14 +586,24 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 <AttioButton
                   variant="secondary"
                   className="w-full gap-1.5"
+                  disabled={completing}
                   onClick={() => {
                     setSkipCounsellor(true);
                     updateConsultation(visitId, { skipCounsellor: true });
                     finishConsult();
                   }}
                 >
-                  <SkipForward className="size-3.5" />
-                  Skip counsellor & finish
+                  {completing ? (
+                    <>
+                      <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      Skipping...
+                    </>
+                  ) : (
+                    <>
+                      <SkipForward className="size-3.5" />
+                      Skip counsellor & finish
+                    </>
+                  )}
                 </AttioButton>
               )}
             </div>
