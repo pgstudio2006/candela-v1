@@ -279,10 +279,13 @@ export function OpdBillingForm({
                           (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase()))
                         )
                         .map((svc: BillingPackage) => (
-                          <SelectItem key={svc.id} value={svc.id}>
-                            <div>
-                              <p className="text-[12px] font-medium">{svc.label}</p>
-                              <p className="text-[11px] text-[var(--attio-text-tertiary)]">{formatPackagePrice(svc)}</p>
+                          <SelectItem key={svc.id} value={svc.id} className="py-3">
+                            <div className="flex flex-col gap-0.5">
+                              <p className="text-[13px] font-medium leading-tight">{svc.label}</p>
+                              {svc.description && (
+                                <p className="text-[11px] text-[var(--attio-text-tertiary)] leading-tight">{svc.description}</p>
+                              )}
+                              <p className="text-[12px] font-semibold text-[var(--attio-accent)]">{formatPackagePrice(svc)}</p>
                             </div>
                           </SelectItem>
                         ))}
@@ -318,10 +321,13 @@ export function OpdBillingForm({
                           (pkg.description && pkg.description.toLowerCase().includes(packageSearch.toLowerCase()))
                         )
                         .map((pkg: BillingPackage) => (
-                          <SelectItem key={pkg.id} value={pkg.id}>
-                            <div>
-                              <p className="text-[12px] font-medium">{pkg.label}</p>
-                              <p className="text-[11px] text-[var(--attio-text-tertiary)]">{formatPackagePrice(pkg)}</p>
+                          <SelectItem key={pkg.id} value={pkg.id} className="py-3">
+                            <div className="flex flex-col gap-0.5">
+                              <p className="text-[13px] font-medium leading-tight">{pkg.label}</p>
+                              {pkg.description && (
+                                <p className="text-[11px] text-[var(--attio-text-tertiary)] leading-tight">{pkg.description}</p>
+                              )}
+                              <p className="text-[12px] font-semibold text-[var(--attio-accent)]">{formatPackagePrice(pkg)}</p>
                             </div>
                           </SelectItem>
                         ))}
