@@ -635,14 +635,6 @@ export function OpdBillingForm({
                   </div>
                 )}
               </Panel>
-
-              <Panel title="Additional billing fields">
-                <PublishedSchemaForm
-                  schemaId="billing"
-                  hideSubmit
-                  onValuesChange={setBillingMeta}
-                />
-              </Panel>
             </>
           )}
 
