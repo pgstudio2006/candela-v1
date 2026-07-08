@@ -35,13 +35,15 @@ export function BillingReceiptModal({
       .then((data) => {
         if (cancelled) return;
         if ("error" in data) {
+          console.error("[BillingReceiptModal] server error:", data.error);
           setError(data.error ?? "Could not load receipt.");
           setReceipt(null);
         } else {
           setReceipt(data.receipt);
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[BillingReceiptModal] action failed:", err);
         if (!cancelled) setError("Could not load receipt.");
       })
       .finally(() => {
