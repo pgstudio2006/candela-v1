@@ -237,7 +237,8 @@ export default function PharmacySuppliersPage() {
               </div>
             </Panel>
 
-            <Panel title="Supplied Medicines">
+            <Panel title="Supplier Medicine Catalogue">
+              <p className="mb-2 text-[11px] text-[var(--attio-text-tertiary)]">Medicines supplied by this vendor with pricing details</p>
               <ul className="divide-y">
                 {stock
                   .filter((s) => s.supplierId === selected.id)
@@ -245,11 +246,20 @@ export default function PharmacySuppliersPage() {
                     const drug = drugs.find((d) => d.id === s.drugId);
                     return (
                       <li key={s.id} className="flex justify-between px-3 py-2">
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium">{drug?.brandName ?? s.drugId}</p>
-                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">Batch {s.batchNo} · Exp {s.expiry}</p>
+                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                            Unit: {drug?.unit} · Power: {drug?.strength}
+                          </p>
+                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                            Batch {s.batchNo} · Exp {s.expiry}
+                          </p>
                         </div>
-                        <span>{s.qtyOnHand} units @ ₹{s.purchaseRate}</span>
+                        <div className="text-right text-[11px]">
+                          <p>Purchase: ₹{s.purchaseRate}</p>
+                          <p>Selling: ₹{s.mrp}</p>
+                          <p>MRP: ₹{s.mrp}</p>
+                        </div>
                       </li>
                     );
                   })}
