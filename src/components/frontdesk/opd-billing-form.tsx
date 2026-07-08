@@ -250,96 +250,84 @@ export function OpdBillingForm({
 
           {!skipBilling && (
             <>
-              <div className="grid gap-6 lg:grid-cols-2">
-                <Panel title="Services">
-                  {loading ? (
-                    <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading services...</p>
-                  ) : (
-                    <>
-                      <div className="mb-3">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--attio-text-tertiary)]" />
-                          <Input
-                            type="text"
-                            placeholder="Search services..."
-                            value={serviceSearch}
-                            onChange={(e) => setServiceSearch(e.target.value)}
-                            className="pl-9 h-9 text-[13px]"
-                          />
-                        </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[12px]">Select service</Label>
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      const svc = services.find((s) => s.id === value);
+                      if (svc) setLines((prev) => [...prev, lineFromPackage(svc)]);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-[13px]">
+                      <SelectValue placeholder="Search and select service..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <div className="mb-2 px-2">
+                        <Input
+                          type="text"
+                          placeholder="Search services..."
+                          value={serviceSearch}
+                          onChange={(e) => setServiceSearch(e.target.value)}
+                          className="h-8 text-[12px]"
+                        />
                       </div>
+                      {services
+                        .filter((svc: BillingPackage) =>
+                          svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+                          (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase()))
+                        )
+                        .map((svc: BillingPackage) => (
+                          <SelectItem key={svc.id} value={svc.id}>
+                            <div>
+                              <p className="text-[12px] font-medium">{svc.label}</p>
+                              <p className="text-[11px] text-[var(--attio-text-tertiary)]">{formatPackagePrice(svc)}</p>
+                            </div>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {services
-                          .filter((svc: BillingPackage) =>
-                            svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
-                            (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase()))
-                          )
-                          .map((svc: BillingPackage) => (
-                            <button
-                              key={svc.id}
-                              type="button"
-                              onClick={() => setLines((prev) => [...prev, lineFromPackage(svc)])}
-                              className="rounded-lg border border-[var(--attio-border)] bg-white p-3 text-left hover:border-[var(--attio-text-tertiary)]"
-                            >
-                              <p className="text-[12px] font-medium leading-snug">{svc.label}</p>
-                              {svc.description && (
-                                <p className="mt-0.5 text-[11px] text-[var(--attio-text-tertiary)]">{svc.description}</p>
-                              )}
-                              <p className="mt-1 text-[13px] font-semibold tabular-nums text-[var(--attio-accent)]">
-                                {formatPackagePrice(svc)}
-                              </p>
-                            </button>
-                          ))}
+                <div className="space-y-1.5">
+                  <Label className="text-[12px]">Select package</Label>
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      const pkg = packages.find((p) => p.id === value);
+                      if (pkg) setLines((prev) => [...prev, lineFromPackage(pkg)]);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-[13px]">
+                      <SelectValue placeholder="Search and select package..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <div className="mb-2 px-2">
+                        <Input
+                          type="text"
+                          placeholder="Search packages..."
+                          value={packageSearch}
+                          onChange={(e) => setPackageSearch(e.target.value)}
+                          className="h-8 text-[12px]"
+                        />
                       </div>
-                    </>
-                  )}
-                </Panel>
-
-                <Panel title="Packages">
-                  {loading ? (
-                    <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading packages...</p>
-                  ) : (
-                    <>
-                      <div className="mb-3">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--attio-text-tertiary)]" />
-                          <Input
-                            type="text"
-                            placeholder="Search packages..."
-                            value={packageSearch}
-                            onChange={(e) => setPackageSearch(e.target.value)}
-                            className="pl-9 h-9 text-[13px]"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {packages
-                          .filter((pkg: BillingPackage) =>
-                            pkg.label.toLowerCase().includes(packageSearch.toLowerCase()) ||
-                            (pkg.description && pkg.description.toLowerCase().includes(packageSearch.toLowerCase()))
-                          )
-                          .map((pkg: BillingPackage) => (
-                            <button
-                              key={pkg.id}
-                              type="button"
-                              onClick={() => setLines((prev) => [...prev, lineFromPackage(pkg)])}
-                              className="rounded-lg border border-[var(--attio-border)] bg-white p-3 text-left hover:border-[var(--attio-text-tertiary)]"
-                            >
-                              <p className="text-[12px] font-medium leading-snug">{pkg.label}</p>
-                              {pkg.description && (
-                                <p className="mt-0.5 text-[11px] text-[var(--attio-text-tertiary)]">{pkg.description}</p>
-                              )}
-                              <p className="mt-1 text-[13px] font-semibold tabular-nums text-[var(--attio-accent)]">
-                                {formatPackagePrice(pkg)}
-                              </p>
-                            </button>
-                          ))}
-                      </div>
-                    </>
-                  )}
-                </Panel>
+                      {packages
+                        .filter((pkg: BillingPackage) =>
+                          pkg.label.toLowerCase().includes(packageSearch.toLowerCase()) ||
+                          (pkg.description && pkg.description.toLowerCase().includes(packageSearch.toLowerCase()))
+                        )
+                        .map((pkg: BillingPackage) => (
+                          <SelectItem key={pkg.id} value={pkg.id}>
+                            <div>
+                              <p className="text-[12px] font-medium">{pkg.label}</p>
+                              <p className="text-[11px] text-[var(--attio-text-tertiary)]">{formatPackagePrice(pkg)}</p>
+                            </div>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {lines.length > 0 && (
