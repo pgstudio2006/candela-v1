@@ -2,27 +2,65 @@
 
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
-import { DataTable, Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { DataTable, Panel, StatusBadge, AttioButton } from "@/components/frontdesk/ui";
 import { RX_STATUS_LABELS } from "@/design-system/pharmacy-data";
 import { useState } from "react";
 
+type IpdTab = "rx" | "indents" | "cart";
+
 export default function PharmacyIpdPage() {
-  const { prescriptions, indents, getDrug, fulfillIndent } = usePharmacyStore();
-  const [tab, setTab] = useState<"rx" | "indents">("rx");
+  const { prescriptions, indents, getDrug, fulfillIndent, stock } = usePharmacyStore();
+  const [tab, setTab] = useState<IpdTab>("rx");
 
   const ipdRx = prescriptions.filter((r) => r.source === "ipd");
+  
+  // Calculate IPD cart charges - dispensed IPD prescriptions
+  const ipdCart = prescriptions
+    .filter((r) => r.source === "ipd" && (r.status === "dispensed" || r.status === "partially_dispensed"))
+    .reduce((acc, rx) => {
+      const visitId = rx.encounterId;
+      if (!visitId) return acc;
+      if (!acc[visitId]) {
+        acc[visitId] = {
+          visitId,
+          patientName: rx.patientName,
+          uhid: rx.uhid,
+          total: 0,
+          items: [],
+        };
+      }
+      rx.lines.forEach((line) => {
+        if (line.qtyDispensed > 0) {
+          const drug = getDrug(line.drugId);
+          // Use drug's default MRP for cart calculation
+          const rate = drug?.defaultMrp ?? 0;
+          const lineTotal = line.qtyDispensed * rate;
+          acc[visitId].total += lineTotal;
+          acc[visitId].items.push({
+            drugName: drug?.brandName ?? line.drugId,
+            qty: line.qtyDispensed,
+            rate,
+            total: lineTotal,
+          });
+        }
+      });
+      return acc;
+    }, {} as Record<string, { visitId: string; patientName: string; uhid: string; total: number; items: Array<{ drugName: string; qty: number; rate: number; total: number }> }>);
+
+  const cartData = Object.values(ipdCart);
 
   return (
     <PageChrome
       breadcrumbs={[{ label: "Pharmacy", href: "/app/pharmacy" }, { label: "IPD" }]}
       title="IPD pharmacy"
-      meta="Inpatient prescriptions · ward indents · floor stock"
+      meta="Inpatient prescriptions · ward indents · IPD cart · discharge billing"
       tabs={[
         { id: "rx", label: "IPD prescriptions" },
         { id: "indents", label: "Ward indents" },
+        { id: "cart", label: "IPD cart" },
       ]}
       activeTab={tab}
-      onTabChange={(id) => setTab(id as typeof tab)}
+      onTabChange={(id) => setTab(id as IpdTab)}
     >
       {tab === "rx" && (
         <>
@@ -84,6 +122,43 @@ export default function PharmacyIpdPage() {
               ) : null,
           }))}
         />
+      )}
+      {tab === "cart" && (
+        <>
+          {cartData.length === 0 ? (
+            <p className="text-[13px] text-[var(--attio-text-tertiary)]">No pharmacy charges in IPD cart. Charges appear after IPD dispense.</p>
+          ) : (
+            <div className="space-y-4">
+              <Panel title="IPD Pharmacy Cart - Charges accumulate until discharge">
+                <DataTable
+                  columns={[
+                    { key: "patient", label: "Patient" },
+                    { key: "uhid", label: "UHID" },
+                    { key: "items", label: "Items" },
+                    { key: "total", label: "Total" },
+                    { key: "actions", label: "" },
+                  ]}
+                  rows={cartData.map((cart) => ({
+                    patient: cart.patientName,
+                    uhid: cart.uhid,
+                    items: `${cart.items.length} item(s)`,
+                    total: `₹${cart.total.toLocaleString("en-IN")}`,
+                    actions: (
+                      <AttioButton variant="secondary" className="!h-7 !text-[11px]">
+                        View details
+                      </AttioButton>
+                    ),
+                  }))}
+                />
+              </Panel>
+              <div className="text-[11px] text-[var(--attio-text-tertiary)]">
+                <p>• Pharmacy charges for IPD patients are added to their IPD cart</p>
+                <p>• Payment is collected at discharge from the IPD billing module</p>
+                <p>• No separate pharmacy bills are created for IPD patients</p>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </PageChrome>
   );
