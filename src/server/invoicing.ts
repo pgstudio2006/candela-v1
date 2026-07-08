@@ -154,6 +154,17 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string): Prom
     where: { id: visitId, ...branchScope(ctx) },
   });
   if (!visit) {
+    const anyVisit = await prisma.opdVisit.findUnique({
+      where: { id: visitId },
+      select: { branchId: true, tenantId: true },
+    });
+    console.error("[getVisitReceipt] visit not in branch", {
+      visitId,
+      expectedBranch: ctx.branchId,
+      expectedTenant: ctx.tenantId,
+      actualBranch: anyVisit?.branchId,
+      actualTenant: anyVisit?.tenantId,
+    });
     throw new ServerActionError(
       "NOT_FOUND",
       `Receipt visit not found in your branch (visit ${visitId}, branch ${ctx.branchId}).`,
