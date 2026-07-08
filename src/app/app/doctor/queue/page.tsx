@@ -14,10 +14,12 @@ import { useState } from "react";
 export default function DoctorQueuePage() {
   useDoctorPoll();
   const router = useRouter();
-  const { getOpdQueue, getPatient, getConsultation, startConsultation, skipConsultation } = useDoctorStore();
+  const { getOpdQueue, getPatient, getConsultation, startConsultation, skipConsultation, activeDoctorId, profile } = useDoctorStore();
   const [deptView, setDeptView] = useState(false);
   const [skippingId, setSkippingId] = useState<string | null>(null);
   const queue = deptView ? getOpdQueue(undefined, true) : getOpdQueue();
+
+  console.log("[DoctorQueue] doctorId:", activeDoctorId, "doctorName:", profile.name, "deptIds:", profile.departmentIds, "queue length:", queue.length);
 
   const callNext = async () => {
     const next = queue[0];
