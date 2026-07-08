@@ -2,11 +2,11 @@
 
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
-import { AttioButton, DataTable, StatusBadge } from "@/components/frontdesk/ui";
+import { AttioButton, DataTable, StatusBadge, Panel } from "@/components/frontdesk/ui";
 import { PharmacyDialog, PharmacyInput, PharmacySelect, PharmacyTextarea, FormRow } from "@/components/pharmacy/ui";
 import { PO_STATUS_LABELS } from "@/design-system/pharmacy-data";
 import type { PoLine } from "@/design-system/pharmacy-data";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Download, MessageSquare } from "lucide-react";
 import { useState } from "react";
 
 export default function PharmacyPurchaseOrdersPage() {
@@ -73,11 +73,21 @@ export default function PharmacyPurchaseOrdersPage() {
     });
   };
 
+  const calculateTotal = () => {
+    return poLines.reduce((acc, line) => {
+      const qty = Number(line.qty) || 0;
+      const rate = Number(line.rate) || 0;
+      const gst = Number(line.gst) || 0;
+      const lineTotal = qty * rate * (1 + gst / 100);
+      return acc + lineTotal;
+    }, 0);
+  };
+
   return (
     <PageChrome
       breadcrumbs={[{ label: "Pharmacy", href: "/app/pharmacy" }, { label: "Purchase orders" }]}
       title="Purchase orders"
-      meta="Draft → approve → GRN receive → stock update"
+      meta="Select supplier · select medicines · enter quantity · generate PO · WhatsApp PDF"
       actions={
         <AttioButton variant="primary" onClick={() => { resetCreate(); setCreateOpen(true); }}>
           <Plus className="size-3.5" />
@@ -90,63 +100,89 @@ export default function PharmacyPurchaseOrdersPage() {
           { key: "id", label: "PO #" },
           { key: "supplier", label: "Supplier" },
           { key: "lines", label: "Lines" },
+          { key: "total", label: "Total" },
           { key: "status", label: "Status" },
           { key: "date", label: "Created" },
           { key: "actions", label: "" },
         ]}
-        rows={purchaseOrders.map((p) => ({
-          id: p.id,
-          supplier: suppliers.find((s) => s.id === p.supplierId)?.name ?? p.supplierId,
-          lines: p.lines.map((l) => `${drugs.find((d) => d.id === l.drugId)?.brandName} ×${l.qtyOrdered}`).join("; "),
-          status: <StatusBadge label={PO_STATUS_LABELS[p.status]} variant="info" />,
-          date: new Date(p.createdAt).toLocaleDateString("en-IN"),
-          actions: (
-            <div className="flex flex-wrap gap-1">
-              {p.status === "draft" && (
-                <AttioButton variant="ghost" className="!h-7 !text-[11px]" onClick={() => void updatePOStatus(p.id, "approved")}>
-                  Approve
+        rows={purchaseOrders.map((p) => {
+          const total = p.lines.reduce((acc, l) => acc + (l.qtyOrdered * l.rate * (1 + l.gstPercent / 100)), 0);
+          return {
+            id: p.id,
+            supplier: suppliers.find((s) => s.id === p.supplierId)?.name ?? p.supplierId,
+            lines: p.lines.map((l) => `${drugs.find((d) => d.id === l.drugId)?.brandName} ×${l.qtyOrdered}`).join("; "),
+            total: `₹${total.toLocaleString("en-IN")}`,
+            status: <StatusBadge label={PO_STATUS_LABELS[p.status]} variant="info" />,
+            date: new Date(p.createdAt).toLocaleDateString("en-IN"),
+            actions: (
+              <div className="flex flex-wrap gap-1">
+                {p.status === "draft" && (
+                  <AttioButton variant="ghost" className="!h-7 !text-[11px]" onClick={() => void updatePOStatus(p.id, "approved")}>
+                    Approve
+                  </AttioButton>
+                )}
+                {["approved", "partial"].includes(p.status) && (
+                  <AttioButton variant="primary" className="!h-7 !text-[11px]" onClick={() => openReceive(p.id)}>
+                    Receive GRN
+                  </AttioButton>
+                )}
+                <AttioButton variant="ghost" className="!h-7 !text-[11px]" title="Download PDF">
+                  <Download className="size-3" />
                 </AttioButton>
-              )}
-              {["approved", "partial"].includes(p.status) && (
-                <AttioButton variant="primary" className="!h-7 !text-[11px]" onClick={() => openReceive(p.id)}>
-                  Receive GRN
+                <AttioButton variant="ghost" className="!h-7 !text-[11px]" title="WhatsApp PDF">
+                  <MessageSquare className="size-3" />
                 </AttioButton>
-              )}
-            </div>
-          ),
-        }))}
+              </div>
+            ),
+          };
+        })}
       />
 
       {createOpen && (
-        <PharmacyDialog open={createOpen} title="Create purchase order" onClose={() => { setCreateOpen(false); resetCreate(); }}>
-          <div className="space-y-4">
-            <FormRow label="Supplier" required>
-              <PharmacySelect value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                <option value="">Select supplier</option>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </PharmacySelect>
-            </FormRow>
-            <FormRow label="Notes">
-              <PharmacyTextarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes / delivery instructions" />
-            </FormRow>
-            <div className="space-y-2">
-              <p className="text-[12px] font-medium text-[var(--attio-text-secondary)]">Lines</p>
-              {poLines.map((line, idx) => (
-                <div key={idx} className="grid gap-2 rounded-lg border p-2 sm:grid-cols-5">
-                  <PharmacySelect value={line.drugId} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, drugId: e.target.value } : l)))}>
-                    <option value="">Select drug</option>
-                    {drugs.map((d) => <option key={d.id} value={d.id}>{d.brandName}</option>)}
-                  </PharmacySelect>
-                  <PharmacyInput type="number" placeholder="Qty" value={line.qty} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, qty: e.target.value } : l)))} />
-                  <PharmacyInput type="number" placeholder="Rate" value={line.rate} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, rate: e.target.value } : l)))} />
-                  <PharmacyInput type="number" placeholder="GST %" value={line.gst} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, gst: e.target.value } : l)))} />
-                  <button type="button" className="flex items-center justify-center text-red-600" onClick={() => setPoLines(poLines.filter((_, i) => i !== idx))}>
-                    <Trash2 className="size-4" />
-                  </button>
-                </div>
-              ))}
-              <AttioButton variant="secondary" onClick={() => setPoLines([...poLines, { drugId: "", qty: "", rate: "", gst: "12" }])}>Add line</AttioButton>
-            </div>
+        <PharmacyDialog open={createOpen} title="Create purchase order" onClose={() => { setCreateOpen(false); resetCreate(); }} width="max-w-2xl">
+          <div className="space-y-4 text-[13px]">
+            <Panel title="Supplier Information">
+              <FormRow label="Supplier *" required>
+                <PharmacySelect value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                  <option value="">Select supplier</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </PharmacySelect>
+              </FormRow>
+              <FormRow label="Notes">
+                <PharmacyTextarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes / delivery instructions" />
+              </FormRow>
+            </Panel>
+
+            <Panel title="Order Lines">
+              <div className="space-y-2">
+                {poLines.map((line, idx) => (
+                  <div key={idx} className="grid gap-2 rounded-lg border p-2 sm:grid-cols-6">
+                    <PharmacySelect value={line.drugId} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, drugId: e.target.value } : l)))}>
+                      <option value="">Select drug</option>
+                      {drugs.map((d) => <option key={d.id} value={d.id}>{d.brandName}</option>)}
+                    </PharmacySelect>
+                    <PharmacyInput type="number" placeholder="Qty" value={line.qty} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, qty: e.target.value } : l)))} />
+                    <PharmacyInput type="number" placeholder="Rate" value={line.rate} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, rate: e.target.value } : l)))} />
+                    <PharmacyInput type="number" placeholder="GST %" value={line.gst} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, gst: e.target.value } : l)))} />
+                    <div className="flex items-center text-[11px] text-[var(--attio-text-tertiary)]">
+                      ₹{((Number(line.qty) || 0) * (Number(line.rate) || 0) * (1 + (Number(line.gst) || 0) / 100)).toFixed(2)}
+                    </div>
+                    <button type="button" className="flex items-center justify-center text-red-600" onClick={() => setPoLines(poLines.filter((_, i) => i !== idx))}>
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                ))}
+                <AttioButton variant="secondary" onClick={() => setPoLines([...poLines, { drugId: "", qty: "", rate: "", gst: "12" }])}>Add line</AttioButton>
+              </div>
+            </Panel>
+
+            <Panel title="Order Summary">
+              <div className="flex justify-between">
+                <p className="font-medium">Total Amount</p>
+                <p className="font-medium">₹{calculateTotal().toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+            </Panel>
+
             <div className="flex justify-end gap-2">
               <AttioButton variant="secondary" onClick={() => { setCreateOpen(false); resetCreate(); }}>Cancel</AttioButton>
               <AttioButton variant="primary" onClick={submitCreate}>Create PO</AttioButton>
@@ -157,7 +193,7 @@ export default function PharmacyPurchaseOrdersPage() {
 
       {receiveId && (
         <PharmacyDialog open={!!receiveId} title="Goods receipt" subtitle={receiveId} onClose={() => { setReceiveId(null); setGrn({}); }}>
-          <div className="space-y-4">
+          <div className="space-y-4 text-[13px]">
             <p className="text-[12px] text-[var(--attio-text-secondary)]">Enter batch and expiry for each line received.</p>
             {purchaseOrders
               .find((p) => p.id === receiveId)
