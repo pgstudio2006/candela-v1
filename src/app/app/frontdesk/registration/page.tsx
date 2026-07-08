@@ -126,7 +126,7 @@ export default function RegistrationPage() {
 
     const payload = normalizeReferralDoctor(data);
     setSubmitting(true);
-    const result = await registerPatientAsync(payload, { forceDuplicate: opts?.forceDuplicate, emergency: isEmergency });
+    const result = await registerPatientAsync(payload, { startVisit: true, forceDuplicate: opts?.forceDuplicate, emergency: isEmergency });
     setSubmitting(false);
 
     if (!result.ok) {

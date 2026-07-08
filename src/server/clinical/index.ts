@@ -620,7 +620,7 @@ export async function registerPatient(
     },
   });
 
-  if (startVisit && visitId) {
+  if (visitId) {
     await prisma.opdVisit.upsert({
       where: { id: visitId },
       update: {

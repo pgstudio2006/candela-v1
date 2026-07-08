@@ -16,7 +16,7 @@ export default function DoctorQueuePage() {
   const router = useRouter();
   const { getOpdQueue, getPatient, getConsultation, startConsultation } = useDoctorStore();
   const [deptView, setDeptView] = useState(false);
-  const queue = getOpdQueue(undefined, deptView);
+  const queue = deptView ? getOpdQueue(undefined, true) : getOpdQueue();
 
   const callNext = async () => {
     const next = queue[0];
