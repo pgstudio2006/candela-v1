@@ -78,15 +78,22 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                 {rx.lines.map((l) => {
                   const drug = drugs.find((d) => d.id === l.drugId);
                   const avail = stock.filter((s) => s.drugId === l.drugId && !s.quarantined).reduce((n, s) => n + s.qtyOnHand - s.reserved, 0);
+                  const batch = pickFefoBatch(l.drugId, stock, l.qtyPrescribed);
                   return (
                     <li key={l.id} className="flex justify-between gap-4 px-3 py-3 text-[13px]">
-                      <div>
+                      <div className="flex-1">
                         <p className="font-medium">{drug?.brandName ?? l.drugId}</p>
                         <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                           {l.dose} · {l.frequency} · {l.duration} · Qty {l.qtyPrescribed}
                         </p>
+                        {l.notes && <p className="text-[11px] text-[var(--attio-text-tertiary)] italic">{l.notes}</p>}
                         {drug && isControlledSchedule(drug.schedule) && (
                           <StatusBadge label={`Schedule ${drug.schedule}`} variant="danger" />
+                        )}
+                        {batch && (
+                          <p className="mt-1 text-[11px] text-[var(--attio-text-tertiary)]">
+                            Shelf: {batch.rack} · Box: {batch.batchNo} · Batch: {batch.batchNo}
+                          </p>
                         )}
                       </div>
                       <span className={avail >= l.qtyPrescribed ? "text-emerald-600" : "text-amber-600"}>{avail} avail</span>
@@ -133,8 +140,29 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                 const remaining = l.qtyPrescribed - l.qtyDispensed;
                 return (
                   <div key={l.id} className="rounded-lg border p-3">
-                    <p className="text-[13px] font-medium">{drug?.brandName}</p>
-                    <p className="text-[11px] text-[var(--attio-text-tertiary)]">Remaining: {remaining}</p>
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="text-[13px] font-medium">{drug?.brandName}</p>
+                        <p className="text-[11px] text-[var(--attio-text-tertiary)]">Remaining: {remaining}</p>
+                        {l.notes && <p className="text-[11px] text-[var(--attio-text-tertiary)] italic">{l.notes}</p>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newQtys = { ...qtys };
+                          delete newQtys[l.id];
+                          setQtys(newQtys);
+                        }}
+                        className="text-red-600 hover:text-red-700 text-[11px]"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    {batch && (
+                      <p className="mt-1 text-[11px] text-[var(--attio-text-tertiary)]">
+                        Shelf: {batch.rack} · Box: {batch.batchNo} · Batch: {batch.batchNo} · Exp: {batch.expiry}
+                      </p>
+                    )}
                     <div className="mt-2 flex flex-wrap items-center gap-3">
                       <Input
                         type="number"
@@ -155,6 +183,12 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                   </div>
                 );
               })}
+              <AttioButton variant="secondary" onClick={() => {
+                const newLineId = `rxl_${rx.id}_${Date.now()}`;
+                setQtys((q) => ({ ...q, [newLineId]: 1 }));
+              }}>
+                Add medicine
+              </AttioButton>
               {needsWitness && (
                 <Input placeholder="Witness pharmacist name (Schedule H1/X)" value={witness} onChange={(e) => setWitness(e.target.value)} className="h-9 text-[13px]" />
               )}
