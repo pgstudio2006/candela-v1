@@ -35,6 +35,7 @@ type Store = PharmacySnapshot & {
   getStaffRole: () => "manager" | "opd" | "purchase";
   getKpis: () => ReturnType<typeof computePharmacyKpis>;
   getDrug: (id: string) => Drug | undefined;
+  getSupplier: (id: string) => Supplier | undefined;
   getActivePrescriptions: () => Prescription[];
   verifyPrescription: (id: string, counselingNotes?: string) => Promise<void>;
   rejectPrescription: (id: string, reason: string) => Promise<void>;
@@ -208,6 +209,7 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
       getKpis: () =>
         computePharmacyKpis(data.prescriptions, data.stock, data.drugs, data.bills, data.purchaseOrders),
       getDrug: (id) => data.drugs.find((d) => d.id === id),
+      getSupplier: (id) => data.suppliers.find((s) => s.id === id),
       getActivePrescriptions: () =>
         getFilteredPrescriptions(
           data.prescriptions.filter((r) => !["dispensed", "cancelled", "rejected"].includes(r.status)),

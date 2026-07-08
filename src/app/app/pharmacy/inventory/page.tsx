@@ -2,7 +2,7 @@
 
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
-import { AttioButton, DataTable, StatusBadge } from "@/components/frontdesk/ui";
+import { AttioButton, DataTable, StatusBadge, Panel } from "@/components/frontdesk/ui";
 import { PharmacyDialog, PharmacyInput, PharmacyTextarea, FormRow } from "@/components/pharmacy/ui";
 import type { StockBatch } from "@/design-system/pharmacy-data";
 import { daysToExpiry } from "@/lib/pharmacy-platform";
@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 export default function PharmacyInventoryPage() {
-  const { stock, getDrug, quarantineBatch, adjustStock } = usePharmacyStore();
+  const { stock, getDrug, getSupplier, quarantineBatch, adjustStock } = usePharmacyStore();
   const [tab, setTab] = useState<"all" | "low" | "expiry">("all");
   const [adjust, setAdjust] = useState<StockBatch | null>(null);
   const [delta, setDelta] = useState("");
@@ -43,7 +43,7 @@ export default function PharmacyInventoryPage() {
     <PageChrome
       breadcrumbs={[{ label: "Pharmacy", href: "/app/pharmacy" }, { label: "Inventory" }]}
       title="Batch inventory"
-      meta="FEFO · reservations · rack locations · quarantine · stock adjustment"
+      meta="Medicine name · live stock · batch · expiry · supplier · shelf · box · description"
       actions={
         <div className="flex gap-2">
           <Link href="/app/pharmacy/suppliers">
@@ -64,25 +64,55 @@ export default function PharmacyInventoryPage() {
     >
       <DataTable
         columns={[
-          { key: "drug", label: "Drug" },
+          { key: "drug", label: "Medicine" },
+          { key: "description", label: "Description" },
           { key: "batch", label: "Batch" },
           { key: "expiry", label: "Expiry" },
-          { key: "onHand", label: "On hand" },
-          { key: "reserved", label: "Reserved" },
-          { key: "rack", label: "Rack" },
+          { key: "stock", label: "Live Stock" },
+          { key: "supplier", label: "Supplier" },
+          { key: "location", label: "Shelf/Box" },
           { key: "status", label: "Status" },
           { key: "actions", label: "" },
         ]}
         rows={rows.map((s) => {
           const drug = getDrug(s.drugId);
+          const supplier = s.supplierId ? getSupplier(s.supplierId) : undefined;
           const d = daysToExpiry(s.expiry);
           return {
-            drug: `${drug?.brandName ?? s.drugId} ${drug?.strength ?? ""}`,
+            drug: (
+              <div>
+                <p className="font-medium">{drug?.brandName ?? s.drugId}</p>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">{drug?.genericName} · {drug?.strength}</p>
+              </div>
+            ),
+            description: (
+              <div className="text-[11px]">
+                <p>{drug?.therapeuticClass}</p>
+                <p className="text-[var(--attio-text-tertiary)]">{drug?.form} · {drug?.route}</p>
+              </div>
+            ),
             batch: s.batchNo,
-            expiry: `${s.expiry} (${d}d)`,
-            onHand: s.qtyOnHand,
-            reserved: s.reserved,
-            rack: s.rack,
+            expiry: (
+              <div>
+                <p>{s.expiry}</p>
+                <p className={`text-[11px] ${d <= 30 ? "text-red-600" : d <= 60 ? "text-amber-600" : "text-[var(--attio-text-tertiary)]"}`}>
+                  {d} days
+                </p>
+              </div>
+            ),
+            stock: (
+              <div>
+                <p className="font-medium">{s.qtyOnHand}</p>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Reserved: {s.reserved}</p>
+              </div>
+            ),
+            supplier: supplier?.name ?? "—",
+            location: (
+              <div>
+                <p className="text-[11px]">Shelf: {s.rack}</p>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Box: {s.batchNo}</p>
+              </div>
+            ),
             status: s.quarantined ? <StatusBadge label="Quarantine" variant="danger" /> : <StatusBadge label="Active" variant="success" />,
             actions: (
               <div className="flex gap-1">
@@ -106,7 +136,26 @@ export default function PharmacyInventoryPage() {
           onClose={() => { setAdjust(null); setDelta(""); setReason(""); }}
         >
           <div className="space-y-4">
-            <p className="text-[13px] text-[var(--attio-text-secondary)]">Current on hand: <strong>{adjust.qtyOnHand}</strong></p>
+            <Panel title="Current Stock">
+              <div className="grid grid-cols-2 gap-3 text-[13px]">
+                <div>
+                  <p className="text-[11px] text-[var(--attio-text-tertiary)]">On hand</p>
+                  <p className="font-medium">{adjust.qtyOnHand}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-[var(--attio-text-tertiary)]">Reserved</p>
+                  <p>{adjust.reserved}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-[var(--attio-text-tertiary)]">Available</p>
+                  <p>{adjust.qtyOnHand - adjust.reserved}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-[var(--attio-text-tertiary)]">Expiry</p>
+                  <p>{adjust.expiry}</p>
+                </div>
+              </div>
+            </Panel>
             <FormRow label="Quantity change (+/-)" required>
               <PharmacyInput type="number" value={delta} onChange={(e) => setDelta(e.target.value)} placeholder="e.g. -5 or 10" />
             </FormRow>
