@@ -17,9 +17,17 @@ import {
   type BillingPackage,
 } from "@/lib/billing-packages";
 import { generatePrescriptionPdf, printPdfBytes } from "@/lib/prescription-pdf";
+import type { DocumentTemplate } from "@/design-system/document-templates";
 import { cn } from "@/lib/utils";
 import { validateFormValues } from "@/lib/schema-registry";
 import { useToast } from "@/components/ui/toast-provider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -79,6 +87,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     completeConsultation,
     templates,
     packages: storePackages,
+    documentTemplates,
   } = useDoctorStore();
 
   const [apiPackages, setApiPackages] = useState<BillingPackage[]>([]);
@@ -94,6 +103,13 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [notes, setNotes] = useState("");
   const [completed, setCompleted] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
+  const prescriptionTemplates = useMemo(
+    () => documentTemplates.filter((t: DocumentTemplate) => t.kind === "prescription" && t.enabled),
+    [documentTemplates],
+  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(() =>
+    prescriptionTemplates.find((t) => t.id === "doc_rx_saini")?.id ?? prescriptionTemplates[0]?.id,
+  );
   const [savingExam, setSavingExam] = useState(false);
   const [savingDx, setSavingDx] = useState(false);
   const [savingTx, setSavingTx] = useState(false);
@@ -204,11 +220,13 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const handlePrintPrescription = async () => {
     if (!patient || !visit || !consult) return;
     try {
+      const selectedTemplate = prescriptionTemplates.find((t) => t.id === selectedTemplateId);
       const pdfBytes = await generatePrescriptionPdf({
         patient,
         visit,
         consult,
         doctorName: visit.doctorName,
+        layout: selectedTemplate?.layout ?? "navayu-letterhead",
       });
       printPdfBytes(pdfBytes, "Prescription");
     } catch (error) {
@@ -505,7 +523,21 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
 
       {tab === "prescription" && consult && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {prescriptionTemplates.length > 1 && (
+              <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v ?? undefined)}>
+                <SelectTrigger className="h-9 w-[220px] text-[13px]">
+                  <SelectValue placeholder="Select prescription template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {prescriptionTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <AttioButton variant="secondary" className="gap-1.5" onClick={handlePrintPrescription}>
               <Printer className="size-3.5" />
               Print prescription

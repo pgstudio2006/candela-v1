@@ -1,17 +1,19 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import { PRESCRIPTION_FREQUENCY_OPTIONS, type ConsultationRecord, type PrescriptionLine } from "@/design-system/doctor-data";
+import { generateSainiPrescriptionPdf } from "@/lib/prescription-pdf-saini";
+import type { DocumentLayoutId } from "@/design-system/document-templates";
 
 const TEMPLATE_URL = "/templates/navayu-invoice-template.pdf";
 
-const COLORS = {
+export const COLORS = {
   ink: rgb(0.12, 0.12, 0.14),
   border: rgb(0.72, 0.72, 0.76),
   headerFill: rgb(0.95, 0.96, 0.98),
   white: rgb(1, 1, 1),
 } as const;
 
-const FONT = {
+export const FONT = {
   caption: 9,
   body: 10,
   table: 10,
@@ -36,9 +38,10 @@ type PrescriptionPdfProps = {
   visit: Visit;
   consult: ConsultationRecord;
   doctorName: string;
+  layout?: DocumentLayoutId;
 };
 
-function pdfSafeText(text: string): string {
+export function pdfSafeText(text: string): string {
   return String(text)
     .replace(/₹/g, "Rs.")
     .replace(/[\u2013\u2014]/g, "-")
@@ -47,17 +50,17 @@ function pdfSafeText(text: string): string {
     .replace(/[^\t\n\r\u0020-\u00FF]/g, "");
 }
 
-function formatFrequency(value: string): string {
+export function formatFrequency(value: string): string {
   return PRESCRIPTION_FREQUENCY_OPTIONS.find((o) => o.value === value)?.label ?? value;
 }
 
-function formatDuration(line: PrescriptionLine): string {
+export function formatDuration(line: PrescriptionLine): string {
   if (line.days && line.days > 0) return `${line.days} day${line.days === 1 ? "" : "s"}`;
   if (line.duration) return line.duration;
   return "—";
 }
 
-function formatConsultDate(iso: string): string {
+export function formatConsultDate(iso: string): string {
   const date = new Date(iso);
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
@@ -66,11 +69,11 @@ function formatConsultDate(iso: string): string {
   });
 }
 
-function drawText(page: PDFPage, text: string, x: number, y: number, font: PDFFont, size: number = FONT.body) {
+export function drawText(page: PDFPage, text: string, x: number, y: number, font: PDFFont, size: number = FONT.body) {
   page.drawText(pdfSafeText(text), { x, y, size, font, color: COLORS.ink });
 }
 
-function drawRightText(
+export function drawRightText(
   page: PDFPage,
   text: string,
   rightX: number,
@@ -84,7 +87,7 @@ function drawRightText(
   page.drawText(safe, { x: rightX - width - padding, y, size, font, color: COLORS.ink });
 }
 
-function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+export function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   const safe = pdfSafeText(text.trim());
   if (!safe) return [""];
 
@@ -120,11 +123,17 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): 
   return lines.length ? lines : [""];
 }
 
-function drawHLine(page: PDFPage, x1: number, x2: number, y: number) {
+export function drawHLine(page: PDFPage, x1: number, x2: number, y: number) {
   page.drawLine({ start: { x: x1, y }, end: { x: x2, y }, thickness: 0.6, color: COLORS.border });
 }
 
 export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Promise<Uint8Array> {
+  const { patient, visit, consult, doctorName, layout = "navayu-letterhead" } = props;
+
+  if (layout === "dr-sunil-saini-letterhead") {
+    return generateSainiPrescriptionPdf({ patient, visit, consult, doctorName });
+  }
+
   const templateBytes = await fetch(TEMPLATE_URL).then((res) => {
     if (!res.ok) throw new Error("Invoice template PDF not found.");
     return res.arrayBuffer();
@@ -135,7 +144,6 @@ export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Prom
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const { patient, visit, consult, doctorName } = props;
   const date = formatConsultDate(consult.completedAt ?? consult.startedAt ?? new Date().toISOString());
 
   let currentY: number = LAYOUT.contentTop;

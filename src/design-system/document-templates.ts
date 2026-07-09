@@ -2,7 +2,7 @@
 
 export type DocumentTemplateKind = "prescription" | "invoice" | "consult_summary";
 
-export type DocumentLayoutId = "navayu-letterhead";
+export type DocumentLayoutId = "navayu-letterhead" | "dr-sunil-saini-letterhead";
 
 export type DocumentTemplate = {
   id: string;
@@ -52,6 +52,15 @@ export const DEFAULT_DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     label: "Consultation Summary",
     layout: "navayu-letterhead",
     description: "Full consult record including AI scribe transcript",
+    enabled: true,
+    isSystem: true,
+  },
+  {
+    id: "doc_rx_saini",
+    kind: "prescription",
+    label: "Dr. Sunil Saini Prescription",
+    layout: "dr-sunil-saini-letterhead",
+    description: "Prescription on Dr. Sunil Saini letterhead with patient info overlay",
     enabled: true,
     isSystem: true,
   },

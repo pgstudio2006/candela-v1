@@ -51,10 +51,12 @@ export async function ensureHospitalBootstrap() {
     });
   }
 
-  if (!(await prisma.documentTemplate.count())) {
-    for (const template of DEFAULT_DOCUMENT_TEMPLATES) {
-      await prisma.documentTemplate.create({ data: template }).catch(() => undefined);
-    }
+  for (const template of DEFAULT_DOCUMENT_TEMPLATES) {
+    await prisma.documentTemplate.upsert({
+      where: { id: template.id },
+      update: {},
+      create: template,
+    }).catch(() => undefined);
   }
 
   if (!(await prisma.doctorTemplate.count())) {
