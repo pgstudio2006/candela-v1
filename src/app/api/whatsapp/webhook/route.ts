@@ -1,19 +1,27 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * WhatsApp Webhook verification (Meta Cloud API)
- * Meta sends a GET request with hub.challenge when you first set up the webhook.
+ * WhatsApp Webhook verification (Meta Cloud API + TeleCRM WACA)
+ * Meta sends hub.mode=subscribe, hub.verify_token and hub.challenge.
+ * TeleCRM WACA sends the verify token as a ?token= query param.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const mode = searchParams.get("hub.mode");
-  const token = searchParams.get("hub.verify_token");
+  const hubToken = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
+  const token = searchParams.get("token") ?? hubToken;
 
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
-  if (mode === "subscribe" && token === verifyToken) {
+  // Meta Cloud API verification
+  if (mode === "subscribe" && hubToken === verifyToken && challenge) {
     return new NextResponse(challenge, { status: 200 });
+  }
+
+  // TeleCRM WACA verification (?token=...)
+  if (token && token === verifyToken) {
+    return new NextResponse(challenge ?? "ok", { status: 200 });
   }
 
   return NextResponse.json({ ok: false, error: "Verification failed" }, { status: 403 });
