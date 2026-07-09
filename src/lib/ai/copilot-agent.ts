@@ -90,6 +90,144 @@ const COPILOT_TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "check_in",
+      description: "Check in an existing patient for a visit. Use UHID, phone, or name to identify the patient.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "UHID, phone, or patient name to search" },
+          doctor: { type: "string", description: "Doctor name or ID" },
+          department: { type: "string", description: "Department id or label e.g. dept_spine" },
+          visitId: { type: "string", description: "Optional existing visit id" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "process_billing",
+      description: "Process billing/payment for a visit. Use when user asks to bill, take payment, or finalize billing.",
+      parameters: {
+        type: "object",
+        properties: {
+          visitId: { type: "string" },
+          paymentScope: { type: "string", enum: ["full", "partial", "defer"], description: "full, partial, or defer" },
+          amount: { type: "number" },
+          collectedAmount: { type: "number" },
+          mode: { type: "string", description: "Payment mode e.g. cash, card, upi" },
+          customLine: { type: "string" },
+          discount: { type: "number" },
+        },
+        required: ["visitId", "paymentScope", "amount", "mode"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "book_appointment",
+      description: "Book an appointment for a patient. Identify patient by UHID/phone/name.",
+      parameters: {
+        type: "object",
+        properties: {
+          patient: { type: "string", description: "UHID, phone, or patient name" },
+          doctor: { type: "string" },
+          department: { type: "string" },
+          date: { type: "string", description: "YYYY-MM-DD" },
+          time: { type: "string", description: "HH:MM" },
+          duration: { type: "number" },
+          notes: { type: "string" },
+        },
+        required: ["patient"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "complete_junior_exam",
+      description: "Complete the junior exam for a visit. Include any red flags if reported.",
+      parameters: {
+        type: "object",
+        properties: {
+          visitId: { type: "string" },
+          redFlags: { type: "boolean" },
+          redFlagNotes: { type: "string" },
+          notes: { type: "string" },
+        },
+        required: ["visitId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "save_submission",
+      description: "Save a dynamic form (registration, junior-exam, etc.) for a visit.",
+      parameters: {
+        type: "object",
+        properties: {
+          formId: { type: "string" },
+          visitId: { type: "string" },
+          data: { type: "object", additionalProperties: true },
+        },
+        required: ["formId", "visitId", "data"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "update_patient",
+      description: "Update an existing patient's details.",
+      parameters: {
+        type: "object",
+        properties: {
+          patientId: { type: "string" },
+          uhid: { type: "string" },
+          data: { type: "object", additionalProperties: true },
+        },
+        required: ["patientId", "data"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "cancel_appointment",
+      description: "Cancel an appointment by its appointment id.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointmentId: { type: "string" },
+        },
+        required: ["appointmentId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "reschedule_appointment",
+      description: "Reschedule an appointment to a new date/time.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointmentId: { type: "string" },
+          date: { type: "string" },
+          time: { type: "string" },
+          doctor: { type: "string" },
+          department: { type: "string" },
+        },
+        required: ["appointmentId", "date", "time"],
+      },
+    },
+  },
 ];
 
 function contextBlock(ctx: CopilotContext): string {
@@ -147,6 +285,95 @@ function parseToolActions(name: string, argsRaw: string, ctx: CopilotContext): C
     return [{ type: "register_patient", data: { ...data, phone, firstName, lastName, fullName } }];
   }
 
+  if (name === "check_in") {
+    const query = asString(args.query ?? args.uhid ?? args.phone ?? args.patient);
+    const doctor = asString(args.doctor);
+    const department = asString(args.department);
+    const visitId = asString(args.visitId ?? ctx.visitId);
+    if (!query) return [];
+    return [{ type: "check_in", query, doctor, department, visitId }];
+  }
+
+  if (name === "process_billing") {
+    const visitId = asString(args.visitId ?? ctx.visitId ?? "");
+    const data = args as Record<string, string | number | boolean>;
+    if (!visitId) return [];
+    return [
+      {
+        type: "process_billing",
+        visitId,
+        data: {
+          paymentScope: asString(data.paymentScope ?? "full"),
+          amount: Number(data.amount ?? 0),
+          collectedAmount: Number(data.collectedAmount ?? data.amount ?? 0),
+          mode: asString(data.mode ?? "cash"),
+          customLine: asString(data.customLine),
+          discount: Number(data.discount ?? 0),
+        },
+      },
+    ];
+  }
+
+  if (name === "book_appointment") {
+    const patientQuery = asString(args.patient ?? args.query);
+    const doctor = asString(args.doctor);
+    const department = asString(args.department);
+    const date = asString(args.date);
+    const time = asString(args.time);
+    const duration = Number(args.duration ?? 20);
+    const notes = asString(args.notes);
+    if (!patientQuery) return [];
+    return [{ type: "book_appointment", patientQuery, doctor, department, date, time, duration, notes }];
+  }
+
+  if (name === "complete_junior_exam") {
+    const visitId = asString(args.visitId ?? ctx.visitId ?? "");
+    const data = args as Record<string, string | number | boolean>;
+    if (!visitId) return [];
+    return [
+      {
+        type: "complete_junior_exam",
+        visitId,
+        data: {
+          redFlags: Boolean(data.redFlags ?? data.red_flags),
+          redFlagNotes: asString(data.redFlagNotes ?? data.redFlag_notes ?? data.redFlagNotes),
+          notes: asString(data.notes),
+        },
+      },
+    ];
+  }
+
+  if (name === "save_submission") {
+    const formId = asString(args.formId ?? args.form_id ?? args.form);
+    const visitId = asString(args.visitId ?? ctx.visitId ?? "");
+    const data = (args.data ?? {}) as Record<string, string | number | boolean>;
+    if (!formId || !visitId) return [];
+    return [{ type: "save_submission", formId, visitId, data }];
+  }
+
+  if (name === "update_patient") {
+    const patientId = asString(args.patientId ?? args.uhid ?? args.id);
+    const data = args as Record<string, string | number | boolean>;
+    if (!patientId) return [];
+    return [{ type: "update_patient", patientId, data }];
+  }
+
+  if (name === "cancel_appointment") {
+    const appointmentId = asString(args.appointmentId ?? args.appointment_id);
+    if (!appointmentId) return [];
+    return [{ type: "cancel_appointment", appointmentId }];
+  }
+
+  if (name === "reschedule_appointment") {
+    const appointmentId = asString(args.appointmentId ?? args.appointment_id);
+    const date = asString(args.date);
+    const time = asString(args.time);
+    const doctor = asString(args.doctor);
+    const department = asString(args.department);
+    if (!appointmentId || !date || !time) return [];
+    return [{ type: "reschedule_appointment", appointmentId, date, time, doctor, department }];
+  }
+
   return [];
 }
 
@@ -159,6 +386,12 @@ You help staff complete real work: fill consult fields, draft prescriptions, and
 When the user asks you to do something you CAN do with tools, call the tool instead of only describing steps.
 When the user asks to register or add a new patient, call register_patient with the details they gave (phone required). Do NOT navigate to /register — that path does not exist.
 When registration needs more fields, navigate to /app/frontdesk/registration only after explaining missing info.
+When the user asks to check in an existing patient, call check_in with query (UHID/phone/name) and optionally doctor/department.
+When the user asks to process billing/take payment, call process_billing with visitId, amount, paymentScope, and mode.
+When the user asks to book an appointment, call book_appointment with patient identifier and optional doctor/date/time.
+When the user asks to complete a junior exam or initial triage, call complete_junior_exam with visitId.
+When the user asks to save a form (registration, junior-exam, etc.), call save_submission with formId, visitId, and data.
+When the user asks to update a patient, call update_patient with patientId and fields.
 When on a doctor consult (visitId present), prefer fill_consult_section and set_prescription for documentation tasks.
 For navigate tool, ONLY use these exact paths:
 ${copilotRouteCatalogForPrompt()}

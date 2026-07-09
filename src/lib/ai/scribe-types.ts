@@ -22,7 +22,31 @@ export type CopilotAction =
     }
   | { type: "set_prescription"; visitId: string; lines: Omit<PrescriptionLine, "id">[] }
   | { type: "navigate"; href: string; label?: string }
-  | { type: "register_patient"; data: Record<string, string | number | boolean> };
+  | { type: "register_patient"; data: Record<string, string | number | boolean> }
+  | { type: "check_in"; query: string; doctor?: string; department?: string; visitId?: string }
+  | { type: "process_billing"; visitId: string; data: Record<string, string | number | boolean> }
+  | {
+      type: "book_appointment";
+      patientQuery: string;
+      doctor?: string;
+      department?: string;
+      date?: string;
+      time?: string;
+      duration?: number;
+      notes?: string;
+    }
+  | { type: "complete_junior_exam"; visitId: string; data: Record<string, string | number | boolean> }
+  | { type: "save_submission"; formId: string; visitId: string; data: Record<string, string | number | boolean> }
+  | { type: "update_patient"; patientId: string; data: Record<string, string | number | boolean> }
+  | { type: "cancel_appointment"; appointmentId: string }
+  | {
+      type: "reschedule_appointment";
+      appointmentId: string;
+      date: string;
+      time: string;
+      doctor?: string;
+      department?: string;
+    };
 
 export type CopilotContext = {
   module: string;
