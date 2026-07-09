@@ -12,11 +12,18 @@ export const leadPartialSchema = z.object({
   alternatePhone: z.string().max(20).optional(),
   email: z.string().max(120).optional(),
   age: z.number().int().min(0).max(120).optional(),
+  dob: z.string().max(30).optional(),
   gender: z.string().max(20).optional(),
   city: z.string().max(80).optional(),
   district: z.string().max(80).optional(),
   state: z.string().max(80).optional(),
   country: z.string().max(80).optional(),
+  houseNumber: z.string().max(80).optional(),
+  street: z.string().max(120).optional(),
+  locality: z.string().max(120).optional(),
+  landmark: z.string().max(120).optional(),
+  address: z.string().max(500).optional(),
+  pincode: z.string().max(20).optional(),
   doctorName: z.string().max(120).optional(),
   appointmentDate: z.string().max(30).optional(),
   appointmentTime: z.string().max(20).optional(),
@@ -32,6 +39,7 @@ export const leadPartialSchema = z.object({
   lostReason: z.string().max(500).optional(),
   stageId: z.string().optional(),
   assigneeId: z.string().optional(),
+  formData: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 export const followUpSchema = z.object({

@@ -4,7 +4,6 @@ import { useCrmStore } from "@/components/crm/crm-store";
 import { PublishedSchemaForm } from "@/components/candela/published-schema-form";
 import { AttioButton } from "@/components/frontdesk/ui";
 import {
-  CRM_APPOINTMENT_CENTRES,
   EMPTY_LEAD_FORM,
   type CrmLead,
   type CrmLeadFormValues,
@@ -30,11 +29,18 @@ function leadToForm(lead: CrmLead): CrmLeadFormValues {
     alternatePhone: lead.alternatePhone ?? "",
     email: lead.email ?? "",
     age: lead.age != null ? String(lead.age) : "",
+    dob: lead.dob ?? "",
     gender: lead.gender ?? "",
     city: lead.city ?? "",
     district: lead.district ?? "",
     state: lead.state ?? "",
     country: lead.country ?? "India",
+    houseNumber: lead.houseNumber ?? "",
+    street: lead.street ?? "",
+    locality: lead.locality ?? "",
+    landmark: lead.landmark ?? "",
+    address: lead.address ?? "",
+    pincode: lead.pincode ?? "",
     doctorName: lead.doctorName ?? "",
     appointmentDate: lead.appointmentDate ?? "",
     appointmentTime: lead.appointmentTime ?? "",
@@ -47,6 +53,7 @@ function leadToForm(lead: CrmLead): CrmLeadFormValues {
     priority: lead.priority,
     notes: lead.notes ?? "",
     lostReason: lead.lostReason ?? "",
+    formData: lead.formData ?? {},
   };
 }
 
@@ -57,19 +64,27 @@ function leadToSchemaValues(form: CrmLeadFormValues): Record<string, string | nu
     alternatePhone: form.alternatePhone,
     email: form.email,
     age: form.age ? Number(form.age) : "",
+    dob: form.dob,
     gender: form.gender,
     city: form.city,
     district: form.district,
     state: form.state,
     country: form.country || "India",
+    houseNumber: form.houseNumber,
+    street: form.street,
+    locality: form.locality,
+    landmark: form.landmark,
+    address: form.address,
+    pincode: form.pincode,
     doctorName: form.doctorName,
     specialty: form.specialty,
     valueEstimate: form.valueEstimate ? Number(form.valueEstimate) : 50000,
     appointmentDate: form.appointmentDate,
     appointmentTime: form.appointmentTime,
-    appointmentCentre: form.appointmentCentre || CRM_APPOINTMENT_CENTRES[0] || "",
+    appointmentCentre: form.appointmentCentre || "Navayu Gurgaon",
     source: form.source,
     notes: form.notes,
+    ...form.formData,
   };
 }
 
@@ -84,11 +99,18 @@ function mergeSchemaIntoForm(
     alternatePhone: String(values.alternatePhone ?? base.alternatePhone),
     email: String(values.email ?? base.email),
     age: values.age !== "" && values.age != null ? String(values.age) : base.age,
+    dob: String(values.dob ?? base.dob),
     gender: (String(values.gender ?? base.gender) || "") as CrmLeadFormValues["gender"],
     city: String(values.city ?? base.city),
     district: String(values.district ?? base.district),
     state: String(values.state ?? base.state),
     country: String(values.country ?? base.country),
+    houseNumber: String(values.houseNumber ?? base.houseNumber),
+    street: String(values.street ?? base.street),
+    locality: String(values.locality ?? base.locality),
+    landmark: String(values.landmark ?? base.landmark),
+    address: String(values.address ?? base.address),
+    pincode: String(values.pincode ?? base.pincode),
     doctorName: String(values.doctorName ?? base.doctorName),
     specialty: String(values.specialty ?? base.specialty),
     valueEstimate: values.valueEstimate != null ? String(values.valueEstimate) : base.valueEstimate,
@@ -97,6 +119,7 @@ function mergeSchemaIntoForm(
     appointmentCentre: String(values.appointmentCentre ?? base.appointmentCentre),
     source: (String(values.source ?? base.source) as CrmLeadSource) || base.source,
     notes: String(values.notes ?? base.notes),
+    formData: { ...values },
   };
 }
 
@@ -107,11 +130,18 @@ function formToLeadPayload(form: CrmLeadFormValues) {
     alternatePhone: form.alternatePhone.trim() || undefined,
     email: form.email.trim() || undefined,
     age: form.age ? Number(form.age) : undefined,
+    dob: form.dob || undefined,
     gender: form.gender || undefined,
     city: form.city.trim() || undefined,
     district: form.district.trim() || undefined,
     state: form.state.trim() || undefined,
     country: form.country.trim() || undefined,
+    houseNumber: form.houseNumber.trim() || undefined,
+    street: form.street.trim() || undefined,
+    locality: form.locality.trim() || undefined,
+    landmark: form.landmark.trim() || undefined,
+    address: form.address.trim() || undefined,
+    pincode: form.pincode.trim() || undefined,
     doctorName: form.doctorName.trim() || undefined,
     appointmentDate: form.appointmentDate || undefined,
     appointmentTime: form.appointmentTime || undefined,
@@ -125,6 +155,7 @@ function formToLeadPayload(form: CrmLeadFormValues) {
     notes: form.notes.trim(),
     tags: [] as string[],
     lostReason: form.lostReason.trim() || undefined,
+    formData: { ...form.formData },
   };
 }
 
@@ -181,7 +212,7 @@ export function CrmLeadFormModal({ open, onClose, initial, onSaved }: CrmLeadFor
         ...EMPTY_LEAD_FORM,
         stageId: firstStage,
         assigneeId: manager ? "" : operatorId,
-        appointmentCentre: CRM_APPOINTMENT_CENTRES[0] ?? "",
+        appointmentCentre: "Navayu Gurgaon",
       };
       setForm(next);
       setCaptureValues(leadToSchemaValues(next));

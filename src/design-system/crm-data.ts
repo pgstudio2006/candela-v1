@@ -104,12 +104,20 @@ export type CrmLead = {
   alternatePhone?: string;
   email?: string;
   age?: number;
+  dob?: string;
   gender?: CrmLeadGender;
   city?: string;
   district?: string;
   state?: string;
   country?: string;
+  houseNumber?: string;
+  street?: string;
+  locality?: string;
+  landmark?: string;
+  address?: string;
+  pincode?: string;
   doctorName?: string;
+  formData?: Record<string, string | number | boolean>;
   appointmentDate?: string;
   appointmentTime?: string;
   appointmentCentre?: string;
@@ -134,7 +142,6 @@ export type CrmLead = {
   lostReason?: string;
   leadStatus?: CrmLeadStatus;
   callOutcome?: CrmCallOutcome;
-  formData?: Record<string, string | number | boolean>;
 };
 
 /** Fields required when a team member manually captures a lead */
@@ -144,11 +151,18 @@ export type CrmLeadFormValues = {
   alternatePhone: string;
   email: string;
   age: string;
+  dob: string;
   gender: CrmLeadGender | "";
   city: string;
   district: string;
   state: string;
   country: string;
+  houseNumber: string;
+  street: string;
+  locality: string;
+  landmark: string;
+  address: string;
+  pincode: string;
   doctorName: string;
   appointmentDate: string;
   appointmentTime: string;
@@ -161,6 +175,7 @@ export type CrmLeadFormValues = {
   priority: CrmLead["priority"];
   notes: string;
   lostReason: string;
+  formData: Record<string, string | number | boolean>;
 };
 
 export const CRM_APPOINTMENT_CENTRES = [
@@ -190,11 +205,18 @@ export const EMPTY_LEAD_FORM: CrmLeadFormValues = {
   alternatePhone: "",
   email: "",
   age: "",
+  dob: "",
   gender: "",
   city: "",
   district: "",
   state: "",
   country: "India",
+  houseNumber: "",
+  street: "",
+  locality: "",
+  landmark: "",
+  address: "",
+  pincode: "",
   doctorName: "",
   appointmentDate: "",
   appointmentTime: "",
@@ -207,6 +229,7 @@ export const EMPTY_LEAD_FORM: CrmLeadFormValues = {
   priority: "medium",
   notes: "",
   lostReason: "",
+  formData: {},
 };
 
 export type CrmFollowUp = {

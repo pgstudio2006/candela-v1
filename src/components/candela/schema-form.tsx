@@ -418,7 +418,7 @@ export function SchemaForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const initialKey = useMemo(() => JSON.stringify(initialValues ?? {}), [initialValues]);
   const fingerprint = useMemo(() => schemaFingerprint(schema), [schema]);
-  const resetKey = formKey ?? `${schema.id}:${initialKey}:${fingerprint}`;
+  const resetKey = `${formKey ?? schema.id}:${initialKey}:${fingerprint}`;
   const lastResetKey = useRef(resetKey);
 
   useEffect(() => {

@@ -19,16 +19,12 @@ export async function GET() {
       select: { id: true, name: true, departmentIds: true },
     }).catch(() => []);
 
-    // Get upcoming appointments for this branch
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    // Get all appointments for this branch
     const appointments = await prisma.appointment.findMany({
       where: {
         branchId: ctx.branchId,
-        date: { gte: today.toISOString().split("T")[0] },
       },
-      orderBy: { date: "asc" },
+      orderBy: [{ date: "asc" }, { time: "asc" }],
       take: 200,
       include: {
         patient: {

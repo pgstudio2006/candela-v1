@@ -2,7 +2,8 @@
 
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
-import { Calendar, Search, Stethoscope } from "lucide-react";
+import { Calendar, ExternalLink, Search, Stethoscope } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type AppointmentData = {
@@ -82,6 +83,16 @@ export default function CrmAppointmentsPage() {
       breadcrumbs={[{ label: "CRM", href: "/app/crm" }, { label: "Appointments" }]}
       title="Appointments"
       meta="View all branch appointments · book for converted patients"
+      actions={
+        <Link
+          href="/app/frontdesk/appointments"
+          target="_blank"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--attio-text)] px-3 text-[12px] font-medium text-white hover:opacity-90"
+        >
+          <ExternalLink className="size-3.5" />
+          Book appointment
+        </Link>
+      }
     >
       <Panel title="Filters">
         <div className="flex flex-wrap gap-3">
@@ -121,7 +132,7 @@ export default function CrmAppointmentsPage() {
         ) : groupedByDate.length === 0 ? (
           <Panel title="No appointments">
             <p className="py-4 text-[13px] text-[var(--attio-text-tertiary)]">
-              No upcoming appointments. Convert leads to patients and book appointments from the lead profile.
+              No appointments found. Book a new appointment from the Front Desk workspace using the button above.
             </p>
           </Panel>
         ) : (
