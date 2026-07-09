@@ -90,13 +90,13 @@ export async function deliverSms(
   return { ok: true, provider: "twilio" };
 }
 
-/** WhatsApp via TeleCRM WACA (WhatsApp Cloud API) */
+/** WhatsApp via Meta Cloud API (WACA) */
 export async function deliverWhatsApp(
   recipient: string,
   body: string,
 ): Promise<DeliveryResult> {
   const token = process.env.WHATSAPP_API_TOKEN;
-  const baseUrl = process.env.WHATSAPP_API_BASE_URL ?? "https://next-api.telecrm.in/waca";
+  const baseUrl = process.env.WHATSAPP_API_BASE_URL ?? "https://graph.facebook.com/v20.0";
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (!token) {
@@ -104,14 +104,14 @@ export async function deliverWhatsApp(
       console.info("[notifications:demo:whatsapp]", recipient, body.slice(0, 120));
       return { ok: true, provider: "demo", detail: "WHATSAPP_API_TOKEN not set — logged only" };
     }
-    return { ok: false, provider: "telecrm-waca", detail: "WHATSAPP_API_TOKEN not configured" };
+    return { ok: false, provider: "whatsapp-cloud-api", detail: "WHATSAPP_API_TOKEN not configured" };
   }
 
   if (!phoneNumberId) {
     return {
       ok: false,
-      provider: "telecrm-waca",
-      detail: "WHATSAPP_PHONE_NUMBER_ID is required. Copy the Phone Number ID from your TeleCRM WACA account and add it to environment variables.",
+      provider: "whatsapp-cloud-api",
+      detail: "WHATSAPP_PHONE_NUMBER_ID is required. Copy the Phone Number ID from your Meta WhatsApp Cloud API account and add it to environment variables.",
     };
   }
 
@@ -119,7 +119,7 @@ export async function deliverWhatsApp(
   const phone = recipient.replace(/\D/g, "");
   const to = phone.length === 10 ? `91${phone}` : phone;
 
-  // TeleCRM WACA endpoint: {baseUrl}/{phoneNumberId}/messages
+  // Meta WACA endpoint: {baseUrl}/{phoneNumberId}/messages
   const url = `${baseUrl}/${phoneNumberId}/messages`;
 
   const res = await fetch(url, {
@@ -141,14 +141,14 @@ export async function deliverWhatsApp(
 
   if (!res.ok) {
     const err = await res.text();
-    console.error("[whatsapp:telecrm-waca] Send failed:", res.status, err);
-    return { ok: false, provider: "telecrm-waca", detail: err.slice(0, 300) };
+    console.error("[whatsapp:meta-waca] Send failed:", res.status, err);
+    return { ok: false, provider: "whatsapp-cloud-api", detail: err.slice(0, 300) };
   }
 
   const data = await res.json().catch(() => ({}));
   const messageId = data?.messages?.[0]?.id ?? data?.id ?? "unknown";
 
-  return { ok: true, provider: "telecrm-waca", detail: `Message ID: ${messageId}` };
+  return { ok: true, provider: "whatsapp-cloud-api", detail: `Message ID: ${messageId}` };
 }
 
 export async function deliverNotification(n: QueuedNotification): Promise<DeliveryResult> {
