@@ -24,6 +24,8 @@ import {
 import { requireAuth, requireModule } from "@/server/auth";
 import { runAction, type ActionResult } from "@/server/action-result";
 import type { ClinicalSnapshot } from "@/server/clinical";
+import { SCHEMA_DEPARTMENT } from "@/lib/schema-registry";
+import type { CandelaRole } from "@/design-system/modules";
 
 export async function getClinicalSnapshotAction(): Promise<ActionResult<ClinicalSnapshot>> {
   return runAction(async () => {
@@ -139,7 +141,8 @@ export async function saveSubmissionAction(
   data: Record<string, string | number | boolean>,
   link?: { patientId?: string; visitId?: string },
 ) {
-  const ctx = await requireModule("frontdesk");
+  const module = (SCHEMA_DEPARTMENT[formId] ?? "frontdesk") as CandelaRole;
+  const ctx = await requireModule(module);
   return saveSubmission(ctx, formId, data, link);
 }
 

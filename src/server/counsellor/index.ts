@@ -577,7 +577,7 @@ export async function completeCounselSession(
     }
 
     if (sendBilling && validated.quote) {
-      const payload = queueItem.payload as ConsultationRecord;
+      const payload = (queueItem.payload ?? {}) as Partial<ConsultationRecord>;
       const handoffPayload: BillingHandoffPayload = {
         visitId,
         patientId: patient.id,

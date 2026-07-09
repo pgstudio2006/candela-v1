@@ -77,6 +77,7 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
   const [paymentExpectation, setPaymentExpectation] = useState<"pay_now" | "desk" | "corporate">("desk");
   const [printOpen, setPrintOpen] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [savingIntake, setSavingIntake] = useState(false);
   const [gstRatePercent, setGstRatePercent] = useState(18);
   const intakeSchema = usePublishedFormSchema("counsellor-intake");
 
@@ -388,18 +389,25 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
             <PublishedSchemaForm
               schema={intakeSchema}
               initialValues={{ internalNotes }}
-              submitLabel="Save intake"
+              submitLabel={savingIntake ? "Saving…" : "Save intake"}
               onSubmit={async (data) => {
-                const notes = [data.chiefConcern, data.internalNotes, data.objectionNotes]
-                  .filter(Boolean)
-                  .map(String)
-                  .join("\n");
-                if (notes) setInternalNotes(notes);
-                await saveSubmissionAction("counsellor-intake", data, {
-                  visitId,
-                  patientId: patient.id,
-                });
-                toast("Intake saved", "success");
+                setSavingIntake(true);
+                try {
+                  const notes = [data.chiefConcern, data.internalNotes, data.objectionNotes]
+                    .filter(Boolean)
+                    .map(String)
+                    .join("\n");
+                  if (notes) setInternalNotes(notes);
+                  await saveSubmissionAction("counsellor-intake", data, {
+                    visitId,
+                    patientId: patient.id,
+                  });
+                  toast("Intake saved", "success");
+                } catch (err) {
+                  toast(err instanceof Error ? err.message : "Could not save intake", "error");
+                } finally {
+                  setSavingIntake(false);
+                }
               }}
             />
           </Panel>
@@ -425,8 +433,11 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
                 <button key={p} type="button" onClick={() => setPaymentExpectation(p)} className={cn("rounded-full border px-2.5 py-1 text-[11px] capitalize", paymentExpectation === p ? "border-[var(--attio-accent)] bg-[var(--attio-accent)]/10" : "border-[var(--attio-border)]")}>{p.replace("_", " ")}</button>
               ))}
             </div>
+            {!consent && (
+              <p className="mb-2 text-[11px] text-amber-600">Check “Package consent captured” to send to reception billing.</p>
+            )}
             <div className="grid gap-2">
-              <AttioButton variant="primary" className="gap-1.5" disabled={!consent || needsReason} onClick={() => void finish("converted", true)}>
+              <AttioButton variant="primary" className="gap-1.5" onClick={() => void finish("converted", true)}>
                 <Send className="size-3.5" />
                 Convert & send to reception
               </AttioButton>

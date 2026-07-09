@@ -140,7 +140,7 @@ const ALL_DEFAULT_SCHEMAS: Record<string, FormSchema> = {
   ...HR_DEFAULT_SCHEMAS,
 };
 
-const SCHEMA_DEPARTMENT: Record<string, FormDepartment> = {
+export const SCHEMA_DEPARTMENT: Record<string, FormDepartment> = {
   registration: "frontdesk",
   checkin: "frontdesk",
   billing: "frontdesk",
