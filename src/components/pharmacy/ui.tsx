@@ -31,9 +31,9 @@ export function PharmacyDialog({ open, title, subtitle, children, onClose, width
   );
 }
 
-export function FormRow({ label, children, required }: { label: string; children: ReactNode; required?: boolean }) {
+export function FormRow({ label, children, required, className }: { label: string; children: ReactNode; required?: boolean; className?: string }) {
   return (
-    <label className="block space-y-1">
+    <label className={cn("block space-y-1", className)}>
       <span className="text-[12px] font-medium text-[var(--attio-text-secondary)]">
         {label}
         {required && <span className="text-red-500">*</span>}

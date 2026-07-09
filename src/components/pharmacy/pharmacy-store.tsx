@@ -43,11 +43,17 @@ type Store = PharmacySnapshot & {
     id: string,
     quantities: Record<string, number>,
     witnessName?: string,
+    batchIds?: Record<string, string>,
+    newLines?: Prescription["lines"],
   ) => Promise<{ ok: boolean; error?: string; billId?: string }>;
   createManualPrescription: (input: {
     patientName: string;
     uhid: string;
+    mobile?: string;
+    age?: number;
     priority?: "routine" | "urgent" | "stat";
+    patientType?: "registered" | "other_doctor" | "without_prescription";
+    referral?: { doctorName?: string; hospital?: string; clinicDetails?: string; address?: string };
     lines: Array<{ drug: string; dose: string; frequency: string; duration: string; instructions?: string }>;
   }) => Promise<{ ok: boolean; error?: string }>;
   addDrug: (drug: Omit<Drug, "id">) => Promise<void>;
@@ -56,13 +62,24 @@ type Store = PharmacySnapshot & {
   updateSupplier: (id: string, patch: Partial<Supplier>) => Promise<void>;
   createPO: (supplierId: string, lines: PoLine[], notes?: string) => Promise<void>;
   updatePOStatus: (id: string, status: PurchaseOrder["status"]) => Promise<void>;
-  receivePO: (poId: string, received: Record<string, { qty: number; batchNo: string; expiry: string }>) => Promise<void>;
+  receivePO: (poId: string, received: Record<string, { qty: number; batchNo: string; expiry: string; shelf?: string; box?: string }>) => Promise<void>;
   adjustStock: (batchId: string, delta: number, reason: string) => Promise<void>;
   quarantineBatch: (batchId: string, quarantined: boolean) => Promise<void>;
   markBillPaid: (id: string, mode: PharmacyBill["paymentMode"]) => Promise<void>;
+  applyBillDiscount: (billId: string, discount: number, discountReason: string) => Promise<{ ok: boolean; error?: string }>;
   approveReturn: (id: string) => Promise<void>;
   restockReturn: (id: string) => Promise<void>;
+  createReturn: (input: {
+    type: "patient" | "ipd" | "walk_in";
+    billId: string;
+    lineIndex: number;
+    qty: number;
+    reason: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  payPOBill: (poId: string, amount: number, mode: "cash" | "upi" | "transfer" | "credit", billUrl?: string) => Promise<{ ok: boolean; error?: string }>;
   fulfillIndent: (id: string, qty: number) => Promise<void>;
+  addSupplierCatalogueItem: (item: Omit<import("@/design-system/pharmacy-data").SupplierCatalogueItem, "id">) => Promise<void>;
+  updateSupplierCatalogueItem: (id: string, patch: Partial<import("@/design-system/pharmacy-data").SupplierCatalogueItem>) => Promise<void>;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -173,6 +190,7 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
       drugs: [],
       stock: [],
       suppliers: [],
+      supplierCatalogue: [],
       purchaseOrders: [],
       prescriptions: [],
       bills: [],
@@ -222,9 +240,17 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
         await pharmacyMutate({ op: "rejectPrescription", operatorId: opId(), rxId: id, reason });
         await refresh({ silent: true });
       },
-      dispensePrescription: async (id, quantities, witnessName) => {
+      dispensePrescription: async (id, quantities, witnessName, batchIds, newLines) => {
         try {
-          const res = await pharmacyMutate({ op: "dispensePrescription", operatorId: opId(), rxId: id, quantities, witnessName });
+          const res = await pharmacyMutate({
+            op: "dispensePrescription",
+            operatorId: opId(),
+            rxId: id,
+            quantities,
+            witnessName,
+            batchIds,
+            newLines,
+          });
           if (!res.ok) return { ok: false, error: res.error };
           await refresh({ silent: true });
           return { ok: true, billId: res.data?.billId };
@@ -284,6 +310,17 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
         await pharmacyMutate({ op: "markBillPaid", operatorId: opId(), billId: id, mode });
         await refresh({ silent: true });
       },
+      applyBillDiscount: async (billId, discount, discountReason) => {
+        try {
+          const res = await pharmacyMutate({ op: "applyBillDiscount", operatorId: opId(), billId, discount, discountReason });
+          if (!res.ok) return { ok: false, error: res.error };
+          await refresh({ silent: true });
+          return { ok: true };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Something went wrong.";
+          return { ok: false, error: msg };
+        }
+      },
       approveReturn: async (id) => {
         await pharmacyMutate({ op: "approveReturn", operatorId: opId(), id });
         await refresh({ silent: true });
@@ -292,8 +329,46 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
         await pharmacyMutate({ op: "restockReturn", operatorId: opId(), id });
         await refresh({ silent: true });
       },
+      createReturn: async (input) => {
+        try {
+          const res = await pharmacyMutate({
+            op: "createReturn",
+            operatorId: opId(),
+            returnType: input.type,
+            billId: input.billId,
+            lineIndex: input.lineIndex,
+            qty: input.qty,
+            reason: input.reason,
+          });
+          if (!res.ok) return { ok: false, error: res.error };
+          await refresh({ silent: true });
+          return { ok: true };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Something went wrong.";
+          return { ok: false, error: msg };
+        }
+      },
+      payPOBill: async (poId, amount, mode, billUrl) => {
+        try {
+          const res = await pharmacyMutate({ op: "payPOBill", operatorId: opId(), poId, amount, paymentMode: mode, billUrl });
+          if (!res.ok) return { ok: false, error: res.error };
+          await refresh({ silent: true });
+          return { ok: true };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Something went wrong.";
+          return { ok: false, error: msg };
+        }
+      },
       fulfillIndent: async (id, qty) => {
         await pharmacyMutate({ op: "fulfillIndent", operatorId: opId(), id, qty });
+        await refresh({ silent: true });
+      },
+      addSupplierCatalogueItem: async (item) => {
+        await pharmacyMutate({ op: "addSupplierCatalogueItem", operatorId: opId(), catalogueItem: item });
+        await refresh({ silent: true });
+      },
+      updateSupplierCatalogueItem: async (id, patch) => {
+        await pharmacyMutate({ op: "updateSupplierCatalogueItem", operatorId: opId(), id, patch });
         await refresh({ silent: true });
       },
     };

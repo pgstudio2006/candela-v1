@@ -7,13 +7,17 @@ import { ServerActionError } from "@/server/errors";
 import {
   addDrug,
   addSupplier,
+  addSupplierCatalogueItem,
   adjustStock,
+  applyBillDiscount,
   approveReturn,
   createManualPrescription,
   createPO,
+  createReturn,
   dispensePrescription,
   fulfillIndent,
   markBillPaid,
+  payPOBill,
   quarantineBatch,
   receivePO,
   rejectPrescription,
@@ -21,9 +25,10 @@ import {
   updateDrug,
   updatePOStatus,
   updateSupplier,
+  updateSupplierCatalogueItem,
   verifyPrescription,
 } from "@/server/pharmacy/index";
-import type { Drug, PaymentMode, PoLine, PurchaseOrder, Supplier } from "@/design-system/pharmacy-data";
+import type { Drug, PaymentMode, PoLine, PurchaseOrder, Supplier, SupplierCatalogueItem } from "@/design-system/pharmacy-data";
 
 type ActionBody = {
   op: string;
@@ -33,6 +38,8 @@ type ActionBody = {
   reason?: string;
   quantities?: Record<string, number>;
   witnessName?: string;
+  batchIds?: Record<string, string>;
+  newLines?: Array<import("@/design-system/pharmacy-data").PrescriptionLine>;
   billId?: string;
   mode?: PaymentMode;
   batchId?: string;
@@ -47,12 +54,24 @@ type ActionBody = {
   notes?: string;
   status?: PurchaseOrder["status"];
   poId?: string;
-  received?: Record<string, { qty: number; batchNo: string; expiry: string }>;
+  received?: Record<string, { qty: number; batchNo: string; expiry: string; shelf?: string; box?: string }>;
   qty?: number;
   patientName?: string;
   uhid?: string;
+  mobile?: string;
+  age?: number;
   priority?: "routine" | "urgent" | "stat";
+  patientType?: "registered" | "other_doctor" | "without_prescription";
+  referral?: { doctorName?: string; hospital?: string; clinicDetails?: string; address?: string };
   rxLines?: Array<{ drug: string; dose: string; frequency: string; duration: string; instructions?: string }>;
+  discount?: number;
+  discountReason?: string;
+  returnType?: "patient" | "ipd" | "walk_in";
+  lineIndex?: number;
+  amount?: number;
+  paymentMode?: "cash" | "upi" | "transfer" | "credit";
+  billUrl?: string;
+  catalogueItem?: Omit<SupplierCatalogueItem, "id">;
 };
 
 export async function POST(request: Request) {
@@ -81,7 +100,7 @@ export async function POST(request: Request) {
         result = await rejectPrescription(ctx, operatorId, body.rxId!, body.reason!);
         break;
       case "dispensePrescription":
-        result = await dispensePrescription(ctx, operatorId, body.rxId!, body.quantities!, body.witnessName);
+        result = await dispensePrescription(ctx, operatorId, body.rxId!, body.quantities!, body.witnessName, body.batchIds, body.newLines);
         break;
       case "markBillPaid":
         result = await markBillPaid(ctx, operatorId, body.billId!, body.mode!);
@@ -126,9 +145,34 @@ export async function POST(request: Request) {
         result = await createManualPrescription(ctx, operatorId, {
           patientName: body.patientName!,
           uhid: body.uhid!,
+          mobile: body.mobile,
+          age: body.age,
           priority: body.priority,
+          patientType: body.patientType,
+          referral: body.referral,
           lines: body.rxLines!,
         });
+        break;
+      case "applyBillDiscount":
+        result = await applyBillDiscount(ctx, operatorId, body.billId!, body.discount!, body.discountReason!);
+        break;
+      case "createReturn":
+        result = await createReturn(ctx, operatorId, {
+          type: body.returnType!,
+          billId: body.billId!,
+          lineIndex: body.lineIndex!,
+          qty: body.qty!,
+          reason: body.reason!,
+        });
+        break;
+      case "payPOBill":
+        result = await payPOBill(ctx, operatorId, body.poId!, body.amount!, body.paymentMode!, body.billUrl);
+        break;
+      case "addSupplierCatalogueItem":
+        result = await addSupplierCatalogueItem(ctx, operatorId, body.catalogueItem!);
+        break;
+      case "updateSupplierCatalogueItem":
+        result = await updateSupplierCatalogueItem(ctx, operatorId, body.id!, body.patch as Partial<import("@/design-system/pharmacy-data").SupplierCatalogueItem>);
         break;
       default:
         return NextResponse.json({ ok: false, error: `Unknown operation: ${op}` }, { status: 400 });

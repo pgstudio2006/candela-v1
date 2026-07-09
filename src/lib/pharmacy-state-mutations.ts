@@ -11,6 +11,7 @@ import type {
   ScheduleHEntry,
   StockBatch,
   Supplier,
+  SupplierCatalogueItem,
   WardIndent,
 } from "@/design-system/pharmacy-data";
 import type { PharmacyStateShape } from "@/server/revenue/state-seeds";
@@ -100,6 +101,8 @@ export function mutateDispensePrescription(
   operator: PharmacyStaff,
   quantities: Record<string, number>,
   witnessName?: string,
+  batchIds?: Record<string, string>,
+  newLines?: Prescription["lines"],
 ): { state: PharmacyStateShape; result: DispenseResult } {
   const rx = state.prescriptions.find((r) => r.id === rxId);
   if (!rx) throw new ServerActionError("NOT_FOUND", "Prescription not found.");
@@ -110,11 +113,18 @@ export function mutateDispensePrescription(
     throw new ServerActionError("FORBIDDEN", "Prescription is assigned to another pharmacist.");
   }
 
+  const addedLines: Prescription["lines"] = (newLines ?? []).map((l, i) => ({
+    ...l,
+    id: l.id || `rxl_${rxId}_${Date.now()}_${i}`,
+    qtyDispensed: 0,
+  }));
+  const allLines = [...rx.lines, ...addedLines];
+
   let stock = [...state.stock];
   const lines: PharmacyBillLine[] = [];
   let scheduleEntries = [...state.scheduleH];
 
-  const updatedLines = rx.lines.map((line) => {
+  const updatedLines = allLines.map((line) => {
     const qty = quantities[line.id] ?? line.qtyPrescribed - line.qtyDispensed;
     if (qty <= 0) return line;
     const remaining = line.qtyPrescribed - line.qtyDispensed;
@@ -124,7 +134,10 @@ export function mutateDispensePrescription(
 
     const drugId = line.substituteDrugId ?? line.drugId;
     const drug = state.drugs.find((d) => d.id === drugId);
-    const batch = pickFefoBatch(drugId, stock, qty);
+
+    const selectedBatchId = batchIds?.[line.id];
+    const pickedBatch = selectedBatchId ? stock.find((s) => s.id === selectedBatchId && s.drugId === drugId) : undefined;
+    const batch = pickedBatch ?? pickFefoBatch(drugId, stock, qty);
     if (!batch) throw new ServerActionError("VALIDATION", `Insufficient stock for ${drug?.brandName ?? drugId}.`);
     if (daysToExpiry(batch.expiry) < 0) {
       throw new ServerActionError("VALIDATION", `Batch ${batch.batchNo} is expired.`);
@@ -137,7 +150,7 @@ export function mutateDispensePrescription(
     stock = stock.map((s) =>
       s.id === batch.id ? { ...s, qtyOnHand: s.qtyOnHand - qty, reserved: Math.max(0, s.reserved - qty) } : s,
     );
-    lines.push({ drugId, batchId: batch.id, qty, rate: batch.mrp, gstPercent: drug?.gstPercent ?? 12 });
+    lines.push({ drugId, batchId: batch.id, qty, rate: batch.mrp, purchaseRate: batch.purchaseRate, gstPercent: drug?.gstPercent ?? 12 });
 
     if (drug && isControlledSchedule(drug.schedule)) {
       const bal = (scheduleEntries.filter((e) => e.drugId === drugId).at(-1)?.balanceAfter ?? 0) + qty;
@@ -157,7 +170,7 @@ export function mutateDispensePrescription(
       });
     }
 
-    return { ...line, qtyDispensed: line.qtyDispensed + qty };
+    return { ...line, qtyDispensed: line.qtyDispensed + qty, batchId: batch.id, dispenseRate: batch.mrp };
   });
 
   if (!lines.length) {
@@ -364,6 +377,7 @@ export function mutateCreatePO(
         supplierId,
         status: "draft",
         createdAt: new Date().toISOString(),
+        billPaid: false,
         lines,
         notes,
       },
@@ -386,7 +400,7 @@ export function mutateReceivePO(
   state: PharmacyStateShape,
   operator: PharmacyStaff,
   poId: string,
-  received: Record<string, { qty: number; batchNo: string; expiry: string }>,
+  received: Record<string, { qty: number; batchNo: string; expiry: string; shelf?: string; box?: string }>,
 ): PharmacyStateShape {
   const po = state.purchaseOrders.find((p) => p.id === poId);
   if (!po) throw new ServerActionError("NOT_FOUND", "PO not found.");
@@ -404,7 +418,9 @@ export function mutateReceivePO(
       reserved: 0,
       purchaseRate: l.rate,
       mrp: drug?.defaultMrp ?? l.rate * 1.3,
-      rack: "RECV",
+      rack: r.shelf || "RECV",
+      shelf: r.shelf,
+      box: r.box,
       supplierId: po.supplierId,
       quarantined: false,
     });
@@ -418,6 +434,78 @@ export function mutateReceivePO(
     stock: newStock,
     purchaseOrders: state.purchaseOrders.map((p) => (p.id === poId ? { ...p, lines: newLines, status } : p)),
     activities: appendPharmacyActivity(state.activities, operator.name, "grn", `GRN for ${poId}`, poId),
+  };
+}
+
+export function mutateApplyBillDiscount(
+  state: PharmacyStateShape,
+  operator: PharmacyStaff,
+  billId: string,
+  discount: number,
+  discountReason: string,
+): PharmacyStateShape {
+  const bill = state.bills.find((b) => b.id === billId);
+  if (!bill) throw new ServerActionError("NOT_FOUND", "Bill not found.");
+  if (bill.paid) throw new ServerActionError("VALIDATION", "Cannot discount an already paid bill.");
+  if (discount < 0 || discount > bill.total) throw new ServerActionError("VALIDATION", "Invalid discount amount.");
+  const total = Math.max(0, bill.subtotal + bill.gstTotal - discount);
+  return {
+    ...state,
+    bills: state.bills.map((b) =>
+      b.id === billId
+        ? { ...b, discount, discountReason, total }
+        : b,
+    ),
+    activities: appendPharmacyActivity(
+      state.activities,
+      operator.name,
+      "discount",
+      `Discount ₹${discount.toFixed(0)} applied to bill ${billId}: ${discountReason}`,
+      billId,
+    ),
+  };
+}
+
+export function mutateCreateReturn(
+  state: PharmacyStateShape,
+  operator: PharmacyStaff,
+  input: {
+    type: "patient" | "ipd" | "walk_in";
+    billId: string;
+    lineIndex: number;
+    qty: number;
+    reason: string;
+  },
+): PharmacyStateShape {
+  const bill = state.bills.find((b) => b.id === input.billId);
+  if (!bill) throw new ServerActionError("NOT_FOUND", "Bill not found.");
+  const line = bill.lines[input.lineIndex];
+  if (!line) throw new ServerActionError("NOT_FOUND", "Bill line not found.");
+  if (input.qty <= 0 || input.qty > line.qty) {
+    throw new ServerActionError("VALIDATION", "Invalid return quantity.");
+  }
+  const ret: ReturnRecord = {
+    id: `ret_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    type: input.type,
+    drugId: line.drugId,
+    batchId: line.batchId,
+    qty: input.qty,
+    reason: input.reason,
+    patientName: bill.patientName,
+    billId: bill.id,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  };
+  return {
+    ...state,
+    returns: [ret, ...state.returns],
+    activities: appendPharmacyActivity(
+      state.activities,
+      operator.name,
+      "return_create",
+      `Return created for ${bill.patientName} — ${line.drugId} × ${input.qty}`,
+      ret.id,
+    ),
   };
 }
 
@@ -439,6 +527,70 @@ export function mutateRestockReturn(state: PharmacyStateShape, operator: Pharmac
     stock: state.stock.map((s) => (s.id === ret.batchId ? { ...s, qtyOnHand: s.qtyOnHand + ret.qty } : s)),
     activities: appendPharmacyActivity(state.activities, operator.name, "return", `Restocked return ${id}`, id),
   };
+}
+
+export function mutatePayPOBill(
+  state: PharmacyStateShape,
+  operator: PharmacyStaff,
+  poId: string,
+  amount: number,
+  mode: "cash" | "upi" | "transfer" | "credit",
+  billUrl?: string,
+): PharmacyStateShape {
+  const po = state.purchaseOrders.find((p) => p.id === poId);
+  if (!po) throw new ServerActionError("NOT_FOUND", "PO not found.");
+  if (po.billPaid && amount <= 0) throw new ServerActionError("VALIDATION", "Bill is already paid.");
+  return {
+    ...state,
+    purchaseOrders: state.purchaseOrders.map((p) =>
+      p.id === poId
+        ? {
+            ...p,
+            billPaid: true,
+            lastPayDate: new Date().toISOString(),
+            uploadedBillUrl: billUrl ?? p.uploadedBillUrl,
+            status: p.status === "received" ? "bill_paid" : p.status,
+          }
+        : p,
+    ),
+    activities: appendPharmacyActivity(
+      state.activities,
+      operator.name,
+      "po_payment",
+      `Paid ₹${amount.toFixed(0)} (${mode}) to supplier for ${poId}`,
+      poId,
+    ),
+  };
+}
+
+export function mutateAddSupplierCatalogueItem(
+  state: PharmacyStateShape,
+  operator: PharmacyStaff,
+  item: Omit<SupplierCatalogueItem, "id">,
+): PharmacyStateShape {
+  return {
+    ...state,
+    supplierCatalogue: [
+      ...state.supplierCatalogue,
+      { ...item, id: `sc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` },
+    ],
+    activities: appendPharmacyActivity(
+      state.activities,
+      operator.name,
+      "catalogue",
+      `Added catalogue item ${item.name} for supplier`,
+      item.supplierId,
+    ),
+  };
+}
+
+export function mutateUpdateSupplierCatalogueItem(
+  state: PharmacyStateShape,
+  id: string,
+  patch: Partial<SupplierCatalogueItem>,
+): PharmacyStateShape {
+  if (!state.supplierCatalogue.some((i) => i.id === id)) throw new ServerActionError("NOT_FOUND", "Catalogue item not found.");
+  return { ...state, supplierCatalogue: state.supplierCatalogue.map((i) => (i.id === id ? { ...i, ...patch } : i)) };
 }
 
 export function mutateFulfillIndent(

@@ -109,8 +109,8 @@ export default function PharmacyInventoryPage() {
             supplier: supplier?.name ?? "—",
             location: (
               <div>
-                <p className="text-[11px]">Shelf: {s.rack}</p>
-                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Box: {s.batchNo}</p>
+                <p className="text-[11px]">Shelf: {s.shelf || s.rack}</p>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Box: {s.box || s.batchNo}</p>
               </div>
             ),
             status: s.quarantined ? <StatusBadge label="Quarantine" variant="danger" /> : <StatusBadge label="Active" variant="success" />,

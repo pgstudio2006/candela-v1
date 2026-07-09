@@ -1,8 +1,10 @@
 "use client";
 
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
+import { RxWorkspaceModal } from "@/components/pharmacy/rx-workspace";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { DataTable, Panel, StatusBadge, AttioButton } from "@/components/frontdesk/ui";
+import type { Prescription } from "@/design-system/pharmacy-data";
 import { RX_STATUS_LABELS } from "@/design-system/pharmacy-data";
 import { useState } from "react";
 
@@ -11,6 +13,7 @@ type IpdTab = "rx" | "indents" | "cart";
 export default function PharmacyIpdPage() {
   const { prescriptions, indents, getDrug, fulfillIndent, stock } = usePharmacyStore();
   const [tab, setTab] = useState<IpdTab>("rx");
+  const [selectedRx, setSelectedRx] = useState<Prescription | null>(null);
 
   const ipdRx = prescriptions.filter((r) => r.source === "ipd");
   
@@ -32,8 +35,7 @@ export default function PharmacyIpdPage() {
       rx.lines.forEach((line) => {
         if (line.qtyDispensed > 0) {
           const drug = getDrug(line.drugId);
-          // Use drug's default MRP for cart calculation
-          const rate = drug?.defaultMrp ?? 0;
+          const rate = line.dispenseRate ?? drug?.defaultMrp ?? 0;
           const lineTotal = line.qtyDispensed * rate;
           acc[visitId].total += lineTotal;
           acc[visitId].items.push({
@@ -85,6 +87,11 @@ export default function PharmacyIpdPage() {
                 items: r.lines.length,
                 status: <StatusBadge label={RX_STATUS_LABELS[r.status]} variant="info" />,
                 time: new Date(r.createdAt).toLocaleString("en-IN"),
+                actions: (
+                  <AttioButton variant="primary" className="!h-7 !text-[11px]" onClick={() => setSelectedRx(r)}>
+                    Dispense
+                  </AttioButton>
+                ),
               }))}
             />
           )}
@@ -160,6 +167,7 @@ export default function PharmacyIpdPage() {
           )}
         </>
       )}
+      {selectedRx && <RxWorkspaceModal rx={selectedRx} onClose={() => setSelectedRx(null)} />}
     </PageChrome>
   );
 }

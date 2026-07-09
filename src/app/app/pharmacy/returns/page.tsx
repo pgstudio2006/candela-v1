@@ -8,12 +8,14 @@ import type { PharmacyBill } from "@/design-system/pharmacy-data";
 import { useState } from "react";
 
 export default function PharmacyReturnsPage() {
-  const { returns, bills, getDrug, approveReturn, restockReturn } = usePharmacyStore();
+  const { returns, bills, getDrug, approveReturn, restockReturn, createReturn } = usePharmacyStore();
   const [open, setOpen] = useState(false);
+  const [returnType, setReturnType] = useState<"patient" | "walk_in" | "ipd">("patient");
   const [selectedBill, setSelectedBill] = useState<PharmacyBill | null>(null);
   const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(null);
   const [returnQty, setReturnQty] = useState("");
   const [returnReason, setReturnReason] = useState("");
+  const [processing, setProcessing] = useState(false);
 
   const handleCreateReturn = async () => {
     if (!selectedBill || selectedLineIndex === null || !returnQty || !returnReason) return;
@@ -23,8 +25,19 @@ export default function PharmacyReturnsPage() {
       alert("Return quantity cannot exceed dispensed quantity");
       return;
     }
-    // Create return record - this would need a server mutation
-    // For now, just close the dialog
+    setProcessing(true);
+    const result = await createReturn({
+      type: returnType,
+      billId: selectedBill.id,
+      lineIndex: selectedLineIndex,
+      qty,
+      reason: returnReason,
+    });
+    setProcessing(false);
+    if (!result.ok) {
+      alert(result.error ?? "Failed to process return");
+      return;
+    }
     setOpen(false);
     setSelectedBill(null);
     setSelectedLineIndex(null);
@@ -81,19 +94,29 @@ export default function PharmacyReturnsPage() {
       )}
 
       {open && (
-        <PharmacyDialog 
-          open={open} 
-          title="New Medicine Return" 
-          onClose={() => { 
-            setOpen(false); 
-            setSelectedBill(null); 
-            setSelectedLineIndex(null); 
-            setReturnQty(""); 
-            setReturnReason(""); 
+        <PharmacyDialog
+          open={open}
+          title="New Medicine Return"
+          onClose={() => {
+            setOpen(false);
+            setSelectedBill(null);
+            setSelectedLineIndex(null);
+            setReturnQty("");
+            setReturnReason("");
           }}
           width="max-w-xl"
         >
           <div className="space-y-4 text-[13px]">
+            <Panel title="Return Type">
+              <FormRow label="Return type" required>
+                <PharmacySelect value={returnType} onChange={(e) => setReturnType(e.target.value as typeof returnType)}>
+                  <option value="patient">OPD / Registered Patient</option>
+                  <option value="walk_in">Walk-in / Without Prescription</option>
+                  <option value="ipd">IPD</option>
+                </PharmacySelect>
+              </FormRow>
+            </Panel>
+
             <Panel title="Select Bill">
               <div className="space-y-2">
                 {bills.filter(b => b.paid).map((bill) => (
@@ -170,8 +193,8 @@ export default function PharmacyReturnsPage() {
                   }}>
                     Cancel
                   </AttioButton>
-                  <AttioButton variant="primary" onClick={handleCreateReturn}>
-                    Process Return
+                  <AttioButton variant="primary" disabled={processing} onClick={handleCreateReturn}>
+                    {processing ? "Processing..." : "Process Return"}
                   </AttioButton>
                 </div>
               </>

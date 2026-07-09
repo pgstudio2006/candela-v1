@@ -5,7 +5,7 @@ import { PublishedSchemaForm } from "@/components/candela/published-schema-form"
 import { saveSubmissionAction } from "@/app/actions/clinical-actions";
 import { AttioButton, StatusBadge } from "@/components/frontdesk/ui";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
-import type { Prescription } from "@/design-system/pharmacy-data";
+import type { Prescription, PrescriptionLine } from "@/design-system/pharmacy-data";
 import { RX_STATUS_LABELS } from "@/design-system/pharmacy-data";
 import { daysToExpiry, isControlledSchedule, pickFefoBatch } from "@/lib/pharmacy-platform";
 import { Input } from "@/components/ui/input";
@@ -18,15 +18,22 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
   const [rejectReason, setRejectReason] = useState("");
   const [witness, setWitness] = useState("");
   const [qtys, setQtys] = useState<Record<string, number>>({});
+  const [batchIds, setBatchIds] = useState<Record<string, string>>({});
+  const [addedLines, setAddedLines] = useState<Array<PrescriptionLine & { _local?: boolean }>>([]);
   const [msg, setMsg] = useState("");
+  const [newDrugId, setNewDrugId] = useState("");
   const dispenseSchema = usePublishedFormSchema("pharmacy-dispense");
 
   useEffect(() => {
     const init: Record<string, number> = {};
+    const initBatch: Record<string, string> = {};
     rx.lines.forEach((l) => {
       init[l.id] = l.qtyPrescribed - l.qtyDispensed;
+      initBatch[l.id] = "";
     });
     setQtys(init);
+    setBatchIds(initBatch);
+    setAddedLines([]);
   }, [rx]);
 
   const needsWitness = rx.lines.some((l) => {
@@ -133,25 +140,30 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
 
           {tab === "dispense" && (
             <div className="space-y-4">
-              {rx.lines.map((l) => {
+              {[...rx.lines, ...addedLines].map((l) => {
                 const drugId = l.substituteDrugId ?? l.drugId;
                 const drug = drugs.find((d) => d.id === drugId);
-                const batch = pickFefoBatch(drugId, stock, qtys[l.id] ?? 0);
-                const remaining = l.qtyPrescribed - l.qtyDispensed;
+                const remaining = "_local" in l && l._local ? qtys[l.id] ?? 0 : l.qtyPrescribed - l.qtyDispensed;
+                const qty = qtys[l.id] ?? 0;
+                const selectedBatchId = batchIds[l.id];
+                const selectedBatch = selectedBatchId ? stock.find((s) => s.id === selectedBatchId && s.drugId === drugId) : undefined;
+                const fefoBatch = qty > 0 ? pickFefoBatch(drugId, stock, qty) : null;
+                const batch = selectedBatch ?? fefoBatch;
                 return (
                   <div key={l.id} className="rounded-lg border p-3">
                     <div className="flex justify-between">
                       <div>
-                        <p className="text-[13px] font-medium">{drug?.brandName}</p>
-                        <p className="text-[11px] text-[var(--attio-text-tertiary)]">Remaining: {remaining}</p>
+                        <p className="text-[13px] font-medium">{drug?.brandName ?? l.drugId}</p>
+                        <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                          {l.dose} · {l.frequency} · {l.duration} · Remaining: {remaining}
+                        </p>
                         {l.notes && <p className="text-[11px] text-[var(--attio-text-tertiary)] italic">{l.notes}</p>}
                       </div>
                       <button
                         type="button"
                         onClick={() => {
-                          const newQtys = { ...qtys };
-                          delete newQtys[l.id];
-                          setQtys(newQtys);
+                          setQtys((q) => ({ ...q, [l.id]: 0 }));
+                          setAddedLines((prev) => prev.filter((x) => x.id !== l.id));
                         }}
                         className="text-red-600 hover:text-red-700 text-[11px]"
                       >
@@ -160,7 +172,7 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                     </div>
                     {batch && (
                       <p className="mt-1 text-[11px] text-[var(--attio-text-tertiary)]">
-                        Shelf: {batch.rack} · Box: {batch.batchNo} · Batch: {batch.batchNo} · Exp: {batch.expiry}
+                        Shelf: {batch.shelf || batch.rack} · Box: {batch.box || batch.batchNo} · Batch: {batch.batchNo} · Exp: {batch.expiry}
                       </p>
                     )}
                     <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -168,27 +180,69 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                         type="number"
                         min={0}
                         max={remaining}
-                        value={qtys[l.id] ?? 0}
-                        onChange={(e) => setQtys((q) => ({ ...q, [l.id]: Number(e.target.value) }))}
+                        value={qty}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setQtys((q) => ({ ...q, [l.id]: v }));
+                          if ("_local" in l && l._local) {
+                            setAddedLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, qtyPrescribed: v } : x)));
+                          }
+                        }}
                         className="h-8 w-20 text-[13px]"
                       />
-                      {batch ? (
-                        <span className="text-[11px] text-[var(--attio-text-secondary)]">
-                          FEFO batch {batch.batchNo} · exp {batch.expiry} ({daysToExpiry(batch.expiry)}d)
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-red-600">No valid batch</span>
-                      )}
+                      <select
+                        className="h-8 rounded border px-2 text-[12px] outline-none focus:border-[var(--attio-text)]"
+                        value={batchIds[l.id] ?? ""}
+                        onChange={(e) => setBatchIds((b) => ({ ...b, [l.id]: e.target.value }))}
+                      >
+                        <option value="">Auto FEFO</option>
+                        {stock.filter((s) => s.drugId === drugId && !s.quarantined).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.batchNo} · exp {s.expiry} · qty {s.qtyOnHand - s.reserved} · {s.shelf || s.rack}
+                          </option>
+                        ))}
+                      </select>
                     </div>
+                    {!batch && qty > 0 && <span className="text-[11px] text-red-600">No valid batch</span>}
                   </div>
                 );
               })}
-              <AttioButton variant="secondary" onClick={() => {
-                const newLineId = `rxl_${rx.id}_${Date.now()}`;
-                setQtys((q) => ({ ...q, [newLineId]: 1 }));
-              }}>
-                Add medicine
-              </AttioButton>
+              <div className="flex items-end gap-2 rounded border p-3">
+                <select
+                  className="h-9 flex-1 rounded border px-2 text-[13px] outline-none focus:border-[var(--attio-text)]"
+                  value={newDrugId}
+                  onChange={(e) => setNewDrugId(e.target.value)}
+                >
+                  <option value="">Select medicine to add</option>
+                  {drugs.filter((d) => d.active).map((d) => (
+                    <option key={d.id} value={d.id}>{d.brandName} · {d.strength}</option>
+                  ))}
+                </select>
+                <AttioButton variant="secondary" onClick={() => {
+                  if (!newDrugId) return;
+                  const drug = drugs.find((d) => d.id === newDrugId);
+                  if (!drug) return;
+                  const id = `rxl_${rx.id}_${Date.now()}`;
+                  const newLine: PrescriptionLine & { _local?: boolean } = {
+                    id,
+                    drugId: newDrugId,
+                    dose: "1 tab",
+                    frequency: "OD",
+                    duration: "1 day",
+                    days: 1,
+                    qtyPrescribed: 1,
+                    qtyDispensed: 0,
+                    notes: "",
+                    _local: true,
+                  };
+                  setAddedLines((prev) => [...prev, newLine]);
+                  setQtys((q) => ({ ...q, [id]: 1 }));
+                  setBatchIds((b) => ({ ...b, [id]: "" }));
+                  setNewDrugId("");
+                }}>
+                  Add medicine
+                </AttioButton>
+              </div>
               {needsWitness && (
                 <Input placeholder="Witness pharmacist name (Schedule H1/X)" value={witness} onChange={(e) => setWitness(e.target.value)} className="h-9 text-[13px]" />
               )}
@@ -206,7 +260,13 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                 variant="primary"
                 disabled={!["verified", "partially_dispensed"].includes(rx.status)}
                 onClick={() => {
-                  void dispensePrescription(rx.id, qtys, witness || undefined).then((result) => {
+                  const newLines = addedLines
+                    .filter((l) => (qtys[l.id] ?? 0) > 0)
+                    .map((l) => ({ ...l, qtyPrescribed: qtys[l.id] ?? l.qtyPrescribed, qtyDispensed: 0 }));
+                  const cleanedBatchIds = Object.fromEntries(
+                    Object.entries(batchIds).filter(([k]) => (qtys[k] ?? 0) > 0),
+                  );
+                  void dispensePrescription(rx.id, qtys, witness || undefined, cleanedBatchIds, newLines).then((result) => {
                     if (!result.ok) setMsg(result.error ?? "Dispense failed");
                     else if (rx.source === "ipd") {
                       setMsg(`Dispensed — charges added to IPD cart for ${rx.patientName}. Payment at discharge.`);

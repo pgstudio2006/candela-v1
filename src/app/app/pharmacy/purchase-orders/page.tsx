@@ -10,13 +10,13 @@ import { Plus, Trash2, Download, MessageSquare } from "lucide-react";
 import { useState } from "react";
 
 export default function PharmacyPurchaseOrdersPage() {
-  const { purchaseOrders, suppliers, drugs, createPO, updatePOStatus, receivePO, isManager, isPurchase } = usePharmacyStore();
+  const { purchaseOrders, suppliers, drugs, createPO, updatePOStatus, receivePO, payPOBill, isManager, isPurchase } = usePharmacyStore();
   const [receiveId, setReceiveId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [supplierId, setSupplierId] = useState("");
   const [notes, setNotes] = useState("");
   const [poLines, setPoLines] = useState<Array<{ drugId: string; qty: string; rate: string; gst: string }>>([{ drugId: "", qty: "", rate: "", gst: "12" }]);
-  const [grn, setGrn] = useState<Record<string, { batchNo: string; expiry: string; qty: string }>>({});
+  const [grn, setGrn] = useState<Record<string, { batchNo: string; expiry: string; qty: string; shelf: string; box: string }>>({});
   const [supplierBillFile, setSupplierBillFile] = useState<File | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "transfer" | "credit">("credit");
@@ -53,9 +53,9 @@ export default function PharmacyPurchaseOrdersPage() {
   const openReceive = (poId: string) => {
     const po = purchaseOrders.find((p) => p.id === poId);
     if (!po) return;
-    const initial: Record<string, { batchNo: string; expiry: string; qty: string }> = {};
+    const initial: Record<string, { batchNo: string; expiry: string; qty: string; shelf: string; box: string }> = {};
     po.lines.forEach((l) => {
-      initial[l.drugId] = { batchNo: "", expiry: "", qty: String(l.qtyOrdered - l.qtyReceived) };
+      initial[l.drugId] = { batchNo: "", expiry: "", qty: String(l.qtyOrdered - l.qtyReceived), shelf: "", box: "" };
     });
     setGrn(initial);
     setSupplierBillFile(null);
@@ -64,19 +64,25 @@ export default function PharmacyPurchaseOrdersPage() {
     setReceiveId(poId);
   };
 
-  const submitReceive = () => {
+  const submitReceive = async () => {
     if (!receiveId) return;
-    const received: Record<string, { batchNo: string; expiry: string; qty: number }> = {};
+    const received: Record<string, { batchNo: string; expiry: string; qty: number; shelf?: string; box?: string }> = {};
     Object.entries(grn).forEach(([drugId, v]) => {
       if (v.batchNo && v.expiry && Number(v.qty) > 0) {
-        received[drugId] = { batchNo: v.batchNo, expiry: v.expiry, qty: Number(v.qty) };
+        received[drugId] = { batchNo: v.batchNo, expiry: v.expiry, qty: Number(v.qty), shelf: v.shelf, box: v.box };
       }
     });
     if (Object.keys(received).length === 0) return;
-    void receivePO(receiveId, received).then(() => {
-      setReceiveId(null);
-      setGrn({});
-    });
+    await receivePO(receiveId, received);
+    if (paymentMode !== "credit" || Number(paymentAmount) > 0) {
+      const amount = paymentMode === "credit" ? 0 : Number(paymentAmount);
+      await payPOBill(receiveId, amount, paymentMode, supplierBillFile ? supplierBillFile.name : undefined);
+    }
+    setReceiveId(null);
+    setGrn({});
+    setSupplierBillFile(null);
+    setPaymentAmount("");
+    setPaymentMode("credit");
   };
 
   const calculateTotal = () => {
@@ -213,6 +219,10 @@ export default function PharmacyPurchaseOrdersPage() {
                         <PharmacyInput placeholder="Batch no" value={grn[l.drugId]?.batchNo ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, batchNo: e.target.value } })} />
                         <PharmacyInput type="date" value={grn[l.drugId]?.expiry ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, expiry: e.target.value } })} />
                         <PharmacyInput type="number" placeholder={`Qty (pending ${l.qtyOrdered - l.qtyReceived})`} value={grn[l.drugId]?.qty ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, qty: e.target.value } })} />
+                      </div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <PharmacyInput placeholder="Shelf / Rack" value={grn[l.drugId]?.shelf ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, shelf: e.target.value } })} />
+                        <PharmacyInput placeholder="Box number" value={grn[l.drugId]?.box ?? ""} onChange={(e) => setGrn({ ...grn, [l.drugId]: { ...grn[l.drugId]!, box: e.target.value } })} />
                       </div>
                     </div>
                   );

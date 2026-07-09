@@ -57,9 +57,11 @@ export async function dispensePrescriptionAction(
   rxId: string,
   quantities: Record<string, number>,
   witnessName?: string,
+  batchIds?: Record<string, string>,
+  newLines?: import("@/design-system/pharmacy-data").Prescription["lines"],
 ) {
   const ctx = await requireModule("pharmacy");
-  return dispensePrescription(ctx, operatorId, rxId, quantities, witnessName);
+  return dispensePrescription(ctx, operatorId, rxId, quantities, witnessName, batchIds, newLines);
 }
 
 export async function markBillPaidAction(operatorId: string, billId: string, mode: PaymentMode) {

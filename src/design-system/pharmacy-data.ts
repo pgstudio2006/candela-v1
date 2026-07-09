@@ -16,9 +16,11 @@ export type RxPriority = "routine" | "urgent" | "stat";
 
 export type RxSource = "opd" | "ipd" | "er" | "walk_in";
 
-export type PoStatus = "draft" | "submitted" | "approved" | "partial" | "received" | "cancelled";
+export type PoStatus = "draft" | "submitted" | "pending" | "approved" | "partial" | "expected_delivery" | "delivered" | "received" | "bill_paid" | "cancelled";
 
 export type PaymentMode = "cash" | "upi" | "card" | "credit_ipd";
+
+export type PatientType = "registered" | "other_doctor" | "without_prescription";
 
 export type PharmacyStaff = {
   id: string;
@@ -34,9 +36,11 @@ export type Drug = {
   genericName: string;
   brandName: string;
   strength: string;
+  power?: string;
   form: string;
   route: string;
   therapeuticClass: string;
+  description?: string;
   schedule: DrugSchedule;
   hsn: string;
   gstPercent: number;
@@ -59,6 +63,9 @@ export type StockBatch = {
   purchaseRate: number;
   mrp: number;
   rack: string;
+  shelf?: string;
+  box?: string;
+  description?: string;
   supplierId?: string;
   quarantined: boolean;
 };
@@ -66,15 +73,33 @@ export type StockBatch = {
 export type Supplier = {
   id: string;
   name: string;
+  company?: string;
+  type?: "wholesaler" | "manufacturer" | "distributor";
+  credit?: number;
+  additionalDetails?: string;
   gstin: string;
   drugLicense: string;
   contactPerson: string;
   phone: string;
+  mobile?: string;
   email: string;
   address: string;
   paymentTerms: string;
   preferred: boolean;
   active: boolean;
+};
+
+export type SupplierCatalogueItem = {
+  id: string;
+  supplierId: string;
+  drugId: string;
+  name: string;
+  unit: string;
+  purchasePrice: number;
+  sellingPrice: number;
+  mrp: number;
+  power?: string;
+  additionalDetails?: string;
 };
 
 export type PoLine = {
@@ -91,6 +116,11 @@ export type PurchaseOrder = {
   status: PoStatus;
   createdAt: string;
   expectedAt?: string;
+  creditDate?: string;
+  lastPayDate?: string;
+  billPaid: boolean;
+  uploadedBillUrl?: string;
+  poPdfUrl?: string;
   lines: PoLine[];
   notes?: string;
 };
@@ -106,22 +136,32 @@ export type PrescriptionLine = {
   qtyDispensed: number;
   substituteDrugId?: string;
   notes?: string;
+  batchId?: string;
+  dispenseRate?: number;
 };
 
 export type Prescription = {
   id: string;
   patientName: string;
   uhid: string;
+  mobile?: string;
   age?: number;
   gender?: string;
   allergies?: string[];
   doctorName: string;
   source: RxSource;
+  patientType?: PatientType;
   priority: RxPriority;
   status: RxStatus;
   assigneeId?: string;
   encounterId?: string;
   lines: PrescriptionLine[];
+  referral?: {
+    doctorName?: string;
+    hospital?: string;
+    clinicDetails?: string;
+    address?: string;
+  };
   rejectReason?: string;
   counselingNotes?: string;
   witnessName?: string;
@@ -136,6 +176,7 @@ export type PharmacyBillLine = {
   batchId: string;
   qty: number;
   rate: number;
+  purchaseRate?: number;
   gstPercent: number;
 };
 
@@ -157,7 +198,7 @@ export type PharmacyBill = {
 
 export type ReturnRecord = {
   id: string;
-  type: "patient" | "ward" | "supplier";
+  type: "patient" | "ipd" | "walk_in" | "opd" | "ward" | "supplier";
   drugId: string;
   batchId?: string;
   qty: number;
@@ -327,6 +368,7 @@ export const SEED_PURCHASE_ORDERS: PurchaseOrder[] = [
     status: "approved",
     createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
     expectedAt: exp(0),
+    billPaid: false,
     lines: [
       { drugId: "dr_amox", qtyOrdered: 50, qtyReceived: 0, rate: 72, gstPercent: 12 },
       { drugId: "dr_preg", qtyOrdered: 30, qtyReceived: 0, rate: 140, gstPercent: 12 },
@@ -337,6 +379,7 @@ export const SEED_PURCHASE_ORDERS: PurchaseOrder[] = [
     supplierId: "sup_3",
     status: "received",
     createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+    billPaid: true,
     lines: [{ drugId: "dr_ins", qtyOrdered: 20, qtyReceived: 20, rate: 520, gstPercent: 12 }],
   },
 ];
@@ -365,8 +408,12 @@ export const RX_STATUS_LABELS: Record<RxStatus, string> = {
 export const PO_STATUS_LABELS: Record<PoStatus, string> = {
   draft: "Draft",
   submitted: "Submitted",
+  pending: "Pending",
   approved: "Approved",
   partial: "Partial",
+  expected_delivery: "Expected Delivery",
+  delivered: "Delivered",
   received: "Received",
+  bill_paid: "Bill Paid",
   cancelled: "Cancelled",
 };

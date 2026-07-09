@@ -42,6 +42,7 @@ import {
   type ScheduleHEntry,
   type StockBatch,
   type Supplier,
+  type SupplierCatalogueItem,
   type WardIndent,
 } from "@/design-system/pharmacy-data";
 
@@ -51,6 +52,7 @@ export type PharmacyStateShape = {
   drugs: Drug[];
   stock: StockBatch[];
   suppliers: Supplier[];
+  supplierCatalogue: SupplierCatalogueItem[];
   purchaseOrders: PurchaseOrder[];
   prescriptions: Prescription[];
   bills: PharmacyBill[];
@@ -94,6 +96,7 @@ export const defaultPharmacyState = (passwords: Record<string, string>): Pharmac
   drugs: structuredClone(SEED_DRUGS),
   stock: structuredClone(SEED_STOCK),
   suppliers: structuredClone(SEED_SUPPLIERS),
+  supplierCatalogue: [],
   purchaseOrders: structuredClone(SEED_PURCHASE_ORDERS),
   prescriptions: structuredClone(SEED_PRESCRIPTIONS),
   bills: structuredClone(SEED_BILLS),

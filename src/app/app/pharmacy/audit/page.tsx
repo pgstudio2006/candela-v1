@@ -7,16 +7,19 @@ import { PharmacySelect, FormRow } from "@/components/pharmacy/ui";
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
 import { usePharmacyPoll } from "@/hooks/use-pharmacy-poll";
 import { useCallback, useEffect, useState } from "react";
+import { PharmacyDialog } from "@/components/pharmacy/ui";
+import type { PharmacyBill } from "@/design-system/pharmacy-data";
 
 type AuditRow = Awaited<ReturnType<typeof listPharmacyAuditLogsAction>>[number];
 
 export default function PharmacyAuditPage() {
   usePharmacyPoll(30_000);
-  const { activities, bills, isManager } = usePharmacyStore();
+  const { activities, bills, getDrug, isManager, stock } = usePharmacyStore();
   const [platformLogs, setPlatformLogs] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"activity" | "bills" | "analytics">("analytics");
   const [dateFilter, setDateFilter] = useState<"today" | "week" | "month" | "all">("month");
+  const [selectedBill, setSelectedBill] = useState<PharmacyBill | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,6 +61,11 @@ export default function PharmacyAuditPage() {
   const paidBills = filteredBills.filter((b) => b.paid).length;
   const pendingBills = filteredBills.filter((b) => !b.paid).length;
   const avgBillValue = filteredBills.length > 0 ? totalRevenue / filteredBills.length : 0;
+
+  const totalCost = filteredBills.reduce((acc, bill) =>
+    acc + bill.lines.reduce((lineAcc, line) => lineAcc + (line.purchaseRate ?? 0) * line.qty, 0), 0);
+  const grossProfit = totalRevenue - totalCost;
+  const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
 
   if (!isManager()) {
     return (
@@ -155,6 +163,27 @@ export default function PharmacyAuditPage() {
               })}
             </div>
           </Panel>
+
+          <Panel title="Finance Analysis">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Total Cost</p>
+                <p className="text-xl font-medium">₹{totalCost.toLocaleString("en-IN")}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Gross Profit</p>
+                <p className="text-xl font-medium text-green-600">₹{grossProfit.toLocaleString("en-IN")}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Gross Margin</p>
+                <p className="text-xl font-medium">{grossMargin.toFixed(1)}%</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Net Revenue</p>
+                <p className="text-xl font-medium">₹{(totalRevenue - totalGST - totalDiscount).toLocaleString("en-IN")}</p>
+              </div>
+            </div>
+          </Panel>
         </div>
       )}
 
@@ -169,6 +198,7 @@ export default function PharmacyAuditPage() {
             { key: "gst", label: "GST" },
             { key: "status", label: "Status" },
             { key: "mode", label: "Payment" },
+            { key: "actions", label: "" },
           ]}
           rows={filteredBills.map((bill) => ({
             id: bill.id,
@@ -179,8 +209,69 @@ export default function PharmacyAuditPage() {
             gst: bill.gstTotal ? `₹${bill.gstTotal}` : "—",
             status: <StatusBadge label={bill.paid ? "Paid" : "Pending"} variant={bill.paid ? "success" : "warning"} />,
             mode: bill.paymentMode.replace("_", " ").toUpperCase(),
+            actions: (
+              <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={() => setSelectedBill(bill)}>
+                View details
+              </AttioButton>
+            ),
           }))}
         />
+      )}
+
+      {selectedBill && (
+        <PharmacyDialog open title={`Bill details — ${selectedBill.id}`} onClose={() => setSelectedBill(null)} width="max-w-2xl">
+          <div className="space-y-4 text-[13px]">
+            <div className="grid grid-cols-2 gap-3">
+              <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Patient</p><p className="font-medium">{selectedBill.patientName}</p></div>
+              <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">UHID</p><p>{selectedBill.uhid ?? "—"}</p></div>
+              <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Date</p><p>{new Date(selectedBill.createdAt).toLocaleString("en-IN")}</p></div>
+              <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Created by</p><p>{selectedBill.createdBy}</p></div>
+            </div>
+            <div className="rounded border">
+              <table className="w-full text-[12px]">
+                <thead className="bg-[var(--attio-hover)]">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Drug</th>
+                    <th className="px-3 py-2 text-left">Batch</th>
+                    <th className="px-3 py-2 text-right">Qty</th>
+                    <th className="px-3 py-2 text-right">Rate</th>
+                    <th className="px-3 py-2 text-right">GST %</th>
+                    <th className="px-3 py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {selectedBill.lines.map((line, idx) => {
+                    const drug = getDrug(line.drugId);
+                    const batch = stock.find((s) => s.id === line.batchId);
+                    const lineTotal = line.qty * line.rate;
+                    return (
+                      <tr key={idx}>
+                        <td className="px-3 py-2">{drug?.brandName ?? line.drugId}</td>
+                        <td className="px-3 py-2">{batch?.batchNo ?? line.batchId}</td>
+                        <td className="px-3 py-2 text-right">{line.qty}</td>
+                        <td className="px-3 py-2 text-right">₹{line.rate.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right">{line.gstPercent}%</td>
+                        <td className="px-3 py-2 text-right">₹{lineTotal.toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-between border-t pt-3 text-[13px]">
+              <div className="space-y-1">
+                <p className="text-[var(--attio-text-tertiary)]">Subtotal: ₹{selectedBill.subtotal.toFixed(2)}</p>
+                <p className="text-[var(--attio-text-tertiary)]">GST: ₹{selectedBill.gstTotal.toFixed(2)}</p>
+                {selectedBill.discount > 0 && <p className="text-[var(--attio-text-tertiary)]">Discount: ₹{selectedBill.discount.toFixed(2)}</p>}
+              </div>
+              <div className="text-right">
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Total</p>
+                <p className="text-xl font-medium">₹{selectedBill.total.toFixed(2)}</p>
+                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Status: {selectedBill.paid ? "Paid" : "Pending"} · {selectedBill.paymentMode.replace("_", " ").toUpperCase()}</p>
+              </div>
+            </div>
+          </div>
+        </PharmacyDialog>
       )}
 
       {tab === "activity" && (

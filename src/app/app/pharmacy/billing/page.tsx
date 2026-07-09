@@ -9,7 +9,7 @@ import type { PaymentMode } from "@/design-system/pharmacy-data";
 import { useState } from "react";
 
 export default function PharmacyBillingPage() {
-  const { bills, getDrug, markBillPaid, adjustStock } = usePharmacyStore();
+  const { bills, getDrug, markBillPaid, applyBillDiscount } = usePharmacyStore();
   const [selected, setSelected] = useState<PharmacyBill | null>(null);
   const [payMode, setPayMode] = useState<PaymentMode>("cash");
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -17,17 +17,15 @@ export default function PharmacyBillingPage() {
   const [applyingDiscount, setApplyingDiscount] = useState(false);
 
   const handleApplyDiscount = async () => {
-    if (!selected || discountPercent <= 0) return;
+    if (!selected || discountPercent <= 0 || !discountReason.trim()) return;
     setApplyingDiscount(true);
-    // Calculate discount amount
     const discountAmount = (selected.subtotal * discountPercent) / 100;
-    // Note: This would need a server mutation to update the bill
-    // For now, just show the calculation
+    await applyBillDiscount(selected.id, discountAmount, discountReason.trim());
     setApplyingDiscount(false);
   };
 
   const calculatedDiscount = selected ? (selected.subtotal * discountPercent) / 100 : 0;
-  const discountedTotal = selected ? selected.total - calculatedDiscount : 0;
+  const discountedTotal = selected ? selected.subtotal + selected.gstTotal - calculatedDiscount : 0;
 
   return (
     <PageChrome

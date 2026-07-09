@@ -3,7 +3,7 @@
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, StatusBadge, Panel } from "@/components/frontdesk/ui";
-import { PharmacyDialog, PharmacyInput, PharmacySelect, FormRow } from "@/components/pharmacy/ui";
+import { PharmacyDialog, PharmacyInput, PharmacySelect, PharmacyTextarea, FormRow } from "@/components/pharmacy/ui";
 import type { Supplier } from "@/design-system/pharmacy-data";
 import { useState } from "react";
 
@@ -12,18 +12,36 @@ export default function PharmacySuppliersPage() {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Supplier | null>(null);
   const [editing, setEditing] = useState<Supplier | null>(null);
-  const [form, setForm] = useState({ 
+  const [form, setForm] = useState<{ 
+    name: string; 
+    company: string;
+    gstin: string; 
+    drugLicense: string; 
+    contactPerson: string; 
+    phone: string; 
+    mobile: string;
+    email: string; 
+    address: string; 
+    paymentTerms: string; 
+    credit: number;
+    type: "wholesaler" | "manufacturer" | "distributor";
+    additionalDetails: string;
+    preferred: boolean; 
+    active: boolean;
+  }>({ 
     name: "", 
     company: "",
     gstin: "", 
     drugLicense: "", 
     contactPerson: "", 
     phone: "", 
+    mobile: "",
     email: "", 
     address: "", 
     paymentTerms: "Net 30", 
     credit: 0,
     type: "wholesaler",
+    additionalDetails: "",
     preferred: false, 
     active: true 
   });
@@ -44,11 +62,13 @@ export default function PharmacySuppliersPage() {
       drugLicense: "", 
       contactPerson: "", 
       phone: "", 
+      mobile: "",
       email: "", 
       address: "", 
       paymentTerms: "Net 30", 
       credit: 0,
       type: "wholesaler",
+      additionalDetails: "",
       preferred: false, 
       active: true 
     });
@@ -60,16 +80,18 @@ export default function PharmacySuppliersPage() {
     setEditing(supplier);
     setForm({
       name: supplier.name,
-      company: "",
+      company: supplier.company || "",
       gstin: supplier.gstin,
       drugLicense: supplier.drugLicense,
       contactPerson: supplier.contactPerson,
       phone: supplier.phone,
+      mobile: supplier.mobile || "",
       email: supplier.email,
       address: supplier.address,
       paymentTerms: supplier.paymentTerms,
-      credit: 0,
-      type: "wholesaler",
+      credit: supplier.credit ?? 0,
+      type: supplier.type || "wholesaler",
+      additionalDetails: supplier.additionalDetails || "",
       preferred: supplier.preferred,
       active: supplier.active,
     });
@@ -113,10 +135,10 @@ export default function PharmacySuppliersPage() {
               {s.name}
             </button>
           ),
-          company: "—",
-          contact: `${s.contactPerson} · ${s.phone}`,
-          credit: `₹0`,
-          type: "Wholesaler",
+          company: s.company || "—",
+          contact: `${s.contactPerson} · ${s.mobile || s.phone}`,
+          credit: `₹${s.credit ?? 0}`,
+          type: (s.type || "wholesaler").replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
           status: <StatusBadge label={s.active ? (s.preferred ? "Preferred" : "Active") : "Inactive"} variant="success" />,
           actions: (
             <div className="flex gap-2">
@@ -146,13 +168,16 @@ export default function PharmacySuppliersPage() {
                   <PharmacyInput value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} placeholder="Contact person" />
                 </FormRow>
                 <FormRow label="Mobile *" required>
-                  <PharmacyInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Mobile number" />
+                  <PharmacyInput value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} placeholder="Mobile number" />
+                </FormRow>
+                <FormRow label="Phone">
+                  <PharmacyInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Landline / alternate phone" />
                 </FormRow>
                 <FormRow label="Email">
                   <PharmacyInput value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email address" />
                 </FormRow>
                 <FormRow label="Type">
-                  <PharmacySelect value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                  <PharmacySelect value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as typeof form.type })}>
                     <option value="wholesaler">Wholesaler</option>
                     <option value="manufacturer">Manufacturer</option>
                     <option value="distributor">Distributor</option>
@@ -187,6 +212,9 @@ export default function PharmacySuppliersPage() {
                 </FormRow>
                 <FormRow label="Credit Limit (₹)">
                   <PharmacyInput type="number" value={form.credit} onChange={(e) => setForm({ ...form, credit: Number(e.target.value) })} placeholder="0" />
+                </FormRow>
+                <FormRow label="Additional Details" className="sm:col-span-2">
+                  <PharmacyTextarea value={form.additionalDetails} onChange={(e) => setForm({ ...form, additionalDetails: e.target.value })} placeholder="Notes, bank details, etc." />
                 </FormRow>
               </div>
             </Panel>
@@ -231,8 +259,8 @@ export default function PharmacySuppliersPage() {
             <Panel title="Payment & Credit">
               <div className="grid grid-cols-2 gap-3">
                 <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Payment Terms</p><p>{selected.paymentTerms}</p></div>
-                <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Credit Limit</p><p>₹0</p></div>
-                <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Type</p><p>Wholesaler</p></div>
+                <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Credit Limit</p><p>₹{selected.credit ?? 0}</p></div>
+                <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Type</p><p>{(selected.type || "wholesaler").replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}</p></div>
                 <div><p className="text-[11px] text-[var(--attio-text-tertiary)]">Status</p><p>{selected.active ? (selected.preferred ? "Preferred" : "Active") : "Inactive"}</p></div>
               </div>
             </Panel>

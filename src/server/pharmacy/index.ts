@@ -6,16 +6,21 @@ import type {
   Prescription,
   PurchaseOrder,
   Supplier,
+  SupplierCatalogueItem,
 } from "@/design-system/pharmacy-data";
 import {
   mutateAddDrug,
   mutateAddSupplier,
+  mutateAddSupplierCatalogueItem,
   mutateAdjustStock,
+  mutateApplyBillDiscount,
   mutateApproveReturn,
   mutateCreatePO,
+  mutateCreateReturn,
   mutateDispensePrescription,
   mutateFulfillIndent,
   mutateMarkBillPaid,
+  mutatePayPOBill,
   mutateQuarantineBatch,
   mutateReceivePO,
   mutateRejectPrescription,
@@ -23,6 +28,7 @@ import {
   mutateUpdateDrug,
   mutateUpdatePOStatus,
   mutateUpdateSupplier,
+  mutateUpdateSupplierCatalogueItem,
   mutateVerifyPrescription,
   resolveStaffOperator,
 } from "@/lib/pharmacy-state-mutations";
@@ -136,12 +142,14 @@ export async function dispensePrescription(
   rxId: string,
   quantities: Record<string, number>,
   witnessName?: string,
+  batchIds?: Record<string, string>,
+  newLines?: Prescription["lines"],
 ) {
   validateDispenseQuantities(quantities);
   let dispenseResult: Awaited<ReturnType<typeof mutateDispensePrescription>>["result"] | null = null;
 
   await withOperator(ctx, operatorId, async (state, operator) => {
-    const { state: next, result } = mutateDispensePrescription(state, rxId, operator, quantities, witnessName);
+    const { state: next, result } = mutateDispensePrescription(state, rxId, operator, quantities, witnessName, batchIds, newLines);
     dispenseResult = result;
 
     await writePlatformAudit({
@@ -318,7 +326,7 @@ export async function receivePO(
   ctx: ServerContext,
   operatorId: string,
   poId: string,
-  received: Record<string, { qty: number; batchNo: string; expiry: string }>,
+  received: Record<string, { qty: number; batchNo: string; expiry: string; shelf?: string; box?: string }>,
 ) {
   await withOperator(ctx, operatorId, async (state, operator) => {
     assertPurchaseOrManager(operator);
@@ -355,6 +363,102 @@ export async function restockReturn(ctx: ServerContext, operatorId: string, id: 
       summary: `Return restocked by ${operator.name}`,
     });
     return next;
+  });
+}
+
+export async function applyBillDiscount(
+  ctx: ServerContext,
+  operatorId: string,
+  billId: string,
+  discount: number,
+  discountReason: string,
+) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    assertManager(operator);
+    const next = mutateApplyBillDiscount(state, operator, billId, discount, discountReason);
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "bill_discount_applied",
+      entityType: "bill",
+      entityId: billId,
+      summary: `Discount ₹${discount.toFixed(0)} applied to bill ${billId} by ${operator.name}`,
+      payload: { discount, discountReason },
+    });
+    return next;
+  });
+}
+
+export async function createReturn(
+  ctx: ServerContext,
+  operatorId: string,
+  input: {
+    type: "patient" | "ipd" | "walk_in";
+    billId: string;
+    lineIndex: number;
+    qty: number;
+    reason: string;
+  },
+) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    const next = mutateCreateReturn(state, operator, input);
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "return_created",
+      entityType: "return",
+      entityId: next.returns[0]?.id ?? "return",
+      summary: `Return created by ${operator.name} for bill ${input.billId}`,
+      payload: input,
+    });
+    return next;
+  });
+}
+
+export async function payPOBill(
+  ctx: ServerContext,
+  operatorId: string,
+  poId: string,
+  amount: number,
+  mode: "cash" | "upi" | "transfer" | "credit",
+  billUrl?: string,
+) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    assertPurchaseOrManager(operator);
+    const next = mutatePayPOBill(state, operator, poId, amount, mode, billUrl);
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "po_bill_paid",
+      entityType: "purchase_order",
+      entityId: poId,
+      summary: `PO bill paid ₹${amount.toFixed(0)} (${mode}) by ${operator.name}`,
+      payload: { amount, mode, billUrl },
+    });
+    return next;
+  });
+}
+
+export async function addSupplierCatalogueItem(
+  ctx: ServerContext,
+  operatorId: string,
+  item: Omit<SupplierCatalogueItem, "id">,
+) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    assertPurchaseOrManager(operator);
+    return mutateAddSupplierCatalogueItem(state, operator, item);
+  });
+}
+
+export async function updateSupplierCatalogueItem(
+  ctx: ServerContext,
+  operatorId: string,
+  id: string,
+  patch: Partial<SupplierCatalogueItem>,
+) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    assertPurchaseOrManager(operator);
+    return mutateUpdateSupplierCatalogueItem(state, id, patch);
   });
 }
 
@@ -419,9 +523,13 @@ function buildPrescriptionFromLines(
     visitId?: string;
     patientName: string;
     uhid: string;
+    mobile?: string;
+    age?: number;
     doctorName: string;
     source: Prescription["source"];
     priority?: Prescription["priority"];
+    patientType?: Prescription["patientType"];
+    referral?: Prescription["referral"];
     lines: Array<{ id?: string; drug: string; dose: string; frequency: string; days?: number; duration?: string; instructions?: string }>;
   },
 ): Prescription | null {
@@ -433,9 +541,13 @@ function buildPrescriptionFromLines(
     encounterId: input.visitId,
     patientName: input.patientName,
     uhid: input.uhid,
+    mobile: input.mobile,
+    age: input.age,
     doctorName: input.doctorName,
     source: input.source,
+    patientType: input.patientType,
     priority,
+    referral: input.referral,
     status: "pending",
     lines: input.lines.map((l, idx) => {
       const drugId = l.drug.toLowerCase().replace(/\s+/g, "_");
@@ -514,8 +626,12 @@ export async function createManualPrescription(
   input: {
     patientName: string;
     uhid: string;
-    lines: Array<{ drug: string; dose: string; frequency: string; duration: string; instructions?: string }>;
+    mobile?: string;
+    age?: number;
     priority?: Prescription["priority"];
+    patientType?: Prescription["patientType"];
+    referral?: Prescription["referral"];
+    lines: Array<{ drug: string; dose: string; frequency: string; duration: string; instructions?: string }>;
   },
 ) {
   const state = await readState(ctx);
@@ -523,9 +639,13 @@ export async function createManualPrescription(
   const rx = buildPrescriptionFromLines({
     patientName: input.patientName,
     uhid: input.uhid,
+    mobile: input.mobile,
+    age: input.age,
     doctorName: operator.name,
     source: "walk_in",
     priority: input.priority,
+    patientType: input.patientType,
+    referral: input.referral,
     lines: input.lines,
   });
   if (!rx) return null;
