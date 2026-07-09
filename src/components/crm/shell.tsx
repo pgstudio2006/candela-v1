@@ -6,7 +6,6 @@ import { CrmCommandPalette } from "@/components/crm/command-palette";
 import { CrmOperatorBanner } from "@/components/crm/operator-picker";
 import { CrmSidebar } from "@/components/crm/sidebar";
 import { useCrmPoll } from "@/hooks/use-crm-poll";
-import { CRM_MANAGER_ID } from "@/components/crm/crm-store";
 import { useSession } from "@/components/candela/session-provider";
 import { useRequireClientSession } from "@/hooks/use-require-client-session";
 import { CopilotPanel } from "@/components/frontdesk/copilot-panel";
@@ -21,7 +20,7 @@ export function CrmShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { session, signOut, setCommandOpen, commandOpen } = useSession();
   const { loading: sessionLoading } = useRequireClientSession();
-  const { ready, error, refresh } = useCrmStore();
+  const { ready, error, refresh, isManager } = useCrmStore();
   const [copilotOpen, setCopilotOpen] = useState(false);
   const current = getCrmNavItem(pathname);
 
@@ -40,12 +39,12 @@ export function CrmShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session?.crmOperatorId) return;
-    const manager = session.crmOperatorId === CRM_MANAGER_ID;
+    const manager = isManager();
     if (!manager) {
       const blocked = CRM_NAV.find((n) => n.managerOnly && pathname.startsWith(n.href));
       if (blocked) router.replace("/app/crm");
     }
-  }, [pathname, session?.crmOperatorId, router]);
+  }, [pathname, session?.crmOperatorId, router, isManager]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -247,6 +247,48 @@ async function upsertAgentCredential(agent: CrmAgent, password?: string) {
   });
 }
 
+async function ensureCrmUser(
+  ctx: ServerContext,
+  email: string,
+  name: string,
+  password: string,
+) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const tenantEmailKey = { tenantId: ctx.tenantId, email: normalizedEmail };
+  const existingUser = await prisma.user.findUnique({ where: { tenantId_email: tenantEmailKey } });
+  if (existingUser && existingUser.activeRoleId) {
+    const role = await prisma.role.findUnique({ where: { id: existingUser.activeRoleId } });
+    if (role && role.key !== "crm") {
+      throw new ServerActionError(
+        "CONFLICT",
+        "This email already belongs to another role. Use Admin → Staff to assign a CRM role instead.",
+      );
+    }
+  }
+  const crmRole = await prisma.role.findFirst({ where: { key: "crm" } });
+  if (!crmRole) throw new ServerActionError("NOT_FOUND", "CRM role not found.");
+  const passwordHash = await hashPassword(password);
+  await prisma.user.upsert({
+    where: { tenantId_email: tenantEmailKey },
+    create: {
+      id: `u_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      email: normalizedEmail,
+      name,
+      tenantId: ctx.tenantId,
+      branchId: ctx.branchId,
+      activeRoleId: crmRole.id,
+      status: "ACTIVE",
+      passwordHash,
+    },
+    update: {
+      name,
+      activeRoleId: crmRole.id,
+      status: "ACTIVE",
+      passwordHash,
+    },
+  });
+}
+
 async function withOperator(
   ctx: ServerContext,
   operatorId: string,
@@ -531,6 +573,7 @@ export async function addAgent(
     pwd = result.password;
     const created = result.state.agents.find((a) => a.id === agentId)!;
     await upsertAgentCredential(created, pwd);
+    await ensureCrmUser(ctx, created.email, created.name, pwd);
     await writePlatformAudit({
       ctx,
       module: "crm",
@@ -561,6 +604,7 @@ export async function setAgentPassword(ctx: ServerContext, operatorId: string, i
     const agent = requireAgent(state, id);
     const next = mutateSetAgentPassword(state, id, password);
     await upsertAgentCredential(agent, password);
+    await ensureCrmUser(ctx, agent.email, agent.name, password);
     await writePlatformAudit({ ctx, module: "crm", action: "agent_password_set", entityType: "agent", entityId: id, summary: `Password reset for ${agent.name}` });
     return next;
   });
@@ -569,8 +613,15 @@ export async function setAgentPassword(ctx: ServerContext, operatorId: string, i
 export async function removeAgent(ctx: ServerContext, operatorId: string, id: string) {
   await withOperator(ctx, operatorId, async (state, operator) => {
     assertManager(operator);
+    const agent = state.agents.find((a) => a.id === id);
     const next = mutateRemoveAgent(state, id, operatorId);
     await prisma.crmOperatorCredential.deleteMany({ where: { id } });
+    if (agent) {
+      await prisma.user.updateMany({
+        where: { tenantId: ctx.tenantId, email: agent.email.trim().toLowerCase() },
+        data: { status: "INACTIVE" },
+      });
+    }
     await writePlatformAudit({ ctx, module: "crm", action: "agent_removed", entityType: "agent", entityId: id, summary: `CRM agent removed`, severity: "warning" });
     return next;
   });
