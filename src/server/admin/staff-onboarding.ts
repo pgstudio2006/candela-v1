@@ -12,6 +12,7 @@ import { branchScope } from "@/server/tenancy";
 import { ServerActionError } from "@/server/errors";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { hashPassword } from "@/server/revenue/password";
+import { ensureRevenueSeeded } from "@/server/revenue/bootstrap";
 import { readCrmWorkspace, writeCrmWorkspace } from "@/server/workspace-state";
 import { defaultCrmState } from "@/server/revenue/state-seeds";
 import type { CrmAgent } from "@/design-system/crm-data";
@@ -32,8 +33,10 @@ export async function syncCrmAgentFromStaff(
   staff: { id: string; name: string; email: string; role: string; active?: boolean; specialtyTags?: string[] },
   password?: string,
 ) {
+  await ensureRevenueSeeded();
   const roleKey = moduleRoleForStaffRole(staff.role as HealthcareStaffRole);
   const email = staff.email.trim().toLowerCase();
+  const crmAgentRole: CrmAgent["role"] = staff.role === "crm_manager" ? "manager" : "counsellor";
 
   if (roleKey !== "crm") {
     const existingCred = await prisma.crmOperatorCredential.findUnique({ where: { email } });
@@ -65,10 +68,10 @@ export async function syncCrmAgentFromStaff(
       id: agentId,
       name: staff.name,
       email,
-      role: "counsellor",
+      role: crmAgentRole,
       active: staff.active ?? true,
       specialtyTags: staff.specialtyTags ?? [],
-      maxOpenLeads: 25,
+      maxOpenLeads: crmAgentRole === "manager" ? 999 : 25,
       backupAgentId: undefined,
       leadWeightPct: 0,
       passwordHash,
@@ -76,10 +79,10 @@ export async function syncCrmAgentFromStaff(
     update: {
       name: staff.name,
       email,
-      role: "counsellor",
+      role: crmAgentRole,
       active: staff.active ?? true,
       ...(staff.specialtyTags ? { specialtyTags: staff.specialtyTags } : {}),
-      maxOpenLeads: existingCred?.maxOpenLeads ?? 25,
+      maxOpenLeads: existingCred?.maxOpenLeads ?? (crmAgentRole === "manager" ? 999 : 25),
       backupAgentId: existingCred?.backupAgentId ?? undefined,
       leadWeightPct: existingCred?.leadWeightPct ?? 0,
       ...(password ? { passwordHash } : {}),
@@ -92,10 +95,10 @@ export async function syncCrmAgentFromStaff(
     id: agentId,
     name: staff.name,
     email,
-    role: "counsellor",
+    role: crmAgentRole,
     active: staff.active ?? true,
     specialtyTags: (staff.specialtyTags as string[]) ?? [],
-    maxOpenLeads: 25,
+    maxOpenLeads: crmAgentRole === "manager" ? 999 : 25,
     leadWeightPercent: 0,
     backupAgentId: undefined,
   };

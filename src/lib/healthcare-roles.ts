@@ -14,6 +14,7 @@ export type HealthcareStaffRole =
   | "pharmacist"
   | "counsellor"
   | "crm_executive"
+  | "crm_manager"
   | "hr_executive"
   | "lab_technician"
   | "billing_executive";
@@ -29,6 +30,7 @@ export const HEALTHCARE_STAFF_ROLES: { value: HealthcareStaffRole; label: string
   { value: "pharmacist", label: "Pharmacist", moduleRole: "pharmacy" },
   { value: "counsellor", label: "Counsellor", moduleRole: "counsellor" },
   { value: "crm_executive", label: "CRM executive", moduleRole: "crm" },
+  { value: "crm_manager", label: "CRM manager", moduleRole: "crm" },
   { value: "hr_executive", label: "HR executive", moduleRole: "hr" },
   { value: "lab_technician", label: "Lab technician" },
   { value: "billing_executive", label: "Billing executive", moduleRole: "frontdesk" },

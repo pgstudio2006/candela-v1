@@ -17,6 +17,7 @@ export type AdminRole =
   | "pharmacist"
   | "counsellor"
   | "crm_executive"
+  | "crm_manager"
   | "hr_executive"
   | "lab_technician"
   | "billing_executive";

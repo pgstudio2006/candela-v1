@@ -15,6 +15,7 @@ import {
 import { useCounsellorPoll } from "@/hooks/use-counsellor-poll";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
 import { useToast } from "@/components/ui/toast-provider";
+import { useSession } from "@/components/candela/session-provider";
 import { cn } from "@/lib/utils";
 import { isRedFlagVisit } from "@/lib/frontdesk-workflow";
 import {
@@ -22,16 +23,10 @@ import {
   fetchServiceChargesFromAPI,
   type BillingPackage,
 } from "@/lib/billing-packages";
-import { ArrowLeft, MessageCircle, Plus, Printer, Send, Sparkles, Trash2, Search } from "lucide-react";
+import { ArrowLeft, MessageCircle, Plus, Printer, Send, Trash2, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-
-const AI_SCRIPTS: Record<string, string> = {
-  en: "Based on your consultation, the doctor recommends a structured MSK care program. This addresses your lumbar disc issue with physiotherapy and monitoring. The 6-session package offers the best balance of recovery and value.",
-  hi: "आपकी जांच के अनुसार, डॉक्टर ने MSK केयर प्रोग्राम की सलाह दी है। यह आपकी कमर की समस्या के लिए फिजियोथेरेपी और नियमित फॉलो-अप पर केंद्रित है।",
-  hinglish: "Doctor ne recommend kiya hai MSK care program — physio sessions ke saath. 6-session package best value hai aapke case mein.",
-};
 
 type SessionWorkspaceProps = { visitId: string };
 
@@ -39,6 +34,7 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
   useCounsellorPoll();
   const router = useRouter();
   const { toast } = useToast();
+  const { session } = useSession();
   const {
     getQueueItem,
     getPatient,
@@ -76,8 +72,6 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
   const [consent, setConsent] = useState(false);
   const [whatsapp, setWhatsapp] = useState(false);
   const [voiceNote, setVoiceNote] = useState("");
-  const [aiLang, setAiLang] = useState("en");
-  const [aiScript, setAiScript] = useState("");
   const [emiMonths, setEmiMonths] = useState(0);
   const [corporateRef, setCorporateRef] = useState("");
   const [paymentExpectation, setPaymentExpectation] = useState<"pay_now" | "desk" | "corporate">("desk");
@@ -85,21 +79,21 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
   const [claiming, setClaiming] = useState(false);
   const [gstRatePercent, setGstRatePercent] = useState(18);
   const intakeSchema = usePublishedFormSchema("counsellor-intake");
-  const packageSchema = usePublishedFormSchema("counsellor-package");
 
   useEffect(() => {
     const loadData = async () => {
       setLoadingData(true);
+      const branchId = session?.branchId;
       const [pkgs, svcs] = await Promise.all([
-        fetchBillingPackagesFromAPI(),
-        fetchServiceChargesFromAPI(),
+        fetchBillingPackagesFromAPI(branchId),
+        fetchServiceChargesFromAPI(branchId),
       ]);
       setApiPackages(pkgs);
       setApiServices(svcs);
       setLoadingData(false);
     };
     loadData();
-  }, []);
+  }, [session?.branchId]);
 
   useEffect(() => {
     if (!item) return;
@@ -154,12 +148,6 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
     setSelectedServices(selectedServices.map(s => s.id === id ? { ...s, quantity: Math.max(1, quantity) } : s));
   };
 
-  const generateAiScript = () => {
-    const dx = String(item.payload.diagnosis.primaryDiagnosis ?? "your condition");
-    const base = AI_SCRIPTS[aiLang] ?? AI_SCRIPTS.en;
-    setAiScript(`${base}\n\n(Diagnosis context: ${dx})`);
-  };
-
   const finish = async (outcome: "converted" | "deferred" | "lost" | "callback", sendBilling = false) => {
     if (sendBilling && !consent) {
       toast("Capture patient consent before sending to billing.", "error");
@@ -189,7 +177,6 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
       consentCaptured: consent,
       whatsappSent: whatsapp,
       voiceNote,
-      aiScript,
     });
 
     if (!result.ok) {
@@ -240,19 +227,6 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
 
         {/* Center: Estimate builder */}
         <div className="space-y-4">
-          <Panel title="AI counsel assistant" action={<Sparkles className="size-4 text-[var(--attio-accent)]" />}>
-            <div className="mb-2 flex flex-wrap gap-1">
-              {["en", "hi", "hinglish"].map((l) => (
-                <button key={l} type="button" onClick={() => setAiLang(l)} className={cn("rounded-full border px-2 py-0.5 text-[11px] capitalize", aiLang === l ? "border-[var(--attio-accent)] bg-[var(--attio-accent)]/10 text-[var(--attio-accent)]" : "border-[var(--attio-border)]")}>{l}</button>
-              ))}
-            </div>
-            <AttioButton variant="secondary" className="mb-2 w-full gap-1.5" onClick={generateAiScript}>
-              <Sparkles className="size-3.5" />
-              Generate patient talk track
-            </AttioButton>
-            <textarea value={aiScript} onChange={(e) => setAiScript(e.target.value)} rows={4} placeholder="Patient-friendly explanation…" className="w-full resize-none rounded-lg border border-[var(--attio-border)] px-3 py-2 text-[12px]" />
-          </Panel>
-
           <Panel title="Package & Service Selection">
             {loadingData ? (
               <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading packages and services...</p>
