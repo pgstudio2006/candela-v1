@@ -1,7 +1,7 @@
 "use client";
 
 import type { CrmLead, CrmPipelineStage } from "@/design-system/crm-data";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 
 export function LeadPipelineBoard({
   leads,
@@ -51,6 +51,7 @@ export function LeadPipelineBoard({
                       {lead.city ? ` · ${lead.city}` : ""}
                     </p>
                     <p className="mt-2 text-[11px] text-[var(--attio-text-secondary)]">{agent?.name ?? "Unassigned"}</p>
+                    <p className="mt-1 text-[10px] text-[var(--attio-text-tertiary)]">{formatRelativeTime(lead.createdAt)}</p>
                     <p className="mt-1 text-[11px] font-medium tabular-nums">₹{(lead.valueEstimate / 1000).toFixed(0)}K</p>
                     {nextStage && (
                       <span

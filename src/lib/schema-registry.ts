@@ -231,6 +231,8 @@ export function isCorruptSchemaOverride(schemaId: string, override: FormSchema):
   const defaultSchema = ALL_DEFAULT_SCHEMAS[schemaId];
   if (!defaultSchema) return false;
   if (schemaId === "registration") return false;
+  // CRM schemas legitimately capture lead/patient details with fullName, phone, etc.
+  if (CRM_FORM_SCHEMA_IDS.includes(schemaId as CrmFormSchemaId)) return false;
 
   const overrideIds = schemaFieldIds(override);
   const registrationDefault = DEFAULT_SCHEMAS.registration;

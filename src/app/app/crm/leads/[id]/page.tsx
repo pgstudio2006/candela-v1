@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
   appointment_booked: "Appointment booked",
   visit_done: "Visit done",
   converted: "Converted",
+  patient: "Patient",
   lost: "Lost",
 };
 
@@ -34,11 +35,12 @@ const STATUS_VARIANT: Record<string, "success" | "info" | "warning" | "neutral">
   appointment_booked: "success",
   visit_done: "success",
   converted: "success",
+  patient: "success",
   lost: "warning",
 };
 
 export default function OnlineCounsellorLeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { getFilteredLeads, agents, activities } = useCrmStore();
+  const { getFilteredLeads, agents, activities, updateLead } = useCrmStore();
   const [paramsResolved, setParamsResolved] = useState<{ id: string } | null>(null);
   const [converting, setConverting] = useState(false);
   const [bookAppointment, setBookAppointment] = useState(true);
@@ -71,7 +73,13 @@ export default function OnlineCounsellorLeadDetailPage({ params }: { params: Pro
 
   const handleCallOutcome = async (outcome: CrmCallOutcome) => {
     const result = await updateLeadCallOutcomeAction(lead.id, outcome);
-    if (!result.ok) alert(result.error);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    const leadStatus: CrmLeadStatus =
+      outcome === "picked" ? "call_picked" : outcome === "not_picked" ? "call_not_picked" : "fresh";
+    await updateLead(lead.id, { callOutcome: outcome, leadStatus });
   };
 
   const handleFormSubmit = async () => {
@@ -95,6 +103,12 @@ export default function OnlineCounsellorLeadDetailPage({ params }: { params: Pro
     setConverting(false);
     if (result.ok) {
       setConverted({ uhid: result.data.uhid });
+      const leadStatus: CrmLeadStatus = bookAppointment ? "appointment_booked" : "patient";
+      await updateLead(lead.id, {
+        leadStatus,
+        patientId: result.data.patientId,
+        uhid: result.data.uhid,
+      });
     } else {
       alert(result.error);
     }
@@ -225,9 +239,9 @@ export default function OnlineCounsellorLeadDetailPage({ params }: { params: Pro
           )}
 
           {/* Convert to patient — visible after wants_visit */}
-          {(currentStatus === "wants_visit" || currentStatus === "converted") && (
+          {(currentStatus === "wants_visit" || currentStatus === "converted" || currentStatus === "patient") && (
             <Panel title="Convert to patient">
-              {currentStatus === "converted" && lead.patientId ? (
+              {(currentStatus === "converted" || currentStatus === "patient") && lead.patientId ? (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-900">
                   <p className="font-medium">Converted — UHID: {lead.uhid}</p>
                   <p className="mt-1 text-[12px]">Patient is in the branch database.</p>

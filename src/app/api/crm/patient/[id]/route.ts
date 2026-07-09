@@ -50,6 +50,78 @@ export async function GET(
       take: 30,
     }).catch(() => []);
 
+    // Get packages purchased via billing handoffs and/or used in counsellor sessions
+    const [billingHandoffs, counsellorSessions] = await Promise.all([
+      prisma.billingHandoff.findMany({
+        where: { patientId: patient.id, packageId: { not: null } },
+        include: { package: true },
+        orderBy: { sentAt: "asc" },
+      }).catch(() => []),
+      prisma.counsellorSession.findMany({
+        where: { patientId: patient.id, packageId: { not: null } },
+        include: { package: true },
+        orderBy: { startedAt: "asc" },
+      }).catch(() => []),
+    ]);
+
+    const packageMap = new Map<string, {
+      package: any;
+      purchaseCount: number;
+      sessionsUsed: number;
+      firstAt: Date;
+      lastPaymentExpectation: string;
+    }>();
+
+    for (const bh of billingHandoffs) {
+      if (!bh.packageId || !bh.package) continue;
+      const existing = packageMap.get(bh.packageId);
+      if (existing) {
+        existing.purchaseCount += 1;
+        existing.sessionsUsed += 0;
+        if (bh.sentAt < existing.firstAt) existing.firstAt = bh.sentAt;
+        existing.lastPaymentExpectation = bh.paymentExpectation ?? existing.lastPaymentExpectation;
+      } else {
+        packageMap.set(bh.packageId, {
+          package: bh.package,
+          purchaseCount: 1,
+          sessionsUsed: 0,
+          firstAt: bh.sentAt,
+          lastPaymentExpectation: bh.paymentExpectation ?? "",
+        });
+      }
+    }
+
+    for (const cs of counsellorSessions) {
+      if (!cs.packageId || !cs.package) continue;
+      const existing = packageMap.get(cs.packageId);
+      if (existing) {
+        existing.sessionsUsed += 1;
+      } else {
+        packageMap.set(cs.packageId, {
+          package: cs.package,
+          purchaseCount: 0,
+          sessionsUsed: 1,
+          firstAt: cs.createdAt,
+          lastPaymentExpectation: "",
+        });
+      }
+    }
+
+    const packages = Array.from(packageMap.entries()).map(([id, entry]) => {
+      const pkg = entry.package;
+      const baseSessions = pkg.sessions ? Number(pkg.sessions) : null;
+      const totalSessions = baseSessions != null ? baseSessions * Math.max(1, entry.purchaseCount) : null;
+      return {
+        id,
+        label: pkg.label ?? "Package",
+        amount: pkg.amount ? Number(pkg.amount) : 0,
+        sessions: totalSessions,
+        sessionsUsed: entry.sessionsUsed,
+        purchasedAt: entry.firstAt.toISOString(),
+        status: entry.lastPaymentExpectation === "partial" ? "Partial" : "Purchased",
+      };
+    });
+
     return NextResponse.json({
       ok: true,
       data: serializeForClient({
@@ -102,6 +174,7 @@ export async function GET(
           advice: c.doctorAdvice ?? c.notes ?? "",
           createdAt: c.createdAt.toISOString(),
         })),
+        packages,
       }),
     });
   } catch (error) {

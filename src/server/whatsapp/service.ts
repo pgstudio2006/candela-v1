@@ -8,7 +8,8 @@ export type WhatsAppTrigger =
   | "appointment_confirmation"
   | "visit_thankyou_review"
   | "billing_invoice"
-  | "prescription_sent";
+  | "prescription_sent"
+  | "call_not_picked";
 
 export type TemplateVars = Record<string, string | number | undefined>;
 
@@ -46,14 +47,14 @@ const DEFAULT_TEMPLATES: Record<
     body:
       "Dear {{patientName}}, your prescription ({{itemCount}} items) from Dr. {{doctorName}} is ready. Please collect it from our pharmacy. Follow the dosage instructions carefully. For queries, call us.",
   },
+  call_not_picked: {
+    label: "Missed Call Follow-up",
+    body:
+      "Hello {{leadName}}, we missed your call. Let us know a convenient time to reconnect or reply to this message. We're here to help you with your healthcare needs.",
+  },
 };
 
-const GURGAON_BRANCH_ID = "branch_gurgaon";
 const GOOGLE_REVIEW_LINK = "https://www.google.com/search?q=Candela+Eye+%26+Retina+Center+Gurgaon#reviews";
-
-function isGurgaon(ctx: ServerContext): boolean {
-  return ctx.branchId === GURGAON_BRANCH_ID;
-}
 
 function interpolateTemplate(body: string, vars: TemplateVars): string {
   return body.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
@@ -147,10 +148,6 @@ export async function sendWhatsApp(
   recipient: string,
   vars: TemplateVars,
 ): Promise<SendWhatsAppResult> {
-  if (!isGurgaon(ctx)) {
-    return { ok: true, trigger, recipient, body: "", error: "Skipped: not Gurgaon branch" };
-  }
-
   if (!recipient?.trim()) {
     return { ok: false, trigger, recipient: "", body: "", error: "No recipient phone" };
   }

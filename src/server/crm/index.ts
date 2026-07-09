@@ -519,7 +519,14 @@ export async function addAgent(
   let pwd = "";
   await withOperator(ctx, operatorId, async (state, operator) => {
     assertManager(operator);
-    const result = mutateAddAgent(state, agent, password);
+    const existing = await prisma.crmOperatorCredential.findUnique({
+      where: { email: agent.email.trim().toLowerCase() },
+    });
+    if (existing && state.agents.some((a) => a.id === existing.id || a.email === agent.email.trim().toLowerCase())) {
+      throw new ServerActionError("CONFLICT", "A CRM agent with this email already exists. Edit the existing agent instead.");
+    }
+    const id = existing?.id;
+    const result = mutateAddAgent(state, agent, password, id);
     agentId = result.agentId;
     pwd = result.password;
     const created = result.state.agents.find((a) => a.id === agentId)!;

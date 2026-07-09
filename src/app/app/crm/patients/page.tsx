@@ -15,7 +15,7 @@ export default function CrmPatientsPage() {
   const convertedLeads = useMemo(() => {
     const leads = getFilteredLeads();
     return leads
-      .filter((l) => l.leadStatus === "converted" || l.patientId)
+      .filter((l) => l.leadStatus === "converted" || l.leadStatus === "patient" || l.patientId)
       .filter((l) => {
         if (!query) return true;
         const q = query.toLowerCase();

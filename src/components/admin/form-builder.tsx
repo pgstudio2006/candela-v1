@@ -2,6 +2,7 @@
 
 import {
   corruptSchemaOverrideMessage,
+  CRM_FORM_SCHEMA_IDS,
   getAnyFormSchema,
   isCorruptSchemaOverride,
   listSchemasForDepartment,
@@ -124,12 +125,20 @@ function loadSchema(id: string): FormSchema {
   return { ...loaded, id, title: catalogLabel(id) };
 }
 
-export function AdminFormBuilder() {
-  const initialDept = "frontdesk";
+export function AdminFormBuilder({
+  initialDepartment = "frontdesk",
+  initialSchemaId,
+  hideDepartmentFilter = false,
+}: {
+  initialDepartment?: FormDepartment;
+  initialSchemaId?: string;
+  hideDepartmentFilter?: boolean;
+}) {
+  const initialDept = initialDepartment;
   const initialSchemas = listSchemasForDepartment(initialDept);
-  const [activeId, setActiveId] = useState<string>(initialSchemas[0]?.id ?? "registration");
+  const [activeId, setActiveId] = useState<string>(initialSchemaId ?? initialSchemas[0]?.id ?? "registration");
   const [deptFilter, setDeptFilter] = useState<SchemaGroup>(initialDept);
-  const [schema, setSchema] = useState<FormSchema>(() => loadSchema("registration"));
+  const [schema, setSchema] = useState<FormSchema>(() => loadSchema(initialSchemaId ?? "registration"));
   const [saved, setSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -188,6 +197,7 @@ export function AdminFormBuilder() {
   const activeLabel = catalogLabel(activeId);
   const schemaLooksLikeRegistration =
     activeId !== "registration" &&
+    !CRM_FORM_SCHEMA_IDS.includes(activeId as any) &&
     (schema.sections.some((s) => s.id === "patient" || s.id === "visit" || s.id === "consent") ||
       schema.sections.flatMap((s) => s.fields).some((f) => f.id === "fullName"));
 
@@ -333,24 +343,26 @@ export function AdminFormBuilder() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--attio-text-tertiary)]">Department scope</p>
-        <div className="flex flex-wrap gap-2">
-          {FORM_DEPARTMENTS.map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDeptFilter(d)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-[12px] font-medium capitalize",
-                deptFilter === d ? "bg-[var(--attio-text)] text-white" : "border border-[var(--attio-border)]",
-              )}
-            >
-              {d}
-            </button>
-          ))}
+      {!hideDepartmentFilter && (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--attio-text-tertiary)]">Department scope</p>
+          <div className="flex flex-wrap gap-2">
+            {FORM_DEPARTMENTS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDeptFilter(d)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-[12px] font-medium capitalize",
+                  deptFilter === d ? "bg-[var(--attio-text)] text-white" : "border border-[var(--attio-border)]",
+                )}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {schemaLooksLikeRegistration && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-900">

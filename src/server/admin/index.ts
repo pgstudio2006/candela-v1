@@ -542,8 +542,9 @@ export async function updateStaff(
       }
       const updated = await prisma.adminStaff.findUnique({ where: { id } });
       if (updated) {
-        const { syncStaffUserProfile } = await import("@/server/admin/staff-onboarding");
+        const { syncStaffUserProfile, syncCrmAgentFromStaff } = await import("@/server/admin/staff-onboarding");
         await syncStaffUserProfile(ctx, updated);
+        await syncCrmAgentFromStaff(ctx, updated);
       }
     },
     {

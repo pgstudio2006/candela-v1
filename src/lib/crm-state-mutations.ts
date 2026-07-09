@@ -226,16 +226,17 @@ export function mutateAddAgent(
   state: CrmStateShape,
   agent: Omit<CrmAgent, "id">,
   password?: string,
+  id?: string,
 ): { state: CrmStateShape; agentId: string; password: string } {
-  const id = `ag_${Date.now().toString(36)}`;
+  const agentId = id?.trim() || `ag_${Date.now().toString(36)}`;
   const pwd = password?.trim() || generateAgentPassword();
   return {
-    agentId: id,
+    agentId,
     password: pwd,
     state: {
       ...state,
-      agents: [...state.agents, { ...agent, id }],
-      agentPasswords: { ...state.agentPasswords, [id]: pwd },
+      agents: [...state.agents, { ...agent, id: agentId }],
+      agentPasswords: { ...state.agentPasswords, [agentId]: pwd },
     },
   };
 }

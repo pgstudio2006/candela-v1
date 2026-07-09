@@ -2,19 +2,23 @@
 
 import { CrmLeadFormModal } from "@/components/crm/lead-form";
 import { LeadDetailPanel, LeadPipelineBoard } from "@/components/crm/lead-detail";
+import { CrmLeadFilterBar } from "@/components/crm/lead-filter-bar";
 import { useCrmStore } from "@/components/crm/crm-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton } from "@/components/frontdesk/ui";
 import type { CrmLead } from "@/design-system/crm-data";
+import { applyCrmLeadFilters, DEFAULT_CRM_LEAD_FILTER, type CrmLeadFilter } from "@/lib/crm-lead-filters";
 import { ArrowRight, Plus } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function CrmLeadsPageClient() {
   const searchParams = useSearchParams();
   const { getFilteredLeads, stages, agents, moveLeadStage, assignLeadManual, activities, followUps } = useCrmStore();
   const leads = getFilteredLeads();
+  const [filters, setFilters] = useState<CrmLeadFilter>(DEFAULT_CRM_LEAD_FILTER);
+  const filteredLeads = useMemo(() => applyCrmLeadFilters(leads, filters), [leads, filters]);
   const [selected, setSelected] = useState<CrmLead | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CrmLead | undefined>();
@@ -49,16 +53,19 @@ export default function CrmLeadsPageClient() {
         </>
       }
     >
-      <LeadPipelineBoard
-        leads={leads}
-        stages={stages}
-        agents={agents}
-        onSelect={setSelected}
-        onMoveStage={moveLeadStage}
-      />
+      <CrmLeadFilterBar filters={filters} onChange={setFilters} agents={agents} />
+      <div className="mt-4">
+        <LeadPipelineBoard
+          leads={filteredLeads}
+          stages={stages}
+          agents={agents}
+          onSelect={setSelected}
+          onMoveStage={moveLeadStage}
+        />
+      </div>
       {selected && (
         <LeadDetailPanel
-          lead={leads.find((l) => l.id === selected.id) ?? selected}
+          lead={filteredLeads.find((l) => l.id === selected.id) ?? selected}
           agent={agents.find((a) => a.id === selected.assigneeId)}
           stageLabel={stages.find((s) => s.id === selected.stageId)?.label ?? selected.stageId}
           onClose={() => setSelected(null)}

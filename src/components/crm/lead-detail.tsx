@@ -4,12 +4,19 @@ import { LeadPipelineBoard } from "@/components/crm/lead-pipeline";
 import { FollowUpScheduleModal } from "@/components/crm/follow-up-form";
 import { useCrmStore } from "@/components/crm/crm-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { CrmActivity, CrmAgent, CrmFollowUp, CrmLead } from "@/design-system/crm-data";
 import { SOURCE_LABELS } from "@/design-system/crm-data";
 import { AttioButton, StatusBadge } from "@/components/frontdesk/ui";
 import { formatStageStatus } from "@/lib/frontdesk-workflow";
 import { channelLabel, followUpDisplayStatus } from "@/lib/crm-follow-ups";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 import { getCrmLeadClinicalHistoryAction, type CrmPatientHistory } from "@/server/crm/actions";
 import { useEffect, useState } from "react";
 
@@ -230,6 +237,7 @@ export function LeadDetailPanel({
               <DetailRow label="Assignee" value={agent?.name} />
               <DetailRow label="UHID" value={lead.uhid ?? patient?.uhid} />
               <DetailRow label="Est. pipeline value" value={lead.valueEstimate ? `₹${lead.valueEstimate.toLocaleString("en-IN")}` : undefined} />
+              <DetailRow label="Capture time" value={formatRelativeTime(lead.createdAt)} />
             </dl>
 
             <p className="text-[11px] font-semibold uppercase text-[var(--attio-text-tertiary)]">Patient</p>
@@ -297,13 +305,21 @@ export function LeadDetailPanel({
 
             <div>
               <p className="mb-2 text-[11px] font-medium uppercase text-[var(--attio-text-tertiary)]">Reassign</p>
-              <div className="flex flex-wrap gap-1">
-                {agents.map((a) => (
-                  <AttioButton key={a.id} variant="secondary" className="!h-7 !text-[11px]" onClick={() => onAssign(a.id)}>
-                    {a.name}
-                  </AttioButton>
-                ))}
-              </div>
+              <Select
+                value={lead.assigneeId || undefined}
+                onValueChange={(agentId) => agentId && onAssign(agentId)}
+              >
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue placeholder="Assign to…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </TabsContent>
 

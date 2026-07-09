@@ -76,6 +76,7 @@ export type CrmLeadStatus =
   | "appointment_booked"
   | "visit_done"
   | "converted"
+  | "patient"
   | "lost";
 
 export type CrmCallOutcome = "picked" | "not_picked" | "callback" | "wrong_number";

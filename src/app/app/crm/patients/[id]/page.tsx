@@ -3,7 +3,7 @@
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Calendar, FileText, Pill, Stethoscope, User } from "lucide-react";
+import { ArrowLeft, Calendar, FileText, Package, Pill, Stethoscope, User } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -58,6 +58,15 @@ type PatientData = {
     advice: string;
     createdAt: string;
   }[];
+  packages: {
+    id: string;
+    label: string;
+    amount: number;
+    sessions: number | null;
+    sessionsUsed: number;
+    purchasedAt: string;
+    status: string;
+  }[];
 };
 
 export default function CrmPatientDetailPage() {
@@ -111,7 +120,7 @@ export default function CrmPatientDetailPage() {
     );
   }
 
-  const { patient, visits, appointments, prescriptions, consultations } = data;
+  const { patient, visits, appointments, prescriptions, consultations, packages } = data;
 
   return (
     <PageChrome
@@ -157,6 +166,7 @@ export default function CrmPatientDetailPage() {
           <TabsTrigger value="consultations">Consultations ({consultations.length})</TabsTrigger>
           <TabsTrigger value="prescriptions">Prescriptions ({prescriptions.length})</TabsTrigger>
           <TabsTrigger value="appointments">Appointments ({appointments.length})</TabsTrigger>
+          <TabsTrigger value="packages">Packages ({packages.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -284,6 +294,36 @@ export default function CrmPatientDetailPage() {
                       </div>
                     </div>
                     <StatusBadge label={a.status} variant={a.status === "scheduled" ? "info" : a.status === "completed" ? "success" : "neutral"} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="packages" className="mt-4">
+          <Panel title="Packages purchased">
+            {packages.length === 0 ? (
+              <p className="py-4 text-[13px] text-[var(--attio-text-tertiary)]">No packages purchased yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {packages.map((p) => (
+                  <li key={p.id} className="flex items-center justify-between rounded-lg border border-[var(--attio-border-subtle)] p-3 text-[13px]">
+                    <div className="flex items-center gap-2">
+                      <Package className="size-3.5 text-[var(--attio-text-tertiary)]" />
+                      <div>
+                        <p className="font-medium">{p.label}</p>
+                        <p className="text-[var(--attio-text-tertiary)]">
+                          {p.sessions != null ? `${p.sessionsUsed} / ${p.sessions} sessions used` : "Sessions: unlimited"}
+                          {" · "}
+                          {new Date(p.purchasedAt).toLocaleDateString("en-IN")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] tabular-nums">₹{p.amount.toLocaleString("en-IN")}</span>
+                      <StatusBadge label={p.status} variant="success" />
+                    </div>
                   </li>
                 ))}
               </ul>

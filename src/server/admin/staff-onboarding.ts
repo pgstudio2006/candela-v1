@@ -12,12 +12,102 @@ import { branchScope } from "@/server/tenancy";
 import { ServerActionError } from "@/server/errors";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { hashPassword } from "@/server/revenue/password";
+import { readCrmWorkspace, writeCrmWorkspace } from "@/server/workspace-state";
+import { defaultCrmState } from "@/server/revenue/state-seeds";
+import type { CrmAgent } from "@/design-system/crm-data";
 
 function newStaffId() {
   return `st_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
 export { syncDoctorToDepartments } from "@/server/admin/doctor-department-sync";
+
+/**
+ * Keeps the CRM workspace agent list and the crmOperatorCredential table in sync
+ * with admin staff. When a staff member has a CRM-related role, they become a
+ * CRM counsellor agent; when they no longer do, they are deactivated/removed.
+ */
+export async function syncCrmAgentFromStaff(
+  ctx: ServerContext,
+  staff: { id: string; name: string; email: string; role: string; active?: boolean; specialtyTags?: string[] },
+  password?: string,
+) {
+  const roleKey = moduleRoleForStaffRole(staff.role as HealthcareStaffRole);
+  const email = staff.email.trim().toLowerCase();
+
+  if (roleKey !== "crm") {
+    const existingCred = await prisma.crmOperatorCredential.findUnique({ where: { email } });
+    if (existingCred) {
+      await prisma.crmOperatorCredential.update({
+        where: { id: existingCred.id },
+        data: { active: false },
+      });
+      const state = await readCrmWorkspace(ctx, () => defaultCrmState({}));
+      const agentIdx = state.agents.findIndex((a) => a.id === staff.id || a.email === email);
+      if (agentIdx >= 0) {
+        state.agents[agentIdx] = { ...state.agents[agentIdx], active: false };
+        const { operatorId: _op, viewAsAgentId: _view, ...payload } = state;
+        await writeCrmWorkspace(ctx, payload);
+      }
+    }
+    return;
+  }
+
+  const explicitPassword = password?.trim() || generateStaffPassword();
+  const passwordHash = await hashPassword(explicitPassword);
+
+  const existingCred = await prisma.crmOperatorCredential.findUnique({ where: { email } });
+  const agentId = existingCred?.id ?? staff.id;
+
+  await prisma.crmOperatorCredential.upsert({
+    where: { id: agentId },
+    create: {
+      id: agentId,
+      name: staff.name,
+      email,
+      role: "counsellor",
+      active: staff.active ?? true,
+      specialtyTags: staff.specialtyTags ?? [],
+      maxOpenLeads: 25,
+      backupAgentId: undefined,
+      leadWeightPct: 0,
+      passwordHash,
+    },
+    update: {
+      name: staff.name,
+      email,
+      role: "counsellor",
+      active: staff.active ?? true,
+      ...(staff.specialtyTags ? { specialtyTags: staff.specialtyTags } : {}),
+      maxOpenLeads: existingCred?.maxOpenLeads ?? 25,
+      backupAgentId: existingCred?.backupAgentId ?? undefined,
+      leadWeightPct: existingCred?.leadWeightPct ?? 0,
+      ...(password ? { passwordHash } : {}),
+    },
+  });
+
+  const state = await readCrmWorkspace(ctx, () => defaultCrmState({}));
+  const agentIdx = state.agents.findIndex((a) => a.id === agentId || a.email === email);
+  const agent: CrmAgent = {
+    id: agentId,
+    name: staff.name,
+    email,
+    role: "counsellor",
+    active: staff.active ?? true,
+    specialtyTags: (staff.specialtyTags as string[]) ?? [],
+    maxOpenLeads: 25,
+    leadWeightPercent: 0,
+    backupAgentId: undefined,
+  };
+  if (agentIdx >= 0) {
+    state.agents[agentIdx] = { ...state.agents[agentIdx], ...agent };
+  } else {
+    state.agents.push(agent);
+  }
+  state.agentPasswords[agentId] = explicitPassword;
+  const { operatorId: _op, viewAsAgentId: _view, ...payload } = state;
+  await writeCrmWorkspace(ctx, payload);
+}
 
 export async function addStaffWithLogin(
   ctx: ServerContext,
@@ -133,19 +223,11 @@ export async function addStaffWithLogin(
   if (roleKey && email) {
     const passwordHashForOperator = await hashPassword(initialPassword);
     if (roleKey === "crm") {
-      await prisma.crmOperatorCredential.upsert({
-        where: { email },
-        update: { name: staffPayload.name, active: true, passwordHash: passwordHashForOperator },
-        create: {
-          id: staffId,
-          name: staffPayload.name,
-          email,
-          role: "executive",
-          active: true,
-          specialtyTags: [],
-          passwordHash: passwordHashForOperator,
-        },
-      });
+      await syncCrmAgentFromStaff(
+        ctx,
+        { id: staffId, name: staffPayload.name, email, role: staffPayload.role },
+        initialPassword,
+      );
     } else if (roleKey === "counsellor") {
       await prisma.counsellorOperatorCredential.upsert({
         where: { email },
@@ -274,19 +356,11 @@ export async function resetStaffLoginPassword(
 
   // Update module-specific operator credentials for CRM, Counsellor, Pharmacy
   if (roleKey === "crm") {
-    await prisma.crmOperatorCredential.upsert({
-      where: { email },
-      update: { name: staff.name, active: true, passwordHash },
-      create: {
-        id: staffId,
-        name: staff.name,
-        email,
-        role: "executive",
-        active: true,
-        specialtyTags: [],
-        passwordHash,
-      },
-    });
+    await syncCrmAgentFromStaff(
+      ctx,
+      { id: staffId, name: staff.name, email, role: staff.role, active: true },
+      initialPassword,
+    );
   } else if (roleKey === "counsellor") {
     await prisma.counsellorOperatorCredential.upsert({
       where: { email },
@@ -386,6 +460,12 @@ export async function removeStaffMember(ctx: ServerContext, staffId: string) {
 
   const drId = staff.role === "doctor" ? doctorIdFromStaffId(staffId) : null;
   const email = staff.email.trim().toLowerCase();
+
+  await syncCrmAgentFromStaff(
+    ctx,
+    { id: staffId, name: staff.name, email, role: staff.role, active: false },
+    undefined,
+  );
 
   if (drId) {
     await removeDoctorFromAllDepartments(drId);

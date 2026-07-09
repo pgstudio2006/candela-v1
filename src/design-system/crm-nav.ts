@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Clipboard,
   ClipboardList,
   Inbox,
   Kanban,
@@ -31,6 +32,7 @@ export const CRM_NAV: CrmNavItem[] = [
   { id: "patients", label: "Patients", href: "/app/crm/patients", icon: FileText, group: "pipeline" },
   { id: "appointments", label: "Appointments", href: "/app/crm/appointments", icon: Calendar, group: "pipeline" },
   { id: "integrations", label: "Integrations", href: "/app/crm/integrations", icon: Plug, group: "ops", managerOnly: true },
+  { id: "form-builder", label: "Lead form builder", href: "/app/crm/form-builder", icon: Clipboard, group: "ops", managerOnly: true },
   { id: "team", label: "Team & routing", href: "/app/crm/team", icon: Users, group: "ops", managerOnly: true },
   { id: "workflows", label: "Workflows", href: "/app/crm/workflows", icon: Workflow, group: "ops", managerOnly: true },
   { id: "commission", label: "Commission Slabs", href: "/app/crm/commission", icon: IndianRupee, group: "ops", managerOnly: true },

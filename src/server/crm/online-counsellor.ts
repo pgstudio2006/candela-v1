@@ -2,6 +2,7 @@ import type { CrmCallOutcome, CrmCommission, CrmLead, CrmLeadStatus } from "@/de
 import { prisma } from "@/lib/prisma";
 import type { ServerContext } from "@/server/context";
 import { writePlatformAudit } from "@/server/platform-audit";
+import { sendWhatsAppAsync } from "@/server/whatsapp/service";
 import { branchScope } from "@/server/tenancy";
 import { ServerActionError } from "@/server/errors";
 
@@ -19,6 +20,10 @@ export type MobileDetectionResult = {
   assigneeName?: string;
   patientId?: string;
   uhid?: string;
+  lead?: Partial<CrmLead> & {
+    age?: number | null;
+    valueEstimate?: number | null;
+  };
 };
 
 async function getAgentName(agentId: string): Promise<string | null> {
@@ -47,6 +52,14 @@ export async function updateLeadCallOutcome(
       lastContactAt: new Date(),
     },
   });
+
+  if (callOutcome === "not_picked" && lead.phone) {
+    sendWhatsAppAsync(ctx, "call_not_picked", lead.phone, {
+      leadName: lead.fullName ?? "there",
+    }).catch((e) => {
+      console.error("[whatsapp] missed-call message failed:", e);
+    });
+  }
 
   await prisma.activity.create({
     data: {
@@ -179,7 +192,7 @@ export async function convertLeadToPatient(
     data: {
       patientId,
       uhid,
-      leadStatus: "converted",
+      leadStatus: "patient",
     },
   });
 
@@ -260,6 +273,32 @@ export async function detectLeadByMobile(
     assigneeName: agent?.name ?? undefined,
     patientId: lead.patientId ?? undefined,
     uhid: lead.uhid ?? undefined,
+    lead: {
+      id: lead.id,
+      fullName: lead.fullName,
+      phone: lead.phone,
+      alternatePhone: lead.alternatePhone ?? undefined,
+      email: lead.email ?? undefined,
+      age: lead.age ?? undefined,
+      gender: (lead.gender as CrmLead["gender"] | undefined) ?? undefined,
+      city: lead.city ?? undefined,
+      district: lead.district ?? undefined,
+      state: lead.state ?? undefined,
+      country: lead.country ?? undefined,
+      doctorName: lead.doctorName ?? undefined,
+      appointmentDate: lead.appointmentDate?.toISOString() ?? undefined,
+      appointmentTime: lead.appointmentTime ?? undefined,
+      appointmentCentre: lead.appointmentCentre ?? undefined,
+      source: lead.source as CrmLead["source"],
+      sourceDetail: lead.sourceDetail ?? undefined,
+      specialty: lead.specialty ?? undefined,
+      valueEstimate: lead.valueEstimate ? Number(lead.valueEstimate) : undefined,
+      notes: lead.notes ?? undefined,
+      tags: lead.tags,
+      leadStatus: (lead.leadStatus ?? "fresh") as CrmLeadStatus,
+      assigneeId: lead.assigneeId ?? undefined,
+      stageId: lead.stageId,
+    },
   };
 }
 

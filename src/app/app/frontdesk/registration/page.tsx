@@ -8,9 +8,14 @@ import { AttioButton, Panel } from "@/components/frontdesk/ui";
 import { useToast } from "@/components/ui/toast-provider";
 import { useSession } from "@/components/candela/session-provider";
 import type { ReferralDoctor } from "@/design-system/admin-data";
+import type { CrmLead } from "@/design-system/crm-data";
 import { isPataudiBranch } from "@/lib/auth-types";
 import { canOverrideDuplicateAction, checkDuplicatePatientAction, getActiveReferralDoctorsAction } from "@/app/actions/clinical-actions";
-import { detectLeadByMobileAction, assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
+import {
+  detectLeadByMobileAction,
+  assignCounsellorToPatientAction,
+  convertLeadToPatientAction,
+} from "@/server/crm/online-counsellor-actions";
 import { schemaFingerprint } from "@/lib/schema-field-utils";
 import { AlertTriangle, LogIn, UserCheck } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +31,10 @@ type LeadDetection = {
   assigneeName?: string;
   patientId?: string;
   uhid?: string;
+  lead?: Partial<CrmLead> & {
+    age?: number | null;
+    valueEstimate?: number | null;
+  };
 };
 
 export default function RegistrationPage() {
@@ -39,6 +48,7 @@ export default function RegistrationPage() {
   const [phoneWarning, setPhoneWarning] = useState<DuplicateInfo | null>(null);
   const [canOverrideDuplicate, setCanOverrideDuplicate] = useState(false);
   const [leadDetection, setLeadDetection] = useState<LeadDetection | null>(null);
+  const [appliedLeadId, setAppliedLeadId] = useState<string | null>(null);
   const [assignCounsellor, setAssignCounsellor] = useState(false);
   const [counsellorName, setCounsellorName] = useState("");
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
@@ -84,6 +94,7 @@ export default function RegistrationPage() {
     const leadResult = await detectLeadByMobileAction(phone);
     if (leadResult.ok) {
       setLeadDetection(leadResult.data);
+      setAppliedLeadId(null);
       if (leadResult.data.found && leadResult.data.assigneeName) {
         setCounsellorName(leadResult.data.assigneeName);
         setAssignCounsellor(true);
@@ -98,6 +109,56 @@ export default function RegistrationPage() {
   }, [draft.phone, checkPhone]);
 
   const schema = useFrontdeskFormSchema("registration", roster, undefined, referralDoctors);
+
+  const appointmentCentreValues = new Set(
+    schema.sections
+      .flatMap((s) => s.fields)
+      .filter((f) => f.id === "appointmentCentre")
+      .flatMap((f) => (f.options ?? []).map((o) => o.value)),
+  );
+
+  const leadToRegistrationValues = (
+    lead: Partial<CrmLead> & { age?: number | null; valueEstimate?: number | null },
+  ): Record<string, string | number | boolean> => {
+    const values: Record<string, string | number | boolean> = {};
+    if (lead.fullName) values.fullName = lead.fullName;
+    if (lead.phone) values.phone = lead.phone;
+    if (lead.alternatePhone) values.alternatePhone = lead.alternatePhone;
+    if (lead.email) values.email = lead.email;
+    if (lead.gender) {
+      const genderMap: Record<string, string> = { male: "M", female: "F", other: "O", prefer_not: "O" };
+      values.gender = genderMap[lead.gender] ?? "O";
+    }
+    if (lead.age != null && typeof lead.age === "number") {
+      const today = new Date();
+      const dob = new Date(today.getFullYear() - lead.age, today.getMonth(), today.getDate());
+      values.dob = dob.toISOString().split("T")[0];
+    }
+    if (lead.country) values.country = lead.country;
+    if (lead.state) values.state = lead.state;
+    if (lead.district) values.district = lead.district;
+    if (lead.city) values.city = lead.city;
+    if (lead.appointmentCentre && appointmentCentreValues.has(lead.appointmentCentre)) {
+      values.appointmentCentre = lead.appointmentCentre;
+    }
+    if (lead.notes) values.notes = lead.notes;
+    if (lead.specialty && roster) {
+      const specialty = lead.specialty.toLowerCase();
+      const dept = roster.departments.find(
+        (d) => d.label.toLowerCase().includes(specialty) || d.id.toLowerCase().includes(specialty),
+      );
+      if (dept) values.department = dept.id;
+    }
+    return values;
+  };
+
+  const appliedLead = leadDetection?.leadId === appliedLeadId ? leadDetection?.lead : undefined;
+  const registrationInitialValues = {
+    ...initialValues,
+    ...(appliedLead ? leadToRegistrationValues(appliedLead) : {}),
+  };
+
+  const formKey = `registration-${schemaFingerprint(schema)}-${appliedLeadId || "new"}`;
 
   const normalizeReferralDoctor = (
     data: Record<string, string | number | boolean>,
@@ -146,6 +207,13 @@ export default function RegistrationPage() {
 
     await saveSubmission("registration", data, { patientId: result.patientId, visitId: result.visitId });
     setSavedUhid(result.uhid);
+
+    if (leadDetection?.leadId && !leadDetection.uhid) {
+      const convertResult = await convertLeadToPatientAction(leadDetection.leadId, { bookAppointment: false });
+      if (!convertResult.ok) {
+        toast(`Patient registered but lead conversion failed: ${convertResult.error}`, "error");
+      }
+    }
 
     if (assignCounsellor && counsellorName.trim()) {
       const leadId = leadDetection?.leadId ?? "";
@@ -202,8 +270,8 @@ export default function RegistrationPage() {
         <Panel title="Patient details">
           <PublishedSchemaForm
             schema={schema}
-            formKey={`registration-${schemaFingerprint(schema)}`}
-            initialValues={initialValues}
+            formKey={formKey}
+            initialValues={registrationInitialValues}
             submitLabel={
               submitting
                 ? "Saving…"
@@ -282,6 +350,14 @@ export default function RegistrationPage() {
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap gap-2">
+                    <AttioButton
+                      variant="primary"
+                      className="h-8 text-[11px]"
+                      disabled={!leadDetection.lead || leadDetection.leadId === appliedLeadId}
+                      onClick={() => leadDetection.leadId && setAppliedLeadId(leadDetection.leadId)}
+                    >
+                      {leadDetection.leadId === appliedLeadId ? "Lead applied" : "Lead to Patient"}
+                    </AttioButton>
                     <Link href={`/app/crm/leads/${leadDetection.leadId}`}>
                       <AttioButton variant="secondary" className="h-8 text-[11px]">
                         Open lead
