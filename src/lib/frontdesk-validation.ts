@@ -24,16 +24,26 @@ function normalizeGender(value: unknown): "M" | "F" | "O" {
 export function normalizeRegisterPatientInput(
   data: Record<string, string | number | boolean>,
 ): Record<string, string | number | boolean> {
-  const fullName = asString(data.fullName ?? data.name);
+  let fullName = asString(data.fullName ?? data.name);
+  const firstName = asString(data.firstName ?? data.first_name);
+  const lastName = asString(data.lastName ?? data.last_name);
+
+  if (!fullName && (firstName || lastName)) {
+    fullName = `${firstName} ${lastName}`.trim();
+  }
+
   const nameParts = fullName.split(/\s+/).filter(Boolean);
   const firstFromFull = nameParts[0] ?? "";
   const lastFromFull = nameParts.slice(1).join(" ");
 
+  const normalizedFirstName = firstName || firstFromFull;
+  const normalizedLastName = lastName || lastFromFull;
+
   return {
     ...data,
-    fullName,
-    firstName: asString(data.firstName ?? data.first_name) || firstFromFull,
-    lastName: asString(data.lastName ?? data.last_name) || lastFromFull,
+    fullName: fullName || `${normalizedFirstName} ${normalizedLastName}`.trim(),
+    firstName: normalizedFirstName,
+    lastName: normalizedLastName,
     phone: asString(data.phone ?? data.mobile),
     alternatePhone: asString(data.alternatePhone ?? data.alternate_phone),
     email: data.email === undefined ? "" : asString(data.email),

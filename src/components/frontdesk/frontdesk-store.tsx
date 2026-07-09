@@ -148,7 +148,7 @@ async function loadClinicalSnapshot(): Promise<ClinicalSnapshotResult> {
   }
 }
 
-async function clinicalMutate(body: Record<string, unknown>): Promise<{ ok: boolean; data?: any; error?: string }> {
+async function clinicalMutate(body: Record<string, unknown>): Promise<{ ok: boolean; data?: any; error?: string; code?: string }> {
   try {
     const res = await fetch("/api/clinical/mutate", {
       method: "POST",
@@ -323,7 +323,7 @@ export function FrontdeskStoreProvider({ children }: { children: ReactNode }) {
           emergency: opts?.emergency,
         });
         if (!serverResult.ok) {
-          return { ok: false, error: serverResult.error!, code: "INTERNAL_ERROR" };
+          return { ok: false, error: serverResult.error!, code: String(serverResult.code ?? "INTERNAL_ERROR") };
         }
         await refresh();
         return {

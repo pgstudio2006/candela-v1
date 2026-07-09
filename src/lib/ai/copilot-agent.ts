@@ -2,6 +2,11 @@ import { openRouterChat, type ChatMessage } from "@/lib/ai/openrouter-client";
 import { copilotRouteCatalogForPrompt, normalizeCopilotHref } from "@/lib/ai/copilot-routes";
 import type { CopilotAction, CopilotContext, CopilotMessage } from "@/lib/ai/scribe-types";
 
+function asString(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+}
+
 const COPILOT_TOOLS = [
   {
     type: "function" as const,
@@ -56,9 +61,9 @@ const COPILOT_TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          firstName: { type: "string", description: "Patient first name" },
+          firstName: { type: "string", description: "Patient first name (required)" },
           lastName: { type: "string" },
-          fullName: { type: "string", description: "Use if first/last not split" },
+          fullName: { type: "string", description: "Use if first/last not split; firstName will be derived from it" },
           phone: { type: "string", description: "10-digit mobile" },
           gender: { type: "string", enum: ["M", "F", "O", "male", "female", "other"] },
           department: { type: "string", description: "Department id e.g. dept_spine" },
@@ -66,7 +71,7 @@ const COPILOT_TOOLS = [
           age: { type: "number" },
           email: { type: "string" },
         },
-        required: ["phone"],
+        required: ["phone", "firstName"],
       },
     },
   },
@@ -134,8 +139,12 @@ function parseToolActions(name: string, argsRaw: string, ctx: CopilotContext): C
 
   if (name === "register_patient") {
     const data = args as Record<string, string | number | boolean>;
-    if (!data.phone && !data.fullName && !data.firstName) return [];
-    return [{ type: "register_patient", data }];
+    const phone = asString(data.phone ?? data.mobile);
+    const firstName = asString(data.firstName ?? data.first_name);
+    const lastName = asString(data.lastName ?? data.last_name);
+    const fullName = asString(data.fullName ?? data.name);
+    if (!phone || (!firstName && !fullName)) return [];
+    return [{ type: "register_patient", data: { ...data, phone, firstName, lastName, fullName } }];
   }
 
   return [];

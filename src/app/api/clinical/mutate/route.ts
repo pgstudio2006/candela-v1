@@ -144,13 +144,13 @@ export async function POST(request: Request) {
       throwIfPrismaError(error);
     } catch (mapped) {
       if (mapped instanceof ServerActionError) {
-        return NextResponse.json({ ok: false, error: mapped.message }, { status: 400 });
+        return NextResponse.json({ ok: false, error: mapped.message, code: mapped.code }, { status: 400 });
       }
     }
     if (error instanceof ServerActionError) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: false, error: error.message, code: error.code }, { status: 400 });
     }
     const msg = error instanceof Error ? error.message : "Something went wrong.";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, error: msg, code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
