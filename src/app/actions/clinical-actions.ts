@@ -21,6 +21,7 @@ import {
   searchPatientsPaginated,
   updatePatient,
 } from "@/server/clinical";
+import { getVisitInvoiceForBilling } from "@/server/invoicing";
 import { requireAuth, requireModule } from "@/server/auth";
 import { runAction, type ActionResult } from "@/server/action-result";
 import type { ClinicalSnapshot } from "@/server/clinical";
@@ -88,6 +89,11 @@ export async function processBillingAction(
 ): Promise<BillingResult> {
   const ctx = await requireModule("frontdesk");
   return processBilling(ctx, visitId, data);
+}
+
+export async function getVisitBillingAction(visitId: string) {
+  const ctx = await requireModule("frontdesk");
+  return getVisitInvoiceForBilling(ctx, visitId);
 }
 
 export async function processCounselBillingAction(

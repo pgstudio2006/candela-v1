@@ -9,6 +9,47 @@ import type { ServerContext } from "@/server/context";
 import { branchScope } from "@/server/tenancy";
 import { ServerActionError } from "@/server/errors";
 
+export async function getVisitInvoiceForBilling(ctx: ServerContext, visitId: string) {
+  const scope = branchScope(ctx);
+  const invoice = await prisma.invoice.findFirst({
+    where: { visitId, ...scope },
+    include: {
+      lines: { orderBy: { createdAt: "asc" } },
+      payments: { orderBy: { paidAt: "asc" } },
+    },
+  });
+  if (!invoice) return null;
+  const payload = (invoice.payload as Record<string, unknown> | null) ?? {};
+  return {
+    status: invoice.status,
+    totalAmount: Number(invoice.totalAmount),
+    amountPaid: Number(invoice.amountPaid),
+    balanceAmount: Number(invoice.balanceAmount),
+    subtotal: Number(invoice.subtotal),
+    discount: Number(invoice.discount),
+    taxAmount: Number(invoice.taxAmount),
+    paymentScope: invoice.paymentScope,
+    paymentMode: invoice.payments[0]?.mode ?? "",
+    paymentSplits: (payload.paymentSplits ?? []) as { mode: string; amount: number }[],
+    packageLines: (payload.packageLines ?? []) as {
+      packageId: string;
+      label: string;
+      amount: number;
+      quantity: number;
+    }[],
+    lines: invoice.lines.map((l) => ({
+      label: l.label,
+      quantity: l.quantity,
+      unitPrice: Number(l.unitPrice),
+      taxPercent: Number(l.taxPercent),
+      lineTotal: Number(l.lineTotal),
+    })),
+    gst: payload.gst as Record<string, unknown> | undefined,
+    discountMode: payload.discountMode as "amount" | "percent" | undefined,
+    discountPercent: payload.discountPercent as number | undefined,
+  };
+}
+
 export async function upsertVisitInvoice(
   ctx: ServerContext,
   input: {
@@ -25,6 +66,7 @@ export async function upsertVisitInvoice(
     lines?: { label: string; quantity: number; taxableAmount: number }[];
     paymentSplits?: { mode: string; amount: number }[];
     gstOverride?: Partial<Pick<GstSettings, "gstRatePercent" | "taxMode">>;
+    packageLines?: { packageId: string; label: string; amount: number; quantity: number }[];
   },
   tx: Prisma.TransactionClient = prisma,
 ) {
@@ -77,6 +119,7 @@ export async function upsertVisitInvoice(
         paymentSplits: input.paymentSplits ?? [],
         discountMode: input.discountMode,
         discountPercent: input.discountPercent,
+        packageLines: input.packageLines ?? [],
       },
     },
     update: {
@@ -96,6 +139,7 @@ export async function upsertVisitInvoice(
         paymentSplits: input.paymentSplits ?? [],
         discountMode: input.discountMode,
         discountPercent: input.discountPercent,
+        packageLines: input.packageLines ?? [],
       },
     },
   });

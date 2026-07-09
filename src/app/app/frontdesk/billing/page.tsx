@@ -58,7 +58,7 @@ function BillingContent() {
   const resolveVisitForPatient = (patient: Patient) => {
     const visits = getPatientVisits(patient.id);
     const billable = visits.find(
-      (v) => v.stage === "billing" || v.billing === "pending" || v.billing === "deferred",
+      (v) => v.stage === "billing" || v.billing === "pending" || v.billing === "deferred" || v.billing === "partial",
     );
     return billable ?? visits[visits.length - 1];
   };
@@ -74,10 +74,16 @@ function BillingContent() {
     routeHref: string;
     routingNote: string;
     visitId: string;
+    finalized?: boolean;
   }) => {
     setRoutingFlash(result.routingNote);
-    setReceiptVisitId(result.visitId);
-    setPendingRoute(result.routeHref);
+    if (result.finalized) {
+      setReceiptVisitId(result.visitId);
+      setPendingRoute(result.routeHref);
+    } else {
+      setPendingRoute(null);
+      setReceiptVisitId(null);
+    }
   };
 
   const finishBilling = async (resultPromise: ReturnType<typeof processBilling>) => {

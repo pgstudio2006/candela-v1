@@ -15,6 +15,7 @@ import {
   billingSubtotal,
   parseOpdBillingPayload,
   primaryPaymentMode,
+  type PaymentSplit,
 } from "@/lib/opd-billing";
 import { buildPatientRegistrationPayload } from "@/lib/registration-meta";
 import { computeGstInvoice, parseBranchGstSettings } from "@/lib/gst-invoicing";
@@ -66,6 +67,7 @@ export type BillingResult = {
   invoiceNumber: string;
   paymentMode: string;
   token?: number;
+  finalized?: boolean;
 };
 
 export type ClinicalSnapshot = {
@@ -825,10 +827,28 @@ export async function processBilling(
   });
 
   const net = gstInvoice.grandTotal;
-  const collected = billingCollectedTotal(payload, net);
-  const balanceDue = Math.max(0, net - collected);
 
-  const route = resolveOpdFirstRoute({ paymentScope, mode, visitId, netAmount: net, collected });
+  // Load any existing invoice so partial payments can accumulate.
+  const existingInvoice = await prisma.invoice.findUnique({
+    where: { visitId },
+    include: { payments: true },
+  });
+  const previousPaid = existingInvoice ? Number(existingInvoice.amountPaid) : (visit.amountPaid ?? 0);
+  const previousBalance = visit.balanceDue ?? 0;
+  const currentCollected = billingCollectedTotal(payload, net);
+  const totalPaid = previousPaid + currentCollected;
+  const remainingBalance = Math.max(0, net - totalPaid);
+  const isFinal = remainingBalance === 0 && totalPaid > 0;
+
+  const route =
+    paymentScope === "defer" || payload.skipBilling
+      ? resolveOpdFirstRoute({ paymentScope: "defer", mode: "defer", visitId, netAmount: net, collected: 0 })
+      : isFinal
+        ? resolveOpdFirstRoute({ paymentScope: "full", mode, visitId, netAmount: net, collected: totalPaid })
+        : resolveOpdFirstRoute({ paymentScope: "partial", mode, visitId, netAmount: net, collected: currentCollected });
+
+  const invoicePaymentScope = payload.skipBilling || paymentScope === "defer" ? "defer" : isFinal ? "full" : "partial";
+
   const maxToken = await prisma.opdVisit.aggregate({
     where: branchScope(ctx),
     _max: { token: true },
@@ -842,20 +862,29 @@ export async function processBilling(
   const assignedDoctorId = data.doctorId ? String(data.doctorId) : undefined;
   const assignedDoctorName = data.doctorName ? String(data.doctorName) : undefined;
 
+  // Merge prior payment splits with the new ones so the invoice keeps the full history.
+  const priorPayload = (existingInvoice?.payload as Record<string, unknown> | null) ?? {};
+  const priorSplits: PaymentSplit[] = Array.isArray(priorPayload.paymentSplits)
+    ? (priorPayload.paymentSplits as PaymentSplit[])
+    : existingInvoice?.payments.map((p) => ({ mode: p.mode, amount: Number(p.amount) })) ?? [];
+  const accumulatedSplits: PaymentSplit[] = [...priorSplits, ...payload.paymentSplits];
+
   await prisma.$transaction(async (tx) => {
+    // Adjust patient balance by the change in outstanding balance, not the whole balance.
+    const balanceDelta = remainingBalance - previousBalance;
     await tx.patient.update({
       where: { id: visit.patientId },
-      data: { balance: { increment: balanceDue } },
+      data: { balance: { increment: balanceDelta } },
     });
     await tx.opdVisit.update({
       where: { id: visitId },
       data: {
         stage: route.stage,
-        billing: billingFromPayment(paymentScope, mode),
+        billing: isFinal ? "paid" : billingFromPayment(paymentScope, mode),
         token: assignedToken,
         billAmount: net,
-        amountPaid: collected,
-        balanceDue: balanceDue > 0 ? balanceDue : null,
+        amountPaid: totalPaid,
+        balanceDue: remainingBalance > 0 ? remainingBalance : null,
         treatmentPath: "opd",
         routingNote: route.routingNote,
         deferredReason:
@@ -868,7 +897,7 @@ export async function processBilling(
         ...(assignedDoctorId ? { doctorId: assignedDoctorId, doctorName: assignedDoctorName } : {}),
       },
     });
-    if (payload.packageLines.length > 0 || collected > 0) {
+    if (payload.packageLines.length > 0 || totalPaid > 0) {
       await upsertVisitInvoice(
         ctx,
         {
@@ -879,19 +908,20 @@ export async function processBilling(
           discount: payload.discount,
           discountMode: payload.discountMode,
           discountPercent: payload.discountPercent,
-          collected,
-          mode,
-          paymentScope,
+          collected: totalPaid,
+          mode: isFinal ? primaryPaymentMode({ ...payload, paymentSplits: accumulatedSplits }) : mode,
+          paymentScope: invoicePaymentScope,
           lines: payload.packageLines.map((line) => ({
             label: line.label,
             quantity: line.quantity,
             taxableAmount: line.amount * line.quantity,
           })),
-          paymentSplits: payload.paymentSplits,
+          paymentSplits: accumulatedSplits,
           gstOverride: {
             gstRatePercent: payload.gstRatePercent,
             taxMode: gstTaxMode,
           },
+          packageLines: payload.packageLines,
         },
         tx,
       );
@@ -912,20 +942,22 @@ export async function processBilling(
 
   const invoice = await prisma.invoice.findUnique({ where: { visitId } });
 
-  // WhatsApp: send billing invoice to patient (Gurgaon only)
-  try {
-    const patient = await prisma.patient.findUnique({ where: { id: visit.patientId } });
-    if (patient?.phone) {
-      await sendWhatsAppAsync(ctx, "billing_invoice", patient.phone, {
-        patientName: patient.name ?? patient.fullName ?? "Patient",
-        invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
-        amount: net,
-        paymentStatus: paymentScope === "defer" ? "Deferred" : collected >= net ? "Paid" : "Partial",
-        balanceDue: balanceDue,
-      });
+  // WhatsApp: only send invoice confirmation once the bill is fully paid.
+  if (isFinal) {
+    try {
+      const patient = await prisma.patient.findUnique({ where: { id: visit.patientId } });
+      if (patient?.phone) {
+        await sendWhatsAppAsync(ctx, "billing_invoice", patient.phone, {
+          patientName: patient.name ?? patient.fullName ?? "Patient",
+          invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
+          amount: net,
+          paymentStatus: "Paid",
+          balanceDue: 0,
+        });
+      }
+    } catch (e) {
+      console.error("[whatsapp] billing trigger failed:", e);
     }
-  } catch (e) {
-    console.error("[whatsapp] billing trigger failed:", e);
   }
 
   return {
@@ -936,6 +968,7 @@ export async function processBilling(
     invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
     paymentMode: mode,
     token: assignedToken,
+    finalized: isFinal,
   };
 }
 

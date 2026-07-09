@@ -111,10 +111,10 @@ export function resolveOpdFirstRoute(input: {
   if (billing === "partial") {
     return {
       billing,
-      stage: "junior_exam",
-      routingLabel: "Partial · released to junior exam",
-      routeHref: "/app/frontdesk/queue",
-      routingNote: `₹${input.collected.toLocaleString("en-IN")} collected · ₹${balance.toLocaleString("en-IN")} balance tracked. Patient proceeds to junior exam.`,
+      stage: "billing",
+      routingLabel: "Partial · balance due",
+      routeHref: "/app/frontdesk/billing",
+      routingNote: `₹${input.collected.toLocaleString("en-IN")} collected · ₹${balance.toLocaleString("en-IN")} balance tracked. Patient stays in billing until full payment.`,
     };
   }
   return {

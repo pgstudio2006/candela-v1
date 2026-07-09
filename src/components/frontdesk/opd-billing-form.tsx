@@ -11,6 +11,7 @@ import {
   fetchServiceChargesFromAPI,
   type BillingPackage,
 } from "@/lib/billing-packages";
+import { getVisitBillingAction } from "@/app/actions/clinical-actions";
 import { computeGstInvoice } from "@/lib/gst-invoicing";
 import type { BillingPackageLine, PaymentSplit } from "@/lib/opd-billing";
 import { resolveBillingDiscount } from "@/lib/opd-billing";
@@ -107,6 +108,8 @@ export function OpdBillingForm({
   const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([
     { mode: "cash", amount: 0 },
   ]);
+  const [previousPayments, setPreviousPayments] = useState<PaymentSplit[]>([]);
+  const [existingInvoice, setExistingInvoice] = useState<null | Awaited<ReturnType<typeof getVisitBillingAction>>>(null);
   const [billingMeta, setBillingMeta] = useState<Record<string, string | number | boolean>>({});
 
   const subtotal = lines.reduce((s, l) => s + l.amount * l.quantity, 0);
@@ -149,7 +152,61 @@ export function OpdBillingForm({
   };
 
   const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const balanceAfterPay = Math.max(0, net - splitTotal);
+  const previousPaid = previousPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const balanceAfterPay = Math.max(0, net - previousPaid - splitTotal);
+
+  useEffect(() => {
+    if (!visit?.id) {
+      setExistingInvoice(null);
+      setPreviousPayments([]);
+      return;
+    }
+    let cancelled = false;
+    void getVisitBillingAction(visit.id).then((inv) => {
+      if (cancelled) return;
+      if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
+        setExistingInvoice(inv);
+        setPreviousPayments(inv.paymentSplits);
+        if (inv.packageLines?.length) {
+          setLines(
+            inv.packageLines.map((l) => ({
+              ...l,
+              key: `${l.packageId}_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            })),
+          );
+        } else if (inv.lines?.length) {
+          setLines(
+            inv.lines.map((l, i) => ({
+              packageId: `line_${i}`,
+              label: l.label,
+              amount: l.quantity > 0 ? l.unitPrice / l.quantity : l.unitPrice,
+              quantity: l.quantity,
+              key: `reconstructed_${i}_${Date.now()}`,
+            })),
+          );
+        }
+        if (inv.discountMode) {
+          setDiscountMode(inv.discountMode);
+          if (inv.discountMode === "percent") setDiscountPercent(inv.discountPercent ?? 0);
+          else setDiscount(inv.discount ?? 0);
+        }
+        if (inv.gst && typeof inv.gst === "object") {
+          const g = inv.gst as Record<string, unknown>;
+          setGstRatePercent(Number(g.gstRatePercent ?? 0));
+          const taxMode = String(g.taxMode ?? "exempt");
+          setGstTaxMode(taxMode === "cgst_sgst" || taxMode === "igst" ? (taxMode as typeof gstTaxMode) : "exempt");
+        }
+        setPaymentScope("partial");
+        setPaymentSplits([{ mode: inv.paymentMode || "cash", amount: inv.balanceAmount }]);
+      } else {
+        setExistingInvoice(null);
+        setPreviousPayments([]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visit?.id, visit?.amountPaid, visit?.balanceDue, visit?.billing]);
 
   const handleSubmit = () => {
     if (!patient || !visit) return;
@@ -239,6 +296,7 @@ export function OpdBillingForm({
               <input
                 type="checkbox"
                 checked={skipBilling}
+                disabled={Boolean(existingInvoice)}
                 onChange={(e) => {
                   setSkipBilling(e.target.checked);
                   if (e.target.checked) setPaymentScope("defer");
@@ -255,6 +313,7 @@ export function OpdBillingForm({
                   <Label className="text-[12px]">Select service</Label>
                   <Select
                     value=""
+                    disabled={Boolean(existingInvoice)}
                     onValueChange={(value) => {
                       const svc = services.find((s) => s.id === value);
                       if (svc) setLines((prev) => [...prev, lineFromPackage(svc)]);
@@ -297,6 +356,7 @@ export function OpdBillingForm({
                   <Label className="text-[12px]">Select package</Label>
                   <Select
                     value=""
+                    disabled={Boolean(existingInvoice)}
                     onValueChange={(value) => {
                       const pkg = packages.find((p) => p.id === value);
                       if (pkg) setLines((prev) => [...prev, lineFromPackage(pkg)]);
@@ -353,6 +413,7 @@ export function OpdBillingForm({
                           <Input
                             type="number"
                             min={1}
+                            readOnly={Boolean(existingInvoice)}
                             value={line.quantity}
                             onChange={(e) =>
                               setLines((prev) =>
@@ -371,6 +432,7 @@ export function OpdBillingForm({
                           <Input
                             type="number"
                             min={0}
+                            readOnly={Boolean(existingInvoice)}
                             value={line.amount}
                             onChange={(e) =>
                               setLines((prev) =>
@@ -386,8 +448,9 @@ export function OpdBillingForm({
                         </div>
                         <button
                           type="button"
+                          disabled={Boolean(existingInvoice)}
                           onClick={() => setLines((prev) => prev.filter((l) => l.key !== line.key))}
-                          className="self-end rounded p-1 text-red-600 hover:bg-red-50"
+                          className="self-end rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-40"
                         >
                           <Trash2 className="size-4" />
                         </button>
@@ -427,6 +490,7 @@ export function OpdBillingForm({
                       type="number"
                       min={0}
                       step={0.5}
+                      readOnly={Boolean(existingInvoice)}
                       value={discountPercent}
                       onChange={(e) =>
                         setDiscountPercent(Math.max(0, Number(e.target.value) || 0))
@@ -438,6 +502,7 @@ export function OpdBillingForm({
                     <Input
                       type="number"
                       min={0}
+                      readOnly={Boolean(existingInvoice)}
                       value={discount}
                       onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
                       className="h-9 text-[13px]"
@@ -456,6 +521,7 @@ export function OpdBillingForm({
                     min={0}
                     max={100}
                     step={0.5}
+                    readOnly={Boolean(existingInvoice)}
                     value={gstRatePercent}
                     onChange={(e) => {
                       const rate = Math.max(0, Number(e.target.value) || 0);
@@ -469,6 +535,7 @@ export function OpdBillingForm({
                   <Label className="text-[12px]">GST type</Label>
                   <Select
                     value={effectiveGstMode}
+                    disabled={Boolean(existingInvoice)}
                     onValueChange={(v) => v && setGstTaxMode(v as typeof gstTaxMode)}
                   >
                     <SelectTrigger className="h-9 text-[13px]">
@@ -512,7 +579,7 @@ export function OpdBillingForm({
 
               <Panel title="Payment">
                 <div className="mb-4 flex flex-wrap gap-2">
-                  {(
+                  {!existingInvoice && (
                     [
                       { id: "full" as const, label: "Full payment" },
                       { id: "partial" as const, label: "Partial payment" },
@@ -534,6 +601,20 @@ export function OpdBillingForm({
                     </button>
                   ))}
                 </div>
+
+                {existingInvoice && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-900">
+                    <p className="font-medium">Partial payment already recorded</p>
+                    <p className="mt-1">
+                      Paid so far: ₹{previousPaid.toLocaleString("en-IN")} · Total: ₹
+                      {net.toLocaleString("en-IN")} · Balance: ₹
+                      {(net - previousPaid).toLocaleString("en-IN")}
+                    </p>
+                    <p className="mt-1 text-[11px]">
+                      Collect the remaining balance below. Billing lines are locked to prevent changes.
+                    </p>
+                  </div>
+                )}
 
                 {paymentScope === "defer" && (
                   <div className="space-y-1.5">
@@ -596,8 +677,9 @@ export function OpdBillingForm({
                       Add payment mode
                     </AttioButton>
                     <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                      Collecting ₹{splitTotal.toLocaleString("en-IN")} of ₹{net.toLocaleString("en-IN")}
-                      {balanceAfterPay > 0 && ` · Balance ₹${balanceAfterPay.toLocaleString("en-IN")} on ledger`}
+                      Collecting ₹{splitTotal.toLocaleString("en-IN")} of balance ₹
+                      {(net - previousPaid).toLocaleString("en-IN")}
+                      {balanceAfterPay > 0 && ` · Balance after this payment ₹${balanceAfterPay.toLocaleString("en-IN")}`}
                     </p>
                   </div>
                 )}
@@ -652,7 +734,11 @@ export function OpdBillingForm({
             disabled={!skipBilling && lines.length === 0}
             onClick={handleSubmit}
           >
-            {skipBilling ? "Skip billing & release to queue" : submitLabel}
+            {skipBilling
+              ? "Skip billing & release to queue"
+              : existingInvoice
+                ? "Collect balance & generate bill"
+                : submitLabel}
           </AttioButton>
         </>
       )}

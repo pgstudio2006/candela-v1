@@ -555,8 +555,8 @@ export function FrontdeskStoreProvider({ children }: { children: ReactNode }) {
           .filter((x) => x.patient),
       getPendingBilling: () =>
         state.visits
-          .filter((v) => v.stage === "billing" || v.billing === "pending" || v.billing === "deferred")
-          .filter((v) => v.billing !== "paid" && v.billing !== "partial")
+          .filter((v) => v.stage === "billing" || v.billing === "pending" || v.billing === "deferred" || v.billing === "partial")
+          .filter((v) => v.billing !== "paid" && (v.billing !== "partial" || (v.balanceDue ?? 0) > 0))
           .filter((v) => v.stage !== "with_doctor" && v.stage !== "completed")
           .map((v) => ({ visit: v, patient: getPatient(v.patientId)! }))
           .filter((x) => x.patient),
