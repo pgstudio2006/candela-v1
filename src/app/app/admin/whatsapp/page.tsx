@@ -287,7 +287,7 @@ export default function WhatsAppTemplatesPage() {
               <ul className="mt-2 space-y-1">
                 <li><code>WHATSAPP_API_TOKEN</code> — Your TeleCRM API access token</li>
                 <li><code>WHATSAPP_API_BASE_URL</code> — TeleCRM API URL (default: https://next-api.telecrm.in/waca)</li>
-                <li><code>WHATSAPP_PHONE_NUMBER_ID</code> — Phone number ID from TeleCRM/Meta (optional — if TeleCRM uses a single number)</li>
+                <li><code>WHATSAPP_PHONE_NUMBER_ID</code> — Phone number ID from TeleCRM WACA (required). Use the numeric ID shown in your TeleCRM WhatsApp number/account settings.</li>
                 <li><code>WHATSAPP_WEBHOOK_VERIFY_TOKEN</code> — Your TeleCRM webhook verify token</li>
               </ul>
               <p className="mt-2">Our webhook receiver: <code>/api/whatsapp/webhook</code></p>

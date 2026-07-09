@@ -107,15 +107,20 @@ export async function deliverWhatsApp(
     return { ok: false, provider: "telecrm-waca", detail: "WHATSAPP_API_TOKEN not configured" };
   }
 
+  if (!phoneNumberId) {
+    return {
+      ok: false,
+      provider: "telecrm-waca",
+      detail: "WHATSAPP_PHONE_NUMBER_ID is required. Copy the Phone Number ID from your TeleCRM WACA account and add it to environment variables.",
+    };
+  }
+
   // Normalize phone: strip non-digits, ensure country code
   const phone = recipient.replace(/\D/g, "");
   const to = phone.length === 10 ? `91${phone}` : phone;
 
   // TeleCRM WACA endpoint: {baseUrl}/{phoneNumberId}/messages
-  // If no phoneNumberId, use {baseUrl}/messages
-  const url = phoneNumberId
-    ? `${baseUrl}/${phoneNumberId}/messages`
-    : `${baseUrl}/messages`;
+  const url = `${baseUrl}/${phoneNumberId}/messages`;
 
   const res = await fetch(url, {
     method: "POST",
