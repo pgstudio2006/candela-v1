@@ -10,7 +10,7 @@ import {
   formatDuration,
   formatFrequency,
   wrapText,
-} from "@/lib/prescription-pdf";
+} from "@/lib/prescription-pdf-shared";
 
 const SAINI_IMAGE_URL = "/templates/Letterhead Dr. Sunil Saini.jpg.jpeg";
 
