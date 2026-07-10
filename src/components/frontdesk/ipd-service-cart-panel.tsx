@@ -152,6 +152,8 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
                         placeholder="Search services…"
                         value={serviceSearch}
                         onChange={(e) => setServiceSearch(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        onKeyUp={(e) => e.stopPropagation()}
                         className="h-8 text-[12px]"
                       />
                     </div>
@@ -192,6 +194,8 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
                         placeholder="Search packages…"
                         value={packageSearch}
                         onChange={(e) => setPackageSearch(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        onKeyUp={(e) => e.stopPropagation()}
                         className="h-8 text-[12px]"
                       />
                     </div>

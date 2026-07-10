@@ -1458,6 +1458,8 @@ export async function updatePatient(
       tags: registration.tags,
       referrer: registration.referrer,
       meta: registration.meta,
+      referralDoctorId: resolveReferralDoctorId(normalized),
+      referralDoctorName: resolveReferralDoctorName(normalized),
     },
   });
 

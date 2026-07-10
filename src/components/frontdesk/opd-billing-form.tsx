@@ -265,6 +265,16 @@ export function OpdBillingForm({
                     {visit.doctorName} · Billing: {visit.billing}
                   </p>
                 )}
+                {patient.referralDoctorName && (
+                  <p className="mt-1 text-[12px] text-[var(--attio-text-secondary)]">
+                    Referral: {patient.referralDoctorName}
+                  </p>
+                )}
+                {patient.corporateId && (
+                  <p className="mt-1 text-[12px] text-[var(--attio-text-secondary)]">
+                    Corporate / Insurance ID: {patient.corporateId}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -329,6 +339,8 @@ export function OpdBillingForm({
                           placeholder="Search services..."
                           value={serviceSearch}
                           onChange={(e) => setServiceSearch(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          onKeyUp={(e) => e.stopPropagation()}
                           className="h-8 text-[12px]"
                         />
                       </div>
@@ -376,6 +388,8 @@ export function OpdBillingForm({
                           placeholder="Search packages..."
                           value={packageSearch}
                           onChange={(e) => setPackageSearch(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          onKeyUp={(e) => e.stopPropagation()}
                           className="h-8 text-[12px]"
                         />
                       </div>

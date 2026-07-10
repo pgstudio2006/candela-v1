@@ -52,7 +52,6 @@ export default function RegistrationPage() {
   const [assignCounsellor, setAssignCounsellor] = useState(false);
   const [counsellorName, setCounsellorName] = useState("");
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
-  const [isEmergency, setIsEmergency] = useState(false);
   const [referralDoctors, setReferralDoctors] = useState<ReferralDoctor[]>([]);
 
   const pataudi = isPataudiBranch(session.session?.branchName);
@@ -180,14 +179,14 @@ export default function RegistrationPage() {
     data: Record<string, string | number | boolean>,
     opts?: { forceDuplicate?: boolean },
   ) => {
-    if (phoneWarning && !opts?.forceDuplicate && !isEmergency) {
+    if (phoneWarning && !opts?.forceDuplicate) {
       toast("This phone is already registered. Use check-in for the existing patient.", "error");
       return;
     }
 
     const payload = normalizeReferralDoctor(data);
     setSubmitting(true);
-    const result = await registerPatientAsync(payload, { startVisit: true, forceDuplicate: opts?.forceDuplicate, emergency: isEmergency });
+    const result = await registerPatientAsync(payload, { startVisit: true, forceDuplicate: opts?.forceDuplicate });
     setSubmitting(false);
 
     if (!result.ok) {
@@ -241,31 +240,6 @@ export default function RegistrationPage() {
       title="Patient registration"
       meta="New capture · duplicate phone guard · billing-first routing"
     >
-      {pataudi && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <input
-              id="emergency-mode"
-              type="checkbox"
-              checked={isEmergency}
-              onChange={(e) => setIsEmergency(e.target.checked)}
-              className="size-4 rounded border-red-300"
-            />
-            <label htmlFor="emergency-mode" className="text-[13px] font-medium text-red-700">
-              Emergency registration
-            </label>
-            <span className="text-[11px] text-red-600">
-              {isEmergency ? "Duplicate phone check is disabled." : "Enable to skip duplicate phone validation for urgent cases."}
-            </span>
-          </div>
-          {isEmergency && (
-            <span className="rounded bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">
-              Urgent mode active
-            </span>
-          )}
-        </div>
-      )}
-
       <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
         <Panel title="Patient details">
           <PublishedSchemaForm
@@ -275,11 +249,9 @@ export default function RegistrationPage() {
             submitLabel={
               submitting
                 ? "Saving…"
-                : phoneWarning && !isEmergency
+                : phoneWarning
                   ? "Blocked — use check-in"
-                  : isEmergency
-                    ? "Emergency save & continue"
-                    : "Save & continue to check-in"
+                  : "Save & continue to check-in"
             }
             onValuesChange={setDraft}
             roster={roster}
