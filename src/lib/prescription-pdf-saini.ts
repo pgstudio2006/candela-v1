@@ -27,12 +27,12 @@ const FONT = {
 const PAGE = { width: 595.2, height: 841.9 };
 
 const LAYOUT = {
-  marginLeft: 50,
-  marginRight: 545,
-  contentTop: 380,
+  marginLeft: 200,
+  marginRight: 560,
+  contentTop: 370,
   minRowHeight: 16,
   lineLeading: 10,
-  footerMinY: 100,
+  footerMinY: 120,
   sectionGap: 14,
   paragraphGap: 10,
 } as const;
@@ -78,40 +78,19 @@ function drawPrescriptionContent(
     drawText(page, "No medicines prescribed", LAYOUT.marginLeft, currentY, font, FONT.body);
     currentY -= 16;
   } else {
-    const colX: number[] = [
-      LAYOUT.marginLeft,
-      LAYOUT.marginLeft + 28,
-      LAYOUT.marginLeft + 160,
-      LAYOUT.marginLeft + 240,
-      LAYOUT.marginLeft + 315,
-      LAYOUT.marginLeft + 390,
-    ];
-    const rowHeight = 15;
-    drawHLine(page, LAYOUT.marginLeft, LAYOUT.marginRight, currentY);
-    currentY -= 14;
-    drawText(page, "#", colX[0], currentY, bold, FONT.tableHead);
-    drawText(page, "Medicine", colX[1], currentY, bold, FONT.tableHead);
-    drawText(page, "Dose", colX[2], currentY, bold, FONT.tableHead);
-    drawText(page, "Frequency", colX[3], currentY, bold, FONT.tableHead);
-    drawText(page, "Duration", colX[4], currentY, bold, FONT.tableHead);
-    drawText(page, "Instructions", colX[5], currentY, bold, FONT.tableHead);
-    currentY -= rowHeight;
-    drawHLine(page, LAYOUT.marginLeft, LAYOUT.marginRight, currentY + rowHeight - 2);
-
     consult.prescription.forEach((line, i) => {
-      const instructions = line.instructions ?? "—";
-      const instructionLines = wrapText(instructions, font, FONT.table, infoWidth - (colX[5] - LAYOUT.marginLeft));
-      const rowLines = Math.max(1, instructionLines.length);
-      drawText(page, String(i + 1), colX[0], currentY, font, FONT.table);
-      drawText(page, line.drug || "—", colX[1], currentY, font, FONT.table);
-      drawText(page, line.dose, colX[2], currentY, font, FONT.table);
-      drawText(page, formatFrequency(line.frequency), colX[3], currentY, font, FONT.table);
-      drawText(page, formatDuration(line), colX[4], currentY, font, FONT.table);
-      instructionLines.forEach((instLine, idx) => {
-        drawText(page, instLine, colX[5], currentY - idx * LAYOUT.lineLeading, font, FONT.table);
-      });
-      currentY -= Math.max(rowHeight, rowLines * LAYOUT.lineLeading + 4);
-      drawHLine(page, LAYOUT.marginLeft, LAYOUT.marginRight, currentY);
+      const header = `${line.drug || "—"} — ${line.dose} — ${formatFrequency(line.frequency)} — ${formatDuration(line)}`;
+      drawText(page, `${i + 1}. ${header}`, LAYOUT.marginLeft, currentY, font, FONT.body);
+      currentY -= 14;
+      const instructions = line.instructions?.trim();
+      if (instructions) {
+        const instLines = wrapText(`Instructions: ${instructions}`, font, FONT.body, infoWidth - 14);
+        instLines.forEach((instLine) => {
+          drawText(page, instLine, LAYOUT.marginLeft + 14, currentY, font, FONT.body);
+          currentY -= LAYOUT.lineLeading;
+        });
+      }
+      currentY -= 6;
     });
     currentY -= LAYOUT.paragraphGap;
   }
