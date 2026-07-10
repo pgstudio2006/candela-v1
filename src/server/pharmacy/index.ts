@@ -557,6 +557,7 @@ function buildPrescriptionFromLines(
       return {
         id: l.id || `rxl_${rxId}_${idx}`,
         drugId,
+        drugName: l.drug,
         dose: l.dose,
         frequency: l.frequency,
         duration: durationText,

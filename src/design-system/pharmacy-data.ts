@@ -128,6 +128,7 @@ export type PurchaseOrder = {
 export type PrescriptionLine = {
   id: string;
   drugId: string;
+  drugName?: string;
   dose: string;
   frequency: string;
   duration: string;

@@ -2,7 +2,6 @@
 
 import { RxWorkspaceModal } from "@/components/pharmacy/rx-workspace";
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
-import { useFrontdeskStore } from "@/components/frontdesk/frontdesk-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, StatusBadge } from "@/components/frontdesk/ui";
 import { PharmacyDialog, PharmacyInput, PharmacySelect, FormRow } from "@/components/pharmacy/ui";
@@ -20,7 +19,6 @@ export default function PharmacyPrescriptionsPage() {
   usePharmacyPoll();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { getPatient } = useFrontdeskStore();
   const { getActivePrescriptions, prescriptions, createManualPrescription } = usePharmacyStore();
   const [selected, setSelected] = useState<Prescription | null>(null);
   const [filter, setFilter] = useState<string>("active");
@@ -43,14 +41,7 @@ export default function PharmacyPrescriptionsPage() {
     const pAge = searchParams.get("age");
     const pType = searchParams.get("patientType");
     if (patientId) {
-      const patient = getPatient(patientId);
-      if (patient) {
-        setPatientName(patient.name);
-        setUhid(patient.uhid);
-        setMobile(patient.phone ?? "");
-        setAge(String(patient.age ?? ""));
-        setPatientType("registered");
-      }
+      setPatientType("registered");
     } else if (name) {
       setPatientName(name);
       setMobile(pMobile ?? "");
@@ -84,7 +75,7 @@ export default function PharmacyPrescriptionsPage() {
         // ignore invalid rxLines
       }
     }
-  }, [searchParams, getPatient]);
+  }, [searchParams]);
 
   const baseRows = filter === "active" ? getActivePrescriptions() : prescriptions;
   const rows = sourceFilter === "all" ? baseRows : baseRows.filter((r) => r.source === sourceFilter);

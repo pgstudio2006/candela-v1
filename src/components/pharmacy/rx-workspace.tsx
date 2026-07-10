@@ -89,7 +89,7 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                   return (
                     <li key={l.id} className="flex justify-between gap-4 px-3 py-3 text-[13px]">
                       <div className="flex-1">
-                        <p className="font-medium">{drug?.brandName ?? l.drugId}</p>
+                        <p className="font-medium">{drug?.brandName ?? l.drugName ?? l.drugId}</p>
                         <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                           {l.dose} · {l.frequency} · {l.duration} · Qty {l.qtyPrescribed}
                         </p>
@@ -153,7 +153,7 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                   <div key={l.id} className="rounded-lg border p-3">
                     <div className="flex justify-between">
                       <div>
-                        <p className="text-[13px] font-medium">{drug?.brandName ?? l.drugId}</p>
+                        <p className="text-[13px] font-medium">{drug?.brandName ?? l.drugName ?? l.drugId}</p>
                         <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                           {l.dose} · {l.frequency} · {l.duration} · Remaining: {remaining}
                         </p>
@@ -208,24 +208,21 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                 );
               })}
               <div className="flex items-end gap-2 rounded border p-3">
-                <select
-                  className="h-9 flex-1 rounded border px-2 text-[13px] outline-none focus:border-[var(--attio-text)]"
+                <Input
+                  className="h-9 flex-1 text-[13px]"
+                  placeholder="Type medicine name to add"
                   value={newDrugId}
                   onChange={(e) => setNewDrugId(e.target.value)}
-                >
-                  <option value="">Select medicine to add</option>
-                  {drugs.filter((d) => d.active).map((d) => (
-                    <option key={d.id} value={d.id}>{d.brandName} · {d.strength}</option>
-                  ))}
-                </select>
+                />
                 <AttioButton variant="secondary" onClick={() => {
-                  if (!newDrugId) return;
-                  const drug = drugs.find((d) => d.id === newDrugId);
-                  if (!drug) return;
+                  const name = newDrugId.trim();
+                  if (!name) return;
+                  const slug = name.toLowerCase().replace(/\s+/g, "_");
                   const id = `rxl_${rx.id}_${Date.now()}`;
                   const newLine: PrescriptionLine & { _local?: boolean } = {
                     id,
-                    drugId: newDrugId,
+                    drugId: slug,
+                    drugName: name,
                     dose: "1 tab",
                     frequency: "OD",
                     duration: "1 day",
