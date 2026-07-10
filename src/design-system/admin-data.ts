@@ -241,6 +241,7 @@ export const FIELD_TYPE_CATALOG: {
   { type: "currency", label: "Currency", category: "numeric" },
   { type: "percent", label: "Percent", category: "numeric" },
   { type: "rating", label: "Rating (VAS 0–10)", category: "numeric" },
+  { type: "slider", label: "Slider / score", category: "numeric" },
   { type: "date", label: "Date", category: "datetime" },
   { type: "time", label: "Time", category: "datetime" },
   { type: "datetime", label: "Date & time", category: "datetime" },

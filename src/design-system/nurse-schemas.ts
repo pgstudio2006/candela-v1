@@ -66,3 +66,20 @@ export const NURSE_SESSION_NOTES_SCHEMA: FormSchema = {
     },
   ],
 };
+
+export const NURSE_SCORES_SCHEMA: FormSchema = {
+  id: "nurse-scores",
+  title: "Nursing scores",
+  sections: [
+    {
+      id: "scores",
+      label: "Score capture (0–10)",
+      fields: [
+        { id: "painIntensity", type: "slider", label: "Pain intensity", hint: "0 = no pain, 10 = worst pain" },
+        { id: "nausea", type: "slider", label: "Nausea", hint: "0 = none, 10 = severe" },
+        { id: "anxiety", type: "slider", label: "Anxiety", hint: "0 = none, 10 = severe" },
+        { id: "scoreNotes", type: "textarea", label: "Score notes", span: 2 },
+      ],
+    },
+  ],
+};

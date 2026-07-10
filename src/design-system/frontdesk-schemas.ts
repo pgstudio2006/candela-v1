@@ -10,6 +10,7 @@ export type FieldType =
   | "currency"
   | "percent"
   | "rating"
+  | "slider"
   | "date"
   | "time"
   | "datetime"

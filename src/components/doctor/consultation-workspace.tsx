@@ -21,6 +21,8 @@ import type { DocumentTemplate } from "@/design-system/document-templates";
 import { cn } from "@/lib/utils";
 import { validateFormValues } from "@/lib/schema-registry";
 import { useToast } from "@/components/ui/toast-provider";
+import { getNurseScoresAction } from "@/app/actions/clinical-actions";
+import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
 import {
   Select,
   SelectContent,
@@ -119,6 +121,22 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [selectedHandoffServiceIds, setSelectedHandoffServiceIds] = useState<string[]>([]);
   const [selectedHandoffPackageId, setSelectedHandoffPackageId] = useState<string>("");
   const [handoffServiceSearch, setHandoffServiceSearch] = useState("");
+  const [scoreEntries, setScoreEntries] = useState<{ id: string; submittedAt: string; data: Record<string, string | number | boolean> }[]>([]);
+
+  const scoreSchema = usePublishedFormSchema("nurse-scores");
+
+  useEffect(() => {
+    if (!visitId) return;
+    void (async () => {
+      const res = await getNurseScoresAction(visitId);
+      if (res.ok) setScoreEntries(res.data);
+    })();
+  }, [visitId]);
+
+  const scoreLabels = useMemo(
+    () => Object.fromEntries(scoreSchema?.sections.flatMap((s) => s.fields).map((f) => [f.id, f.label]) ?? []),
+    [scoreSchema],
+  );
 
   const visit = getVisit(visitId);
   const patient = visit ? getPatient(visit.patientId) : undefined;
@@ -389,6 +407,34 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
             )}
           </div>
         </Panel>
+        </div>
+      )}
+
+      {scoreEntries.length > 0 && (
+        <div className="mb-4">
+          <Panel title="Nursing scores">
+            <div className="space-y-2">
+              {scoreEntries.map((entry) => (
+                <div key={entry.id} className="rounded-lg bg-[var(--attio-surface)] p-2 text-[12px]">
+                  <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                    {new Date(entry.submittedAt).toLocaleString("en-IN")}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(entry.data)
+                      .filter(([key]) => key !== "scoreNotes")
+                      .map(([key, value]) => (
+                        <span key={key} className="font-medium">
+                          {scoreLabels[key] ?? key}: {String(value)}
+                        </span>
+                      ))}
+                  </div>
+                  {entry.data.scoreNotes && (
+                    <p className="mt-1 text-[var(--attio-text-tertiary)]">{String(entry.data.scoreNotes)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Panel>
         </div>
       )}
 

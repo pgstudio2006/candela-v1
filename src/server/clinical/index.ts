@@ -509,9 +509,10 @@ export async function saveSubmission(
   formId: string,
   data: PrimitiveRecord,
   link?: { patientId?: string; visitId?: string },
+  append?: boolean,
 ) {
   await ensureClinicalSeed();
-  if (link?.visitId) {
+  if (link?.visitId && !append) {
     await prisma.formSubmission.deleteMany({
       where: { formId, visitId: link.visitId, tenantId: ctx.tenantId, branchId: ctx.branchId },
     });

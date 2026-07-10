@@ -24,6 +24,7 @@ import {
 import { HR_LEAVE_REQUEST_SCHEMA, HR_ONBOARDING_SCHEMA } from "@/design-system/hr-schemas";
 import {
   NURSE_CONSENT_NOTES_SCHEMA,
+  NURSE_SCORES_SCHEMA,
   NURSE_SESSION_NOTES_SCHEMA,
   NURSE_VITALS_SCHEMA,
 } from "@/design-system/nurse-schemas";
@@ -54,6 +55,7 @@ export const NURSE_FORM_SCHEMA_IDS = [
   "nurse-vitals",
   "nurse-consent-notes",
   "nurse-session-notes",
+  "nurse-scores",
 ] as const;
 
 export type NurseFormSchemaId = (typeof NURSE_FORM_SCHEMA_IDS)[number];
@@ -107,6 +109,7 @@ const NURSE_DEFAULT_SCHEMAS: Record<NurseFormSchemaId, FormSchema> = {
   "nurse-vitals": NURSE_VITALS_SCHEMA,
   "nurse-consent-notes": NURSE_CONSENT_NOTES_SCHEMA,
   "nurse-session-notes": NURSE_SESSION_NOTES_SCHEMA,
+  "nurse-scores": NURSE_SCORES_SCHEMA,
 };
 
 const COUNSELLOR_DEFAULT_SCHEMAS: Record<CounsellorFormSchemaId, FormSchema> = {
@@ -154,6 +157,7 @@ export const SCHEMA_DEPARTMENT: Record<string, FormDepartment> = {
   "nurse-vitals": "nurse",
   "nurse-consent-notes": "nurse",
   "nurse-session-notes": "nurse",
+  "nurse-scores": "nurse",
   "counsellor-intake": "counsellor",
   "counsellor-followup": "counsellor",
   "counsellor-package": "counsellor",

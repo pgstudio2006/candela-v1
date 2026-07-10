@@ -27,6 +27,8 @@ import { runAction, type ActionResult } from "@/server/action-result";
 import type { ClinicalSnapshot } from "@/server/clinical";
 import { SCHEMA_DEPARTMENT } from "@/lib/schema-registry";
 import type { CandelaRole } from "@/design-system/modules";
+import { prisma } from "@/lib/prisma";
+import { branchScope } from "@/server/tenancy";
 
 export async function getClinicalSnapshotAction(): Promise<ActionResult<ClinicalSnapshot>> {
   return runAction(async () => {
@@ -146,10 +148,31 @@ export async function saveSubmissionAction(
   formId: string,
   data: Record<string, string | number | boolean>,
   link?: { patientId?: string; visitId?: string },
+  append?: boolean,
 ) {
   const module = (SCHEMA_DEPARTMENT[formId] ?? "frontdesk") as CandelaRole;
   const ctx = await requireModule(module);
-  return saveSubmission(ctx, formId, data, link);
+  return saveSubmission(ctx, formId, data, link, append);
+}
+
+export async function getNurseScoresAction(visitId: string): Promise<
+  ActionResult<{ id: string; submittedAt: string; data: Record<string, string | number | boolean> }[]>
+> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("doctor", "nurse");
+    const rows = await prisma.formSubmission.findMany({
+      where: { formId: "nurse-scores", visitId, ...branchScope(ctx) },
+      orderBy: { submittedAt: "desc" },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      submittedAt: String(row.submittedAt),
+      data:
+        row.data && typeof row.data === "object" && !Array.isArray(row.data)
+          ? (row.data as Record<string, string | number | boolean>)
+          : {},
+    }));
+  });
 }
 
 export async function getVisitReceiptAction(visitId: string) {

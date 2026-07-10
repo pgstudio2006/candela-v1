@@ -145,7 +145,7 @@ function SchemaFieldInput({
     );
   }
 
-  if (field.type === "rating" || field.type === "pain-scale") {
+  if (field.type === "rating" || field.type === "pain-scale" || field.type === "slider") {
     return (
       <input type="range" min={0} max={10} value={Number(value ?? 0)} onChange={(e) => onChange(Number(e.target.value))} className="w-full" />
     );
