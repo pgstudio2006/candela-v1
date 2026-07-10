@@ -10,8 +10,9 @@ import { useMemo, useState } from "react";
 export default function NurseDischargePage() {
   useNursePoll();
   const { toast } = useToast();
-  const { episodes, patients, handoffs, saveDischargeSummary } = useNurseStore();
+  const { episodes, patients, handoffs, getEpisode, saveDischargeSummary } = useNurseStore();
   const [visitId, setVisitId] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [admissionDate, setAdmissionDate] = useState("");
   const [dischargeDate, setDischargeDate] = useState("");
   const [diagnosis, setDiagnosis] = useState("");
@@ -46,6 +47,39 @@ export default function NurseDischargePage() {
       setFollowUp(selected.existing.followUp);
       setNotes(selected.existing.notes);
     }
+  };
+
+  const generateAIDraft = async () => {
+    if (!visitId) {
+      toast("Select an IPD patient", "error");
+      return;
+    }
+    setGenerating(true);
+    const episode = getEpisode(visitId);
+    const handoff = handoffs.find((h) => h.visitId === visitId);
+    const patient = patients.find((p) => p.id === episode?.patientId);
+    const today = new Date().toISOString().slice(0, 10);
+    const vitals = episode?.vitals;
+    const diagnosis =
+      (handoff?.consultation?.diagnosis?.clinicalImpression as string) ||
+      (handoff?.consultation?.diagnosis?.provisionalDiagnosis as string) ||
+      "";
+    const procedures = episode?.sessions.map((s) => s.procedure).filter(Boolean).join("\n") ?? "";
+    const medications = episode?.tasks.map((t) => t.title).filter(Boolean).join("\n") ?? "";
+    const vitalsLine = vitals
+      ? `Vitals recorded by ${vitals.recordedBy}: BP ${vitals.bpSystolic ?? "—"}/${vitals.bpDiastolic ?? "—"}, pulse ${vitals.pulse ?? "—"}, SpO₂ ${vitals.spo2 ?? "—"}%` +
+        (vitals.redFlags ? `. Red flags: ${vitals.redFlags}` : "")
+      : "No vitals recorded.";
+    const notes = `AI draft generated for ${patient?.name ?? handoff?.patientName ?? "patient"}. ${vitalsLine}`;
+    setAdmissionDate(episode?.queuedAt?.slice(0, 10) ?? "");
+    setDischargeDate(today);
+    setDiagnosis(diagnosis);
+    setProcedures(procedures);
+    setMedications(medications);
+    setFollowUp("");
+    setNotes(notes);
+    setGenerating(false);
+    toast("AI draft generated — review and edit before saving", "success");
   };
 
   const save = async () => {
@@ -100,7 +134,7 @@ export default function NurseDischargePage() {
               </select>
             </label>
             {selected && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {selected.existing ? (
                   <>
                     <StatusBadge label="Existing summary" variant="success" />
@@ -111,6 +145,9 @@ export default function NurseDischargePage() {
                 ) : (
                   <StatusBadge label="New summary" variant="neutral" />
                 )}
+                <AttioButton variant="secondary" disabled={generating} onClick={generateAIDraft}>
+                  {generating ? "Generating..." : "Generate AI draft"}
+                </AttioButton>
               </div>
             )}
           </div>
