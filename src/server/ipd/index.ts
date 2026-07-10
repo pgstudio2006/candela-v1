@@ -6,6 +6,7 @@ import type {
   IpdBedRow,
   IpdBedSummary,
   IpdBillingMode,
+  IpdCartItem,
   IpdPatientType,
   IpdSnapshot,
   IpdWard,
@@ -21,6 +22,8 @@ import { patientDisplayName } from "@/lib/frontdesk-workflow";
 import { resolveDoctorName } from "@/lib/clinical-roster";
 import { backfillBranchScope } from "@/server/branch-scope";
 import { loadClinicalRoster } from "@/server/clinical/roster";
+import { upsertVisitInvoice } from "@/server/invoicing";
+import { computeGstInvoice, parseBranchGstSettings } from "@/lib/gst-invoicing";
 
 export type { IpdSnapshot } from "@/design-system/ipd-data";
 
@@ -243,6 +246,7 @@ export async function getIpdAdmission(ctx: ServerContext, id: string) {
     lastRoundAt: admission.lastRoundAt?.toISOString() ?? null,
     lastRoundNote: admission.lastRoundNote ?? null,
     status: admission.status as IpdAdmissionStatus,
+    cart: (admission.cart as unknown as IpdCartItem[] | null) ?? [],
   };
   return detail;
 }
@@ -390,6 +394,201 @@ export async function updateIpdAdmission(
   });
 
   return { id };
+}
+
+function parseCart(raw: unknown): IpdCartItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (item): item is IpdCartItem =>
+      item &&
+      typeof item === "object" &&
+      typeof (item as IpdCartItem).id === "string" &&
+      typeof (item as IpdCartItem).packageId === "string" &&
+      typeof (item as IpdCartItem).label === "string" &&
+      typeof (item as IpdCartItem).amount === "number" &&
+      typeof (item as IpdCartItem).quantity === "number",
+  );
+}
+
+export async function getIpdCart(ctx: ServerContext, admissionId: string): Promise<IpdCartItem[]> {
+  const scope = branchScope(ctx);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id: admissionId, tenantId: scope.tenantId, branchId: scope.branchId },
+    select: { cart: true },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  return parseCart(admission.cart);
+}
+
+export async function addIpdCartItem(
+  ctx: ServerContext,
+  admissionId: string,
+  item: Omit<IpdCartItem, "id" | "addedAt">,
+): Promise<IpdCartItem[]> {
+  const scope = branchScope(ctx);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id: admissionId, tenantId: scope.tenantId, branchId: scope.branchId },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+
+  const newItem: IpdCartItem = {
+    ...item,
+    id: createId("ipdcart"),
+    addedAt: new Date().toISOString(),
+  };
+
+  const cart = parseCart(admission.cart);
+  const existingIndex = cart.findIndex((c) => c.packageId === item.packageId);
+  if (existingIndex >= 0) {
+    cart[existingIndex] = { ...cart[existingIndex], quantity: cart[existingIndex].quantity + item.quantity };
+  } else {
+    cart.push(newItem);
+  }
+
+  await prisma.ipdAdmission.update({
+    where: { id: admissionId },
+    data: { cart: cart as unknown as object },
+  });
+
+  await writePlatformAudit({
+    ctx,
+    module: "frontdesk",
+    action: "ipd_cart_item_added",
+    entityType: "ipd_admission",
+    entityId: admissionId,
+    summary: `Added ${item.label} to IPD cart`,
+    payload: { item: newItem },
+  });
+
+  return cart;
+}
+
+export async function removeIpdCartItem(ctx: ServerContext, admissionId: string, itemId: string): Promise<IpdCartItem[]> {
+  const scope = branchScope(ctx);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id: admissionId, tenantId: scope.tenantId, branchId: scope.branchId },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+
+  const cart = parseCart(admission.cart).filter((c) => c.id !== itemId);
+  await prisma.ipdAdmission.update({
+    where: { id: admissionId },
+    data: { cart: cart as unknown as object },
+  });
+
+  return cart;
+}
+
+export async function generateIpdFinalBill(
+  ctx: ServerContext,
+  admissionId: string,
+  input: {
+    mode?: string;
+    paymentSplits?: { mode: string; amount: number }[];
+    discount?: number;
+  },
+) {
+  const scope = branchScope(ctx);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id: admissionId, tenantId: scope.tenantId, branchId: scope.branchId },
+    include: { patient: { select: { id: true, name: true, fullName: true } } },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  const visitId = admission.visitId;
+  if (!visitId) throw new ServerActionError("VALIDATION", "Admission is not linked to a visit.");
+
+  const visit = await prisma.opdVisit.findUnique({ where: { id: visitId } });
+  if (!visit) throw new ServerActionError("NOT_FOUND", "Visit not found.");
+
+  const cart = parseCart(admission.cart);
+  if (!cart.length) throw new ServerActionError("VALIDATION", "No services or packages in the IPD cart.");
+
+  const packageLines = cart.map((item) => ({
+    packageId: item.packageId,
+    label: item.label,
+    amount: item.amount,
+    quantity: item.quantity,
+  }));
+
+  const subtotal = packageLines.reduce((s, line) => s + line.amount * line.quantity, 0);
+  const branch = await prisma.branch.findUnique({ where: { id: scope.branchId } });
+  const gstInvoice = computeGstInvoice({
+    settings: parseBranchGstSettings(branch?.meta),
+    lines: packageLines.map((line) => ({
+      label: line.label,
+      quantity: line.quantity,
+      taxableAmount: line.amount * line.quantity,
+    })),
+    discount: input.discount ?? 0,
+  });
+  const net = gstInvoice.grandTotal;
+
+  const splits = input.paymentSplits?.length
+    ? input.paymentSplits
+    : [{ mode: input.mode ?? "cash", amount: net }];
+  const collected = splits.reduce((s, p) => s + p.amount, 0);
+
+  await prisma.$transaction(async (tx) => {
+    await upsertVisitInvoice(
+      ctx,
+      {
+        visitId,
+        patientId: visit.patientId,
+        label: packageLines.map((l) => l.label).join(" · ") || "IPD services",
+        subtotal,
+        discount: input.discount ?? 0,
+        collected,
+        mode: splits.length === 1 ? splits[0].mode : "split",
+        paymentScope: "full",
+        lines: packageLines.map((line) => ({
+          label: line.label,
+          quantity: line.quantity,
+          taxableAmount: line.amount * line.quantity,
+        })),
+        paymentSplits: splits,
+        packageLines,
+      },
+      tx,
+    );
+
+    await tx.ipdAdmission.update({
+      where: { id: admissionId },
+      data: { cart: [] as unknown as object },
+    });
+    await tx.opdVisit.update({
+      where: { id: visitId },
+      data: {
+        billing: collected >= net ? "paid" : "partial",
+        billAmount: net,
+        amountPaid: collected,
+        balanceDue: Math.max(0, net - collected),
+      },
+    });
+  });
+
+  const updated = await prisma.opdVisit.findUnique({ where: { id: visitId } });
+  if (updated) await syncVisitFromOpdVisit(ctx, updated);
+
+  const invoice = await prisma.invoice.findUnique({ where: { visitId } });
+  const patientName = patientDisplayName(admission.patient) ?? admission.patientId;
+
+  await writePlatformAudit({
+    ctx,
+    module: "frontdesk",
+    action: "ipd_final_bill_generated",
+    entityType: "ipd_admission",
+    entityId: admissionId,
+    summary: `Generated IPD final bill for ${patientName}`,
+    payload: { total: net, collected, visitId },
+  });
+
+  return {
+    visitId,
+    invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
+    total: net,
+    amountPaid: collected,
+    balanceDue: Math.max(0, net - collected),
+  };
 }
 
 export async function transferIpdAdmission(

@@ -1,9 +1,10 @@
 "use server";
 
-import type { IpdAdmissionInput, IpdAdmissionStatus } from "@/design-system/ipd-data";
+import type { IpdAdmissionInput, IpdAdmissionStatus, IpdCartItem } from "@/design-system/ipd-data";
 import { runAction, type ActionResult } from "@/server/action-result";
 import { requireAnyModule, requireModule } from "@/server/auth";
 import {
+  addIpdCartItem,
   admitPatient,
   createIpdBed,
   createIpdWard,
@@ -11,9 +12,12 @@ import {
   deleteIpdWard,
   generateDischargeSummary,
   generateDeathSummary,
+  generateIpdFinalBill,
   getIpdAdmission,
+  getIpdCart,
   getIpdSnapshot,
   getIpdWards,
+  removeIpdCartItem,
   saveDischargeSummary,
   saveDeathSummary,
   transferIpdAdmission,
@@ -142,5 +146,43 @@ export async function saveDeathSummaryAction(id: string, summary: DeathSummaryPa
   return runAction(async () => {
     const ctx = await requireModule("doctor");
     return saveDeathSummary(ctx, id, summary);
+  });
+}
+
+export async function getIpdCartAction(admissionId: string): Promise<ActionResult<IpdCartItem[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return getIpdCart(ctx, admissionId);
+  });
+}
+
+export async function addIpdCartItemAction(
+  admissionId: string,
+  item: Omit<IpdCartItem, "id" | "addedAt">,
+): Promise<ActionResult<IpdCartItem[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return addIpdCartItem(ctx, admissionId, item);
+  });
+}
+
+export async function removeIpdCartItemAction(admissionId: string, itemId: string): Promise<ActionResult<IpdCartItem[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return removeIpdCartItem(ctx, admissionId, itemId);
+  });
+}
+
+export async function generateIpdFinalBillAction(
+  admissionId: string,
+  input: {
+    mode?: string;
+    paymentSplits?: { mode: string; amount: number }[];
+    discount?: number;
+  },
+): Promise<ActionResult<{ visitId: string; invoiceNumber: string; total: number; amountPaid: number; balanceDue: number }>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return generateIpdFinalBill(ctx, admissionId, input);
   });
 }

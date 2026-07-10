@@ -219,6 +219,7 @@ model IpdAdmission {
   lastRoundAt       String?
   lastRoundNote     String?
   status            String
+  cart              Json?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }

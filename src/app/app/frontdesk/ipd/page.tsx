@@ -10,6 +10,7 @@ import {
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, MetricStrip, Panel } from "@/components/frontdesk/ui";
 import { PatientSearchField } from "@/components/frontdesk/patient-search-field";
+import { IpdServiceCartPanel } from "@/components/frontdesk/ipd-service-cart-panel";
 import { useToast } from "@/components/ui/toast-provider";
 import type { IpdAdmissionDetail, IpdAdmissionStatus, IpdBillingMode, IpdPatientType, IpdSnapshot } from "@/design-system/ipd-data";
 import { cn } from "@/lib/utils";
@@ -314,6 +315,17 @@ export default function FrontdeskIpdPage() {
                         )}
                       </div>
                     </Panel>
+                  )}
+
+                  {selectedAdmission && (
+                    <IpdServiceCartPanel
+                      admission={selectedAdmission}
+                      onChange={async () => {
+                        const res = await getIpdAdmissionAction(selectedAdmission.id);
+                        if (res.ok) setSelectedAdmission(res.data);
+                        setRefreshKey((k) => k + 1);
+                      }}
+                    />
                   )}
                 </>
               ) : (

@@ -89,6 +89,16 @@ export type IpdAdmissionInput = {
   expectedDischarge?: string;
 };
 
+export type IpdCartItem = {
+  id: string;
+  type: "service" | "package";
+  packageId: string;
+  label: string;
+  amount: number;
+  quantity: number;
+  addedAt: string;
+};
+
 export type IpdAdmissionDetail = {
   id: string;
   visitId: string;
@@ -111,4 +121,5 @@ export type IpdAdmissionDetail = {
   lastRoundAt?: string | null;
   lastRoundNote?: string | null;
   status: IpdAdmissionStatus;
+  cart: IpdCartItem[];
 };
