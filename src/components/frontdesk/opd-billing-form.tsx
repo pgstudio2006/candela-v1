@@ -12,6 +12,7 @@ import {
   type BillingPackage,
 } from "@/lib/billing-packages";
 import { getVisitBillingAction } from "@/app/actions/clinical-actions";
+import { getIpdCartAction } from "@/app/actions/ipd-actions";
 import { computeGstInvoice } from "@/lib/gst-invoicing";
 import type { BillingPackageLine, PaymentSplit } from "@/lib/opd-billing";
 import { resolveBillingDiscount } from "@/lib/opd-billing";
@@ -154,6 +155,28 @@ export function OpdBillingForm({
   const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const previousPaid = previousPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const balanceAfterPay = Math.max(0, net - previousPaid - splitTotal);
+
+  useEffect(() => {
+    if (!visit?.ipdAdmissionId || existingInvoice || lines.length > 0) return;
+    let cancelled = false;
+    void getIpdCartAction(visit.ipdAdmissionId).then((res) => {
+      if (cancelled) return;
+      if (res.ok && res.data?.length) {
+        setLines(
+          res.data.map((item: { packageId: string; label: string; amount: number; quantity: number }) => ({
+            packageId: item.packageId,
+            label: item.label,
+            amount: item.amount,
+            quantity: item.quantity,
+            key: `${item.packageId}_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          })),
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visit?.ipdAdmissionId, existingInvoice]);
 
   useEffect(() => {
     if (!visit?.id) {

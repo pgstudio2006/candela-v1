@@ -85,7 +85,7 @@ export type IpdAdmissionInput = {
   wardId: string;
   bed: string;
   patientType: IpdPatientType;
-  billingMode: IpdBillingMode;
+  billingMode?: IpdBillingMode;
   expectedDischarge?: string;
 };
 

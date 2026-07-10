@@ -47,6 +47,8 @@ export default function EmergencyPage() {
     policeStation: "",
     firNumber: "",
     admitToIpd: false,
+    wardId: "",
+    bedId: "",
     attendingDoctorId: "",
     expectedDischarge: "",
     bpSystolic: "",
@@ -94,6 +96,8 @@ export default function EmergencyPage() {
       policeStation: form.policeStation,
       firNumber: form.firNumber,
       admitToIpd: form.admitToIpd,
+      wardId: form.admitToIpd ? form.wardId || undefined : undefined,
+      bedId: form.admitToIpd ? form.bedId || undefined : undefined,
       attendingDoctorId: form.attendingDoctorId || undefined,
       expectedDischarge: form.expectedDischarge || undefined,
       vitals,
@@ -113,6 +117,8 @@ export default function EmergencyPage() {
         policeStation: "",
         firNumber: "",
         admitToIpd: false,
+        wardId: "",
+        bedId: "",
         attendingDoctorId: "",
         expectedDischarge: "",
         bpSystolic: "",
@@ -299,6 +305,38 @@ export default function EmergencyPage() {
               />
               Admit to Emergency Ward (IPD)
             </label>
+            {form.admitToIpd && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <select
+                  className="rounded-md border px-3 py-2"
+                  value={form.wardId}
+                  onChange={(e) => setForm({ ...form, wardId: e.target.value, bedId: "" })}
+                >
+                  <option value="">Select ward</option>
+                  {snapshot?.wards.map((w) => (
+                    <option key={w.wardId} value={w.wardId}>
+                      {w.ward}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="rounded-md border px-3 py-2"
+                  value={form.bedId}
+                  onChange={(e) => setForm({ ...form, bedId: e.target.value })}
+                  disabled={!form.wardId}
+                >
+                  <option value="">Select bed</option>
+                  {snapshot?.wards
+                    .find((w) => w.wardId === form.wardId)
+                    ?.beds.filter((b) => !b.occupied)
+                    .map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <AttioButton type="button" variant="secondary" onClick={() => setShowForm(false)} disabled={busy}>
                 Cancel

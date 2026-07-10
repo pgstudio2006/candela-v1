@@ -90,7 +90,6 @@ export default function FrontdeskIpdPage() {
     const wardId = formData.get("wardId") as string;
     const bedId = formData.get("bedId") as string;
     const patientType = formData.get("patientType") as string;
-    const billingMode = formData.get("billingMode") as string;
     const expectedDischarge = formData.get("expectedDischarge") as string;
 
     const result = await admitPatientAction({
@@ -101,7 +100,6 @@ export default function FrontdeskIpdPage() {
       wardId,
       bed: bedId,
       patientType: patientType as IpdPatientType,
-      billingMode: billingMode as IpdBillingMode,
       expectedDischarge: expectedDischarge || undefined,
     });
 
@@ -430,24 +428,15 @@ export default function FrontdeskIpdPage() {
                       </select>
                     </label>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block text-[12px]">
-                      <span className="mb-1 block text-[var(--attio-text-tertiary)]">Patient type</span>
-                      <select name="patientType" className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3">
-                        <option value="general">General</option>
-                        <option value="corporate">Corporate</option>
-                        <option value="insurance">Insurance</option>
-                        <option value="vip">VIP</option>
-                      </select>
-                    </label>
-                    <label className="block text-[12px]">
-                      <span className="mb-1 block text-[var(--attio-text-tertiary)]">Billing mode</span>
-                      <select name="billingMode" className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3">
-                        <option value="prepaid">Prepaid</option>
-                        <option value="postpaid">Postpaid</option>
-                      </select>
-                    </label>
-                  </div>
+                  <label className="block text-[12px]">
+                    <span className="mb-1 block text-[var(--attio-text-tertiary)]">Patient type</span>
+                    <select name="patientType" className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3">
+                      <option value="general">General</option>
+                      <option value="corporate">Corporate</option>
+                      <option value="insurance">Insurance</option>
+                      <option value="vip">VIP</option>
+                    </select>
+                  </label>
                   <label className="block text-[12px]">
                     <span className="mb-1 block text-[var(--attio-text-tertiary)]">Expected discharge</span>
                     <input

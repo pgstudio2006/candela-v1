@@ -180,7 +180,11 @@ export async function getIpdSnapshot(ctx: ServerContext): Promise<IpdSnapshot> {
 
   const [registeredPatients, roster] = await Promise.all([
     prisma.patient.findMany({
-      where: { tenantId: scope.tenantId, branchId: scope.branchId },
+      where: {
+        tenantId: scope.tenantId,
+        branchId: scope.branchId,
+        status: { in: ["active", "emergency"] },
+      },
       select: { id: true, name: true, fullName: true, uhid: true, phone: true },
       orderBy: { createdAt: "desc" },
     }),
@@ -326,7 +330,7 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
         doctorName,
         diagnosis: input.diagnosis,
         patientType: input.patientType,
-        billingMode: input.billingMode,
+        billingMode: input.billingMode ?? "postpaid",
         expectedDischarge: input.expectedDischarge ? new Date(input.expectedDischarge) : null,
         admittedAt: new Date(),
         attendingDoctorId: input.doctorId,
@@ -372,6 +376,10 @@ export async function updateIpdAdmission(
   });
   if (!existing) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
 
+  if (patch.status === "discharged") {
+    await assertIpdDischargeAllowed(ctx, existing);
+  }
+
   const data: Record<string, unknown> = {};
   if (patch.status) data.status = patch.status;
   if (patch.expectedDischarge !== undefined) data.expectedDischarge = patch.expectedDischarge ? new Date(patch.expectedDischarge) : null;
@@ -394,6 +402,23 @@ export async function updateIpdAdmission(
   });
 
   return { id };
+}
+
+async function assertIpdDischargeAllowed(ctx: ServerContext, admission: { id: string; visitId: string | null; cart: unknown }) {
+  if (!admission.visitId) return;
+  const scope = branchScope(ctx);
+  const visit = await prisma.opdVisit.findFirst({
+    where: { id: admission.visitId, tenantId: scope.tenantId, branchId: scope.branchId },
+    select: { balanceDue: true, amountPaid: true, billAmount: true },
+  });
+  const balanceDue = visit?.balanceDue ?? 0;
+  const cart = parseCart(admission.cart);
+  if (balanceDue > 0 || (visit && (visit.amountPaid ?? 0) < (visit.billAmount ?? 0))) {
+    throw new ServerActionError("VALIDATION", "Cannot discharge while IPD bill is unpaid. Complete billing first.");
+  }
+  if (cart.length > 0) {
+    throw new ServerActionError("VALIDATION", "Cannot discharge while services/packages are still in the cart. Clear or bill the cart first.");
+  }
 }
 
 function parseCart(raw: unknown): IpdCartItem[] {
@@ -458,6 +483,29 @@ export async function addIpdCartItem(
     entityId: admissionId,
     summary: `Added ${item.label} to IPD cart`,
     payload: { item: newItem },
+  });
+
+  return cart;
+}
+
+export async function updateIpdCartItem(
+  ctx: ServerContext,
+  admissionId: string,
+  itemId: string,
+  quantity: number,
+): Promise<IpdCartItem[]> {
+  const scope = branchScope(ctx);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id: admissionId, tenantId: scope.tenantId, branchId: scope.branchId },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+
+  const cart = parseCart(admission.cart).map((c) =>
+    c.id === itemId ? { ...c, quantity: Math.max(1, quantity) } : c,
+  );
+  await prisma.ipdAdmission.update({
+    where: { id: admissionId },
+    data: { cart: cart as unknown as object },
   });
 
   return cart;
@@ -783,6 +831,7 @@ export async function saveDischargeSummary(
   const scope = branchScope(ctx);
   const existing = await prisma.ipdAdmission.findFirst({ where: { id, tenantId: scope.tenantId, branchId: scope.branchId } });
   if (!existing) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  await assertIpdDischargeAllowed(ctx, existing);
   const summaryId = createId("dsum");
   await prisma.ipdAdmission.update({
     where: { id },

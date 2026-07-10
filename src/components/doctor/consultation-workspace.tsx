@@ -375,6 +375,18 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
             {junior.specialTests && (
               <p><span className="font-medium">Special tests:</span> {String(junior.specialTests)}</p>
             )}
+            {(junior.bpSystolic || junior.bpDiastolic || junior.pulse || junior.spo2 || junior.temperature || junior.weight || junior.height) && (
+              <div className="col-span-full rounded-lg bg-[var(--attio-surface)] p-2 text-[12px]">
+                <p className="font-medium">Vitals</p>
+                <p>
+                  BP: {String(junior.bpSystolic ?? "—")}/{String(junior.bpDiastolic ?? "—")} mmHg ·{" "}
+                  Pulse: {String(junior.pulse ?? "—")} bpm · SpO₂: {String(junior.spo2 ?? "—")}% ·{" "}
+                  Temp: {String(junior.temperature ?? "—")} °F · Weight: {String(junior.weight ?? "—")} kg{" "}
+                  {junior.height ? `· Height: ${String(junior.height)} cm` : ""}
+                </p>
+                {junior.vitalsNotes && <p className="mt-1 text-[var(--attio-text-tertiary)]">{String(junior.vitalsNotes)}</p>}
+              </div>
+            )}
           </div>
         </Panel>
         </div>

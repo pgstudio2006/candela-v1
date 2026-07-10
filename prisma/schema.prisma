@@ -276,6 +276,7 @@ model Patient {
   billingHandoffs BillingHandoff[]
   documents       PatientDocument[]
   emergencyReferrals EmergencyReferral[]
+  emergencyRecords EmergencyPatient[]
   assignedCounsellorId String?
   assignedCounsellorName String?
   leadSourceId    String?
@@ -2032,6 +2033,30 @@ model PatientDocument {
   @@index([patientId, category])
   @@index([branchId, category])
   @@index([tenantId, branchId])
+}
+
+model EmergencyPatient {
+  id            String   @id @default(cuid())
+  tenantId      String
+  branchId      String
+  patientId     String?  @unique
+  name          String
+  phone         String?
+  age           Int?
+  gender        String?
+  status        String   @default("active")
+  mlc           Boolean  @default(false)
+  mlcDetails    String?
+  broughtBy     String?
+  policeStation String?
+  firNumber     String?
+  complaint     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  patient       Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, branchId, status])
+  @@index([branchId, patientId])
 }
 
 model EmergencyReferral {

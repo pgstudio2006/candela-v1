@@ -5,6 +5,7 @@ import { runAction, type ActionResult } from "@/server/action-result";
 import { requireAnyModule, requireModule } from "@/server/auth";
 import {
   addIpdCartItem,
+  updateIpdCartItem,
   admitPatient,
   createIpdBed,
   createIpdWard,
@@ -163,6 +164,17 @@ export async function addIpdCartItemAction(
   return runAction(async () => {
     const ctx = await requireModule("frontdesk");
     return addIpdCartItem(ctx, admissionId, item);
+  });
+}
+
+export async function updateIpdCartItemAction(
+  admissionId: string,
+  itemId: string,
+  quantity: number,
+): Promise<ActionResult<IpdCartItem[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return updateIpdCartItem(ctx, admissionId, itemId, quantity);
   });
 }
 

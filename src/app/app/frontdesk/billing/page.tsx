@@ -198,12 +198,22 @@ function BillingContent() {
                 <p className="text-[13px] text-[var(--attio-text-tertiary)]">All clear — use search above to bill any patient.</p>
               ) : (
                 <ul className="max-h-48 space-y-1 overflow-y-auto text-[12px] text-[var(--attio-text-secondary)]">
-                  {pending.map(({ visit, patient }) => (
-                    <li key={visit.id}>
-                      {patient.name} · {visit.doctorName} ·{" "}
-                      <StatusBadge label={visit.billing} variant="warning" />
-                    </li>
-                  ))}
+                  {pending.map(({ visit, patient }) => {
+                    const billingVariant =
+                      visit.billing === "paid"
+                        ? "success"
+                        : visit.billing === "partial"
+                          ? "info"
+                          : visit.billing === "deferred"
+                            ? "neutral"
+                            : "warning";
+                    return (
+                      <li key={visit.id}>
+                        {patient.name} · {visit.doctorName} ·{" "}
+                        <StatusBadge label={visit.billing} variant={billingVariant} />
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </Panel>

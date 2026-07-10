@@ -2,7 +2,13 @@ import { Prisma } from "@prisma/client";
 import type { BillingHandoffPayload } from "@/design-system/counsellor-data";
 import { DOCTOR_TEMPLATES, IPD_PATIENTS } from "@/design-system/doctor-data";
 import { DEFAULT_DOCUMENT_TEMPLATES } from "@/design-system/document-templates";
-import { PATIENTS as SEED_PATIENTS, VISITS as SEED_VISITS, type Patient, type Visit } from "@/design-system/frontdesk-data";
+import {
+  PATIENTS as SEED_PATIENTS,
+  VISITS as SEED_VISITS,
+  type BillingStatus,
+  type Patient,
+  type Visit,
+} from "@/design-system/frontdesk-data";
 import type { Appointment, FormSubmission, FrontdeskCounters } from "@/lib/frontdesk-workflow";
 import { ageFromDob, computeWaitMinutes, deptLabel, doctorName, mapPrismaPatientRow, matchPatientByQuery, nextUhid, patientDisplayName, templateAmount } from "@/lib/frontdesk-workflow";
 import { billingFromPayment, resolveOpdFirstRoute, resolvePostCounselRoute, treatmentPathFromConvert, type PaymentScope } from "@/lib/billing-routing";
@@ -409,7 +415,10 @@ export async function getClinicalSnapshot(ctx: ServerContext): Promise<ClinicalS
   const clinicalWhere = branchClinicalWhere(ctx);
 
   const [patientsRows, visitsRows, appointmentRows, handoffRows, roster, branchPatientCounter] = await Promise.all([
-    prisma.patient.findMany({ where: clinicalWhere, orderBy: { createdAt: "asc" } }),
+    prisma.patient.findMany({
+      where: { ...clinicalWhere, status: { not: "emergency" } },
+      orderBy: { createdAt: "asc" },
+    }),
     prisma.opdVisit.findMany({ where: clinicalWhere, orderBy: { createdAt: "asc" } }),
     prisma.appointment.findMany({
       where: { tenantId: ctx.tenantId, branchId: ctx.branchId },
@@ -840,8 +849,19 @@ export async function processBilling(
   const remainingBalance = Math.max(0, net - totalPaid);
   const isFinal = remainingBalance === 0 && totalPaid > 0;
 
-  const route =
-    paymentScope === "defer" || payload.skipBilling
+  const isIpd = visit.treatmentPath === "ipd" || Boolean(visit.ipdAdmissionId);
+
+  const route = isIpd
+    ? {
+        billing: isFinal ? "paid" : (billingFromPayment(paymentScope, mode) as BillingStatus),
+        stage: "ipd_admitted" as Visit["stage"],
+        routingLabel: isFinal ? "IPD bill paid" : "IPD bill updated",
+        routeHref: "/app/frontdesk/ipd",
+        routingNote: isFinal
+          ? "IPD bill paid in full — returned to ward."
+          : `IPD billing updated — ₹${totalPaid.toLocaleString("en-IN")} collected · ₹${remainingBalance.toLocaleString("en-IN")} outstanding.`,
+      }
+    : paymentScope === "defer" || payload.skipBilling
       ? resolveOpdFirstRoute({ paymentScope: "defer", mode: "defer", visitId, netAmount: net, collected: 0 })
       : isFinal
         ? resolveOpdFirstRoute({ paymentScope: "full", mode, visitId, netAmount: net, collected: totalPaid })
@@ -885,7 +905,7 @@ export async function processBilling(
         billAmount: net,
         amountPaid: totalPaid,
         balanceDue: remainingBalance > 0 ? remainingBalance : null,
-        treatmentPath: "opd",
+        treatmentPath: isIpd ? visit.treatmentPath : "opd",
         routingNote: route.routingNote,
         deferredReason:
           route.billing === "deferred"
@@ -897,6 +917,13 @@ export async function processBilling(
         ...(assignedDoctorId ? { doctorId: assignedDoctorId, doctorName: assignedDoctorName } : {}),
       },
     });
+
+    if (isIpd && visit.ipdAdmissionId) {
+      await tx.ipdAdmission.update({
+        where: { id: visit.ipdAdmissionId },
+        data: { cart: [] as unknown as object },
+      });
+    }
     if (payload.packageLines.length > 0 || totalPaid > 0) {
       await upsertVisitInvoice(
         ctx,

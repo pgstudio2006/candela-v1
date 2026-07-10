@@ -4,11 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Panel, AttioButton } from "@/components/frontdesk/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { BillingReceiptModal } from "@/components/frontdesk/billing-receipt-modal";
 import {
   addIpdCartItemAction,
   removeIpdCartItemAction,
-  generateIpdFinalBillAction,
+  updateIpdCartItemAction,
 } from "@/app/actions/ipd-actions";
 import {
   fetchBillingPackagesFromAPI,
@@ -17,20 +16,13 @@ import {
   formatPackagePrice,
 } from "@/lib/billing-packages";
 import { useToast } from "@/components/ui/toast-provider";
+import { useRouter } from "next/navigation";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 
 type IpdServiceCartPanelProps = {
   admission: IpdAdmissionDetail;
   onChange?: () => void;
 };
-
-const PAYMENT_MODES = [
-  { value: "cash", label: "Cash" },
-  { value: "card", label: "Card" },
-  { value: "upi", label: "UPI" },
-  { value: "netbanking", label: "Netbanking" },
-  { value: "cheque", label: "Cheque" },
-];
 
 export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanelProps) {
   const { toast } = useToast();
@@ -41,8 +33,7 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
   const [packageSearch, setPackageSearch] = useState("");
   const [cart, setCart] = useState(admission.cart);
   const [processing, setProcessing] = useState(false);
-  const [paymentMode, setPaymentMode] = useState("cash");
-  const [receiptVisitId, setReceiptVisitId] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     setCart(admission.cart);
@@ -97,21 +88,25 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
     onChange?.();
   };
 
-  const generateBill = async () => {
-    if (!cart.length) return;
+  const updateQuantity = async (itemId: string, quantity: number) => {
+    if (quantity < 1) return;
     setProcessing(true);
-    const result = await generateIpdFinalBillAction(admission.id, {
-      mode: paymentMode,
-    });
+    const result = await updateIpdCartItemAction(admission.id, itemId, quantity);
     setProcessing(false);
     if (!result.ok) {
       toast(result.error, "error");
       return;
     }
-    toast(`IPD final bill generated: ${result.data.invoiceNumber}`, "success");
-    setCart([]);
-    setReceiptVisitId(result.data.visitId);
+    setCart(result.data);
     onChange?.();
+  };
+
+  const goToBilling = () => {
+    if (!cart.length || !admission.visitId) {
+      toast("Add services to the cart before billing", "error");
+      return;
+    }
+    router.push(`/app/frontdesk/billing?visit=${admission.visitId}`);
   };
 
   const filteredServices = services.filter(
@@ -235,7 +230,28 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
                           ₹{item.amount.toLocaleString("en-IN")} × {item.quantity}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            disabled={processing || item.quantity <= 1}
+                            className="flex size-6 items-center justify-center rounded border text-[12px] disabled:opacity-50"
+                            aria-label="Decrease quantity"
+                          >
+                            −
+                          </button>
+                          <span className="min-w-[1.5rem] text-center text-[13px]">{item.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            disabled={processing}
+                            className="flex size-6 items-center justify-center rounded border text-[12px] disabled:opacity-50"
+                            aria-label="Increase quantity"
+                          >
+                            +
+                          </button>
+                        </div>
                         <p className="font-medium">₹{(item.amount * item.quantity).toLocaleString("en-IN")}</p>
                         <button
                           type="button"
@@ -253,21 +269,12 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
                   <span>Cart total (excl. GST)</span>
                   <span>₹{cartTotal.toLocaleString("en-IN")}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-[var(--attio-text-secondary)]">Payment mode</span>
-                  <select
-                    value={paymentMode}
-                    onChange={(e) => setPaymentMode(e.target.value)}
-                    className="h-8 rounded-md border px-2 text-[12px]"
-                  >
-                    {PAYMENT_MODES.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <AttioButton variant="primary" className="w-full" disabled={processing} onClick={generateBill}>
+                <AttioButton
+                  variant="primary"
+                  className="w-full"
+                  disabled={processing || !cart.length || !admission.visitId}
+                  onClick={goToBilling}
+                >
                   Generate final bill & collect payment
                 </AttioButton>
               </div>
@@ -275,11 +282,6 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
           </div>
         )}
       </Panel>
-      <BillingReceiptModal
-        open={Boolean(receiptVisitId)}
-        visitId={receiptVisitId}
-        onClose={() => setReceiptVisitId(null)}
-      />
     </>
   );
 }

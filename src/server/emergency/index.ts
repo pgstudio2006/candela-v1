@@ -5,7 +5,6 @@ import { maxUhidCounterInBranch } from "@/server/clinical";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
 import { branchScope } from "@/server/tenancy";
-import { ensureIpdWardBed } from "@/server/ipd";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 import { loadClinicalRoster } from "@/server/clinical/roster";
@@ -25,9 +24,10 @@ export async function registerEmergency(
     policeStation?: string;
     firNumber?: string;
     admitToIpd?: boolean;
+    wardId?: string;
+    bedId?: string;
     attendingDoctorId?: string;
     patientType?: string;
-    billingMode?: string;
     expectedDischarge?: string;
     vitals?: Record<string, string | number | boolean>;
   },
@@ -35,6 +35,7 @@ export async function registerEmergency(
   const scope = branchScope(ctx);
   const patientId = createId("pat");
   const visitId = createId("vis");
+  const emergencyPatientId = createId("emp");
 
   const branchPatientCounter = await maxUhidCounterInBranch(ctx);
   const uhid = nextUhid(branchPatientCounter + 1, ctx.branchId);
@@ -56,7 +57,25 @@ export async function registerEmergency(
         phone: patientPhone,
         age: input.age ?? null,
         gender: input.gender ?? null,
-        status: "active",
+        status: "emergency",
+      },
+    });
+
+    await tx.emergencyPatient.create({
+      data: {
+        id: emergencyPatientId,
+        ...scope,
+        patientId,
+        name: patientName,
+        phone: patientPhone,
+        age: input.age ?? null,
+        gender: input.gender ?? null,
+        complaint: input.complaint,
+        mlc: input.mlc ?? false,
+        mlcDetails: input.mlcDetails ?? null,
+        broughtBy: input.broughtBy ?? null,
+        policeStation: input.policeStation ?? null,
+        firNumber: input.firNumber ?? null,
       },
     });
 
@@ -133,20 +152,37 @@ export async function registerEmergency(
     }
 
     if (input.admitToIpd) {
+      if (!input.wardId || !input.bedId) {
+        throw new ServerActionError("VALIDATION", "Select a ward and bed before admitting emergency patient to IPD.");
+      }
+      const bed = await tx.ipdBed.findFirst({
+        where: { id: input.bedId, wardId: input.wardId, branchId: scope.branchId, active: true },
+        include: { ward: true },
+      });
+      if (!bed) throw new ServerActionError("NOT_FOUND", "Selected bed not found.");
+      const occupant = await tx.ipdAdmission.findFirst({
+        where: {
+          tenantId: scope.tenantId,
+          branchId: scope.branchId,
+          bedId: bed.id,
+          status: { in: ["admitted", "discharge_planned"] },
+        },
+      });
+      if (occupant) throw new ServerActionError("CONFLICT", "Selected bed is already occupied.");
+
       const ipdId = `ipd_${visitId}`;
-      const { wardId, bedId } = await ensureIpdWardBed(tx, ctx, "Emergency Ward", "EB-1", "general");
       await tx.ipdAdmission.create({
         data: {
           id: ipdId,
           ...scope,
           visitId,
           patientId,
-          wardId,
-          bedId,
+          wardId: bed.wardId,
+          bedId: bed.id,
           doctorName: doctorName ?? input.attendingDoctorId ?? "Emergency team",
           diagnosis: input.complaint,
           patientType: input.patientType ?? "emergency",
-          billingMode: input.billingMode ?? "postpaid",
+          billingMode: "postpaid",
           expectedDischarge: input.expectedDischarge ? new Date(input.expectedDischarge) : null,
           admittedAt: new Date(),
           attendingDoctorId: input.attendingDoctorId ?? "emergency",
@@ -166,7 +202,7 @@ export async function registerEmergency(
     action: "emergency_registered",
     entityType: "emergency_visit",
     entityId: visitId,
-    summary: `Emergency registration: ${patientName} (${input.mlc ? "MLC" : "non-MLC"})${input.admitToIpd ? " · admitted to Emergency Ward" : ""}`,
+    summary: `Emergency registration: ${patientName} (${input.mlc ? "MLC" : "non-MLC"})${input.admitToIpd ? " · admitted to IPD" : ""}`,
     payload: { mlc: input.mlc, admitToIpd: input.admitToIpd, complaint: input.complaint },
   });
 
@@ -177,7 +213,11 @@ export async function getEmergencyVisits(ctx: ServerContext) {
   const scope = branchScope(ctx);
   const rows = await prisma.opdVisit.findMany({
     where: { ...scope, stage: { in: ["emergency", "ipd_admitted"] }, treatmentPath: { in: ["emergency", "ipd"] } },
-    include: { patient: { select: { id: true, name: true, fullName: true, uhid: true, phone: true, age: true, gender: true } } },
+    include: {
+      patient: {
+        include: { emergencyRecords: { take: 1 } },
+      },
+    },
     orderBy: { createdAt: "desc" },
     take: 50,
   });

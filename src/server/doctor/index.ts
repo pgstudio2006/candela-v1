@@ -255,6 +255,9 @@ export async function getDoctorSnapshot(
 }
 
 function juniorExamToConsultFields(junior: Record<string, string | number | boolean>) {
+  const bpSys = junior.bpSystolic;
+  const bpDia = junior.bpDiastolic;
+  const vitalsBp = bpSys || bpDia ? `${bpSys ?? "—"}/${bpDia ?? "—"}` : "";
   return {
     examination: {
       chiefComplaint: String(junior.chiefComplaint ?? ""),
@@ -269,6 +272,12 @@ function juniorExamToConsultFields(junior: Record<string, string | number | bool
       specialTests: String(junior.specialTests ?? ""),
       juniorImpression: String(junior.juniorImpression ?? ""),
       seniorHandoff: String(junior.seniorHandoff ?? ""),
+      vitalsBp,
+      vitalsPulse: junior.pulse ?? "",
+      vitalsSpo2: junior.spo2 ?? "",
+      vitalsWeight: junior.weight ?? "",
+      vitalsTemperature: junior.temperature ?? "",
+      vitalsHeight: junior.height ?? "",
       bpSystolic: junior.bpSystolic ?? "",
       bpDiastolic: junior.bpDiastolic ?? "",
       pulse: junior.pulse ?? "",
