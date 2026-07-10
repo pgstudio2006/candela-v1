@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type {
   IpdAdmissionDetail,
@@ -904,4 +905,171 @@ export async function saveDeathSummary(
     summary: `Death summary saved for IPD admission ${id}`,
   });
   return { id: summaryId };
+}
+
+export type IpdRoundConfig = {
+  id: string;
+  name: string;
+  scheduleAt?: string;
+  vitals: string[];
+  notes: string[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type IpdRoundLogEntry = {
+  id: string;
+  kind: string;
+  at: string;
+  actorName: string;
+  actorRole: string;
+  content: string;
+  data: Record<string, string | number | boolean> | null;
+};
+
+function asRoundConfig(row: {
+  id: string;
+  name: string;
+  scheduleAt: string | null;
+  vitals: unknown;
+  notes: unknown;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}): IpdRoundConfig {
+  return {
+    id: row.id,
+    name: row.name,
+    scheduleAt: row.scheduleAt ?? undefined,
+    vitals: Array.isArray(row.vitals) ? (row.vitals as string[]) : [],
+    notes: Array.isArray(row.notes) ? (row.notes as string[]) : [],
+    active: row.active,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export async function getIpdRoundConfigs(ctx: ServerContext): Promise<IpdRoundConfig[]> {
+  const scope = branchScope(ctx);
+  const rows = await prisma.ipdRoundConfig.findMany({
+    where: { tenantId: scope.tenantId, branchId: scope.branchId },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(asRoundConfig);
+}
+
+export async function saveIpdRoundConfig(
+  ctx: ServerContext,
+  input: Omit<IpdRoundConfig, "id" | "createdAt" | "updatedAt"> & { id?: string },
+): Promise<IpdRoundConfig> {
+  const scope = branchScope(ctx);
+  const id = input.id ?? createId("irc");
+  const row = await prisma.ipdRoundConfig.upsert({
+    where: { id },
+    create: {
+      id,
+      tenantId: scope.tenantId,
+      branchId: scope.branchId,
+      name: input.name,
+      scheduleAt: input.scheduleAt ?? null,
+      vitals: input.vitals as unknown as object,
+      notes: input.notes as unknown as object,
+      active: input.active ?? true,
+    },
+    update: {
+      name: input.name,
+      scheduleAt: input.scheduleAt ?? null,
+      vitals: input.vitals as unknown as object,
+      notes: input.notes as unknown as object,
+      active: input.active ?? true,
+    },
+  });
+  await writePlatformAudit({
+    ctx,
+    module: "admin",
+    action: "ipd_round_config_saved",
+    entityType: "ipd_round_config",
+    entityId: row.id,
+    summary: `IPD round config saved: ${row.name}`,
+  });
+  return asRoundConfig(row);
+}
+
+export async function deleteIpdRoundConfig(ctx: ServerContext, id: string): Promise<void> {
+  const scope = branchScope(ctx);
+  await prisma.ipdRoundConfig.deleteMany({ where: { id, tenantId: scope.tenantId, branchId: scope.branchId } });
+}
+
+export async function writeIpdRoundLog(
+  ctx: ServerContext,
+  params: {
+    ipdAdmissionId?: string;
+    visitId?: string;
+    kind: string;
+    actorId?: string;
+    actorName: string;
+    actorRole: string;
+    content?: string;
+    data?: Record<string, string | number | boolean>;
+  },
+): Promise<IpdRoundLogEntry> {
+  const id = createId("ipdlog");
+  const row = await prisma.ipdRoundLog.create({
+    data: {
+      id,
+      tenantId: ctx.tenantId,
+      branchId: ctx.branchId,
+      ipdAdmissionId: params.ipdAdmissionId ?? null,
+      visitId: params.visitId ?? null,
+      kind: params.kind,
+      actorId: params.actorId ?? null,
+      actorName: params.actorName,
+      actorRole: params.actorRole,
+      content: params.content ?? null,
+      payload: params.data ? (params.data as unknown as object) : Prisma.JsonNull,
+    },
+  });
+  return {
+    id: row.id,
+    kind: row.kind,
+    at: row.createdAt.toISOString(),
+    actorName: row.actorName,
+    actorRole: row.actorRole,
+    content: row.content ?? "",
+    data: params.data ?? null,
+  };
+}
+
+export async function getIpdRoundLog(
+  ctx: ServerContext,
+  ipdAdmissionId: string,
+): Promise<IpdRoundLogEntry[]> {
+  const scope = branchScope(ctx);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id: ipdAdmissionId, tenantId: scope.tenantId, branchId: scope.branchId },
+    select: { visitId: true },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+
+  const logs = await prisma.ipdRoundLog.findMany({
+    where: {
+      ...branchScope(ctx),
+      OR: [{ ipdAdmissionId }, { visitId: admission.visitId ?? undefined }],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return logs.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    at: row.createdAt.toISOString(),
+    actorName: row.actorName,
+    actorRole: row.actorRole,
+    content: row.content ?? "",
+    data:
+      row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+        ? (row.payload as Record<string, string | number | boolean>)
+        : null,
+  }));
 }

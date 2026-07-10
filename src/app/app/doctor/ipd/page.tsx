@@ -141,15 +141,24 @@ export default function DoctorIpdPage() {
             <IpdDischargeSummaryPanel admissionId={selected.id} />
 
             {roundHistory.length > 0 && (
-              <Panel title="Round history">
+              <Panel title="Round log">
                 <ul className="divide-y divide-[var(--attio-border-subtle)]">
                   {roundHistory.map((round) => (
                     <li key={round.id} className="py-3">
-                      <p className="text-[11px] text-[var(--attio-text-tertiary)]">
-                        {new Date(round.at).toLocaleString("en-IN")}
-                      </p>
-                      <pre className="mt-1 whitespace-pre-wrap font-sans text-[12px] text-[var(--attio-text-secondary)]">
-                        {round.note}
+                      <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="font-medium text-[var(--attio-text)]">{round.actorName}</span>
+                        <span className="rounded-full border border-[var(--attio-border-subtle)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--attio-text-tertiary)]">
+                          {round.actorRole}
+                        </span>
+                        <span className="rounded-full bg-[var(--attio-surface)] px-1.5 py-0.5 text-[10px] text-[var(--attio-text-secondary)]">
+                          {round.kind.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-[var(--attio-text-tertiary)]">
+                          {new Date(round.at).toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <pre className="whitespace-pre-wrap font-sans text-[12px] text-[var(--attio-text-secondary)]">
+                        {round.content}
                       </pre>
                     </li>
                   ))}

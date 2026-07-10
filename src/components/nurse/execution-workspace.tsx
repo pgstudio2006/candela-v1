@@ -9,6 +9,7 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { requiredConsentsComplete, TREATMENT_BAYS, consentProgress } from "@/design-system/nurse-data";
 import { useNursePoll } from "@/hooks/use-nurse-poll";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
+import { saveNurseIpdNoteAction } from "@/app/actions/nurse-actions";
 import { saveSubmissionAction } from "@/app/actions/clinical-actions";
 import { validateFormValues } from "@/lib/schema-registry";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,9 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const [savingVitals, setSavingVitals] = useState(false);
+  const [ipdNote, setIpdNote] = useState("");
+  const [savingIpdNote, setSavingIpdNote] = useState(false);
+  const [ipdNoteMessage, setIpdNoteMessage] = useState<string | null>(null);
   const [vitals, setVitals] = useState({
     bpSystolic: 120,
     bpDiastolic: 80,
@@ -154,6 +158,42 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
           IPD admission · {handoff.ipdWard ?? "Ward TBD"}
           {handoff.ipdBed ? ` · Bed ${handoff.ipdBed}` : ""}
         </div>
+      )}
+
+      {handoff.treatmentPath === "ipd" && (
+        <Panel title="IPD nursing note / report">
+          {ipdNoteMessage && (
+            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-900">
+              {ipdNoteMessage}
+            </div>
+          )}
+          <textarea
+            value={ipdNote}
+            onChange={(e) => setIpdNote(e.target.value)}
+            placeholder="Record an observation, concern, or handoff message for the doctor’s ward round…"
+            className="min-h-[80px] w-full rounded-lg border border-[var(--attio-border)] bg-white px-3 py-2 text-[13px]"
+          />
+          <AttioButton
+            variant="secondary"
+            className="mt-3"
+            disabled={savingIpdNote || !ipdNote.trim()}
+            onClick={async () => {
+              setSavingIpdNote(true);
+              setActionError(null);
+              try {
+                await saveNurseIpdNoteAction(visitId, ipdNote.trim());
+                setIpdNote("");
+                setIpdNoteMessage("Note logged and will be visible in the doctor’s IPD round.");
+              } catch (err) {
+                setActionError(err instanceof Error ? err.message : "Could not save note");
+              } finally {
+                setSavingIpdNote(false);
+              }
+            }}
+          >
+            {savingIpdNote ? "Saving…" : "Log note for doctor round"}
+          </AttioButton>
+        </Panel>
       )}
 
       {episode && (

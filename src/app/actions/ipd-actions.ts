@@ -16,15 +16,18 @@ import {
   generateIpdFinalBill,
   getIpdAdmission,
   getIpdCart,
+  getIpdRoundConfigs,
   getIpdSnapshot,
   getIpdWards,
   removeIpdCartItem,
   saveDischargeSummary,
   saveDeathSummary,
+  saveIpdRoundConfig,
   transferIpdAdmission,
   updateIpdAdmission,
   updateIpdBed,
   updateIpdWard,
+  deleteIpdRoundConfig,
   type DischargeSummaryPayload,
   type DeathSummaryPayload,
   type IpdSnapshot,
@@ -196,5 +199,28 @@ export async function generateIpdFinalBillAction(
   return runAction(async () => {
     const ctx = await requireModule("frontdesk");
     return generateIpdFinalBill(ctx, admissionId, input);
+  });
+}
+
+export async function getIpdRoundConfigsAction() {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("admin", "nurse");
+    return getIpdRoundConfigs(ctx);
+  });
+}
+
+export async function saveIpdRoundConfigAction(
+  input: Parameters<typeof saveIpdRoundConfig>[1],
+) {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("admin", "nurse");
+    return saveIpdRoundConfig(ctx, input);
+  });
+}
+
+export async function deleteIpdRoundConfigAction(id: string) {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("admin", "nurse");
+    return deleteIpdRoundConfig(ctx, id);
   });
 }

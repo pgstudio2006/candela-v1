@@ -23,7 +23,7 @@ import {
   requireDoctorVisit,
 } from "@/server/doctor/guards";
 import { ensureVisitDoctorAssignment } from "@/server/doctor/visit-claim";
-import { ensureIpdWardBed } from "@/server/ipd";
+import { ensureIpdWardBed, writeIpdRoundLog, getIpdRoundLog } from "@/server/ipd";
 import { ServerActionError } from "@/server/errors";
 import { notifyPrescriptionWhatsapp } from "@/server/notifications";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
@@ -98,9 +98,12 @@ export type JuniorExamSubmission = {
 
 export type IpdRoundRecord = {
   id: string;
+  kind: string;
   at: string;
-  note: string;
-  data: Record<string, string | number | boolean>;
+  actorName: string;
+  actorRole: string;
+  content: string;
+  data: Record<string, string | number | boolean> | null;
 };
 
 export type DoctorSnapshot = {
@@ -894,6 +897,7 @@ export async function saveIpdRound(
   note: Record<string, string | number | boolean>,
 ) {
   const doctorId = await resolveDoctorIdForContext(ctx);
+  const profile = await resolveDoctorProfile(ctx);
   const ipd = await prisma.ipdAdmission.findFirst({ where: { id: ipdId, ...branchScope(ctx) }, include: { ward: true, bed: true } });
   if (!ipd) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
   if (!ipd.visitId) throw new ServerActionError("VALIDATION", "IPD admission has no linked visit.");
@@ -904,6 +908,7 @@ export async function saveIpdRound(
 
   const text = `S: ${note.subjective}\nO: ${note.objective}\nA: ${note.assessment}\nP: ${note.plan}`;
   const now = new Date().toISOString();
+  const submissionId = `ipd_round_${ipdId}_${Date.now()}`;
 
   await prisma.$transaction([
     prisma.ipdAdmission.update({
@@ -912,7 +917,7 @@ export async function saveIpdRound(
     }),
     prisma.formSubmission.create({
       data: {
-        id: `ipd_round_${ipdId}_${Date.now()}`,
+        id: submissionId,
         tenantId: ctx.tenantId,
         branchId: ctx.branchId,
         formId: "doctor-ipd-round",
@@ -920,6 +925,21 @@ export async function saveIpdRound(
         visitId: ipd.visitId,
         data: note,
         submittedAt: now,
+      },
+    }),
+    prisma.ipdRoundLog.create({
+      data: {
+        id: `ipdlog_${ipdId}_${Date.now()}`,
+        tenantId: ctx.tenantId,
+        branchId: ctx.branchId,
+        ipdAdmissionId: ipdId,
+        visitId: ipd.visitId,
+        kind: "doctor_round",
+        actorId: doctorId,
+        actorName: profile.name,
+        actorRole: "doctor",
+        content: text,
+        payload: { ...note, sourceSubmissionId: submissionId } as unknown as object,
       },
     }),
   ]);
@@ -939,20 +959,39 @@ export async function getIpdRoundHistory(ctx: ServerContext, ipdId: string): Pro
   if (!ipd || !ipd.visitId) return [];
   await requireDoctorVisit(ctx, ipd.visitId);
 
-  const rows = await prisma.formSubmission.findMany({
+  const logs = await getIpdRoundLog(ctx, ipdId);
+
+  const legacy = await prisma.formSubmission.findMany({
     where: { ...branchScope(ctx), formId: "doctor-ipd-round", visitId: ipd.visitId },
     orderBy: { createdAt: "desc" },
   });
 
-  return rows.map((row) => {
-    const data = asRecord(row.data);
-    return {
-      id: row.id,
-      at: row.submittedAt,
-      data,
-      note: `S: ${data.subjective ?? ""}\nO: ${data.objective ?? ""}\nA: ${data.assessment ?? ""}\nP: ${data.plan ?? ""}`,
-    };
-  });
+  const loggedSubmissionIds = new Set(
+    logs
+      .map((l) => l.data?.sourceSubmissionId)
+      .filter((v): v is string => typeof v === "string"),
+  );
+
+  const legacyEntries: IpdRoundRecord[] = legacy
+    .filter((row) => !loggedSubmissionIds.has(row.id))
+    .map((row) => {
+      const data = asRecord(row.data);
+      return {
+        id: row.id,
+        kind: "doctor_round",
+        at: String(row.submittedAt),
+        actorName: "Doctor",
+        actorRole: "doctor",
+        content: `S: ${data.subjective ?? ""}\nO: ${data.objective ?? ""}\nA: ${data.assessment ?? ""}\nP: ${data.plan ?? ""}`,
+        data,
+      };
+    });
+
+  const all = [...logs, ...legacyEntries].sort(
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+  );
+
+  return all;
 }
 
 export async function listDoctorAuditLogs(

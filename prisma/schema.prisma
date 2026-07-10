@@ -125,6 +125,8 @@ model Branch {
   ipdWards           IpdWard[]
   ipdBeds            IpdBed[]
   ipdAdmissions      IpdAdmission[]
+  ipdRoundConfigs    IpdRoundConfig[]
+  ipdRoundLogs       IpdRoundLog[]
   referralDoctors    ReferralDoctor[]
   slots             Slot[]
   whatsappTemplates WhatsAppTemplate[]
@@ -2009,6 +2011,42 @@ model IpdAdmission {
   @@index([tenantId, branchId, status])
   @@index([branchId, wardId, bedId])
   @@index([branchId, patientId])
+}
+
+model IpdRoundConfig {
+  id         String   @id
+  tenantId   String?
+  branchId   String
+  name       String
+  scheduleAt String?
+  vitals     Json     @default("[]")
+  notes      Json     @default("[]")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId, active])
+}
+
+model IpdRoundLog {
+  id             String   @id
+  tenantId       String?
+  branchId       String
+  ipdAdmissionId String?
+  visitId        String?
+  kind           String
+  actorId        String?
+  actorName      String
+  actorRole      String
+  content        String?
+  payload        Json?
+  createdAt      DateTime @default(now())
+  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId, ipdAdmissionId, createdAt])
+  @@index([tenantId, branchId, visitId, createdAt])
+  @@index([kind, createdAt])
 }
 
 model PatientDocument {

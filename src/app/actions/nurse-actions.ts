@@ -11,6 +11,7 @@ import {
   getNurseSnapshot,
   listNurseAuditLogs,
   presentConsent,
+  saveNurseIpdNote,
   saveVitals,
   signConsent,
   startSession,
@@ -101,4 +102,9 @@ export async function updateEpisodeNotesAction(visitId: string, notes: string) {
 export async function listNurseAuditLogsAction(input?: { limit?: number; cursor?: string }) {
   const ctx = await requireModule("nurse");
   return listNurseAuditLogs(ctx, input ?? {});
+}
+
+export async function saveNurseIpdNoteAction(visitId: string, content: string) {
+  const ctx = await requireModule("nurse");
+  return saveNurseIpdNote(ctx, visitId, content);
 }

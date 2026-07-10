@@ -22,6 +22,7 @@ import {
 } from "@/lib/nurse-validation";
 import { prisma } from "@/lib/prisma";
 import { getClinicalSnapshot } from "@/server/clinical";
+import { writeIpdRoundLog } from "@/server/ipd";
 import { createNursePharmacyOrder as createNursePharmacyOrderInPharmacy } from "@/server/pharmacy";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
@@ -337,6 +338,48 @@ export async function saveVitals(
       redFlags: record.redFlags || undefined,
     },
   });
+
+  const ipdAdmission = await prisma.ipdAdmission.findUnique({ where: { visitId } });
+  if (ipdAdmission) {
+    await writeIpdRoundLog(ctx, {
+      ipdAdmissionId: ipdAdmission.id,
+      visitId,
+      kind: "nurse_vitals",
+      actorId: operatorId,
+      actorName: operatorName,
+      actorRole: "nurse",
+      content: `Vitals · BP ${record.bpSystolic}/${record.bpDiastolic} · Pulse ${record.pulse} · SpO₂ ${record.spo2}% · Temp ${record.temperature}°C · Pain ${record.painScore}/10${record.redFlags.trim() ? ` · Red flags: ${record.redFlags}` : ""}`,
+      data: record as unknown as Record<string, string | number | boolean>,
+    });
+  }
+}
+
+export async function saveNurseIpdNote(ctx: ServerContext, visitId: string, content: string) {
+  const { operatorId, operatorName } = await resolveNurseOperator(ctx);
+  await assertNurseOwnsEpisode(ctx, visitId, operatorId);
+  await logIpdNurseNote(ctx, visitId, operatorId, operatorName, content);
+}
+
+async function logIpdNurseNote(
+  ctx: ServerContext,
+  visitId: string,
+  operatorId: string,
+  operatorName: string,
+  content: string,
+  data?: Record<string, string | number | boolean>,
+) {
+  const ipdAdmission = await prisma.ipdAdmission.findUnique({ where: { visitId } });
+  if (!ipdAdmission) return;
+  await writeIpdRoundLog(ctx, {
+    ipdAdmissionId: ipdAdmission.id,
+    visitId,
+    kind: "nurse_note",
+    actorId: operatorId,
+    actorName: operatorName,
+    actorRole: "nurse",
+    content,
+    data: data ?? { note: content },
+  });
 }
 
 async function patchConsent(
@@ -603,6 +646,14 @@ export async function completeSession(
       payload: { visitId, notes, nextSession: nextSession.sessionNumber },
     });
 
+    if (episode.treatmentPath === "ipd" && notes?.trim()) {
+      await logIpdNurseNote(ctx, visitId, operatorId, operatorName, `Session ${session.sessionNumber}/${total} note: ${notes}`, {
+        sessionId,
+        sessionNumber: session.sessionNumber,
+        notes,
+      });
+    }
+
     return { episodeComplete: false, nextSessionNumber: nextSession.sessionNumber };
   }
 
@@ -620,6 +671,15 @@ export async function completeSession(
     summary: `Final session ${session.sessionNumber}/${total} completed by ${operatorName}`,
     payload: { visitId, notes },
   });
+
+  if (episode.treatmentPath === "ipd" && notes?.trim()) {
+    await logIpdNurseNote(ctx, visitId, operatorId, operatorName, `Final session ${session.sessionNumber}/${total} note: ${notes}`, {
+      sessionId,
+      sessionNumber: session.sessionNumber,
+      notes,
+      final: true,
+    });
+  }
 
   return { episodeComplete: false };
 }
