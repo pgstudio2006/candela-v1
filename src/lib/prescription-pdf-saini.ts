@@ -5,6 +5,7 @@ import {
   COLORS,
   FONT as BASE_FONT,
   drawHLine,
+  drawRightText,
   drawText,
   formatConsultDate,
   formatDuration,
@@ -127,11 +128,12 @@ function drawPrescriptionContent(
   // Signature
   currentY = Math.max(currentY, LAYOUT.footerMinY + 32);
   const sigX = LAYOUT.marginRight - 180;
-  drawHLine(page, sigX, LAYOUT.marginRight, currentY);
-  currentY -= 4;
-  drawText(page, doctorName, sigX + 90, currentY, font, FONT.caption);
-  currentY -= 10;
-  drawText(page, "Consultant Signature", sigX + 90, currentY, font, FONT.caption);
+  const sigRight = LAYOUT.marginRight - 8;
+  drawHLine(page, sigX, sigRight, currentY);
+  currentY -= 12;
+  drawRightText(page, doctorName, sigRight, currentY, font, FONT.caption, 0);
+  currentY -= 14;
+  drawRightText(page, "Consultant Signature", sigRight, currentY, font, FONT.caption, 0);
 }
 
 export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<Uint8Array> {
