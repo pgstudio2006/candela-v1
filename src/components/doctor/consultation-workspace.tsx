@@ -116,8 +116,9 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [savingTx, setSavingTx] = useState(false);
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [selectedHandoffServiceId, setSelectedHandoffServiceId] = useState<string>("");
+  const [selectedHandoffServiceIds, setSelectedHandoffServiceIds] = useState<string[]>([]);
   const [selectedHandoffPackageId, setSelectedHandoffPackageId] = useState<string>("");
+  const [handoffServiceSearch, setHandoffServiceSearch] = useState("");
 
   const visit = getVisit(visitId);
   const patient = visit ? getPatient(visit.patientId) : undefined;
@@ -171,7 +172,8 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       setSkipCounsellor(consult.skipCounsellor);
       setNotes(consult.notes);
       setCompleted(consult.status === "completed");
-      setSelectedHandoffServiceId(String(consult.handoff?.serviceId ?? ""));
+      const savedServiceIds = String(consult.handoff?.serviceIds ?? "");
+      setSelectedHandoffServiceIds(savedServiceIds ? savedServiceIds.split(",") : []);
       setSelectedHandoffPackageId(String(consult.handoff?.packageId ?? consult.packageId ?? ""));
     }
   }, [consult]);
@@ -245,12 +247,15 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     updateConsultation(visitId, { handoff: next });
   };
 
-  const handleSelectHandoffService = (svc: BillingPackage) => {
-    const selected = selectedHandoffServiceId === svc.id ? "" : svc.id;
-    setSelectedHandoffServiceId(selected);
+  const toggleHandoffService = (svc: BillingPackage) => {
+    const next = selectedHandoffServiceIds.includes(svc.id)
+      ? selectedHandoffServiceIds.filter((id) => id !== svc.id)
+      : [...selectedHandoffServiceIds, svc.id];
+    setSelectedHandoffServiceIds(next);
+    const labels = apiServices.filter((s) => next.includes(s.id)).map((s) => s.label);
     updateHandoffSelection({
-      serviceId: selected,
-      serviceLabel: selected ? svc.label : "",
+      serviceIds: next.join(","),
+      serviceLabels: labels.join(", "),
     });
   };
 
@@ -609,52 +614,82 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Services</p>
-                    <ul className="max-h-48 space-y-2 overflow-y-auto">
-                      {apiServices.map((svc: BillingPackage) => (
-                        <button
-                          key={svc.id}
-                          type="button"
-                          onClick={() => handleSelectHandoffService(svc)}
-                          className={cn(
-                            "w-full rounded-lg border px-3 py-2 text-left text-[13px] transition-colors hover:bg-[var(--attio-hover)]",
-                            selectedHandoffServiceId === svc.id && "border-[var(--attio-accent)] bg-blue-50/50",
-                          )}
-                        >
-                          <p className="font-medium">{svc.label}</p>
-                          <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                            ₹{svc.amount.toLocaleString("en-IN")}
-                          </p>
-                        </button>
-                      ))}
-                      {apiServices.length === 0 && (
-                        <p className="text-[12px] text-[var(--attio-text-tertiary)]">No services available.</p>
+                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">
+                      Services ({selectedHandoffServiceIds.length})
+                    </p>
+                    <input
+                      type="text"
+                      placeholder="Search services…"
+                      value={handoffServiceSearch}
+                      onChange={(e) => setHandoffServiceSearch(e.target.value)}
+                      className="mb-2 w-full rounded-md border border-[var(--attio-border)] px-2 py-1.5 text-[12px] outline-none"
+                    />
+                    <ul className="max-h-48 space-y-1 overflow-y-auto">
+                      {apiServices
+                        .filter(
+                          (svc) =>
+                            svc.label.toLowerCase().includes(handoffServiceSearch.toLowerCase()) ||
+                            (svc.description && svc.description.toLowerCase().includes(handoffServiceSearch.toLowerCase())),
+                        )
+                        .map((svc) => (
+                          <li key={svc.id}>
+                            <label className="flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-[13px] hover:bg-[var(--attio-hover)]">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={selectedHandoffServiceIds.includes(svc.id)}
+                                onChange={() => toggleHandoffService(svc)}
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium">{svc.label}</p>
+                                <p className="text-[12px] text-[var(--attio-text-tertiary)]">
+                                  ₹{svc.amount.toLocaleString("en-IN")}
+                                </p>
+                              </div>
+                            </label>
+                          </li>
+                        ))}
+                      {apiServices.filter(
+                        (svc) =>
+                          svc.label.toLowerCase().includes(handoffServiceSearch.toLowerCase()) ||
+                          (svc.description && svc.description.toLowerCase().includes(handoffServiceSearch.toLowerCase())),
+                      ).length === 0 && (
+                        <p className="text-[12px] text-[var(--attio-text-tertiary)]">No services match.</p>
                       )}
                     </ul>
                   </div>
                   <div>
-                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Packages</p>
-                    <ul className="max-h-48 space-y-2 overflow-y-auto">
-                      {apiPackages.map((pkg: BillingPackage) => (
-                        <button
-                          key={pkg.id}
-                          type="button"
-                          onClick={() => handleSelectHandoffPackage(pkg)}
-                          className={cn(
-                            "w-full rounded-lg border px-3 py-2 text-left text-[13px] transition-colors hover:bg-[var(--attio-hover)]",
-                            selectedHandoffPackageId === pkg.id && "border-[var(--attio-accent)] bg-blue-50/50",
-                          )}
-                        >
-                          <p className="font-medium">{pkg.label}</p>
-                          <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                            ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
-                          </p>
-                        </button>
-                      ))}
-                      {apiPackages.length === 0 && (
-                        <p className="text-[12px] text-[var(--attio-text-tertiary)]">No packages available.</p>
-                      )}
-                    </ul>
+                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Package</p>
+                    <Select
+                      value={selectedHandoffPackageId || "none"}
+                      onValueChange={(value) => {
+                        const pkg = apiPackages.find((p) => p.id === value);
+                        if (pkg) {
+                          handleSelectHandoffPackage(pkg);
+                        } else {
+                          setSelectedHandoffPackageId("");
+                          updateHandoffSelection({ packageId: "", packageLabel: "" });
+                          updateConsultation(visitId, { packageId: undefined });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-[13px]">
+                        <SelectValue placeholder="Select package…" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 min-w-[260px]">
+                        <SelectItem value="none">None</SelectItem>
+                        {apiPackages.map((pkg) => (
+                          <SelectItem key={pkg.id} value={pkg.id}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{pkg.label}</span>
+                              <span className="text-[11px] text-[var(--attio-text-tertiary)]">
+                                ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               )}

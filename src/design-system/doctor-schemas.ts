@@ -96,17 +96,6 @@ export const DOCTOR_HANDOFF_SCHEMA: FormSchema = {
       id: "counsellor",
       label: "Commercial handoff",
       fields: [
-        {
-          id: "packageId",
-          type: "select",
-          label: "Package recommendation",
-          options: [
-            { value: "pkg_regen", label: "Advanced Regenerative — 12 sessions" },
-            { value: "pkg_basic", label: "Basic MSK Care — 6 sessions" },
-            { value: "pkg_wellness", label: "Metabolic Reset — 8 sessions" },
-            { value: "pkg_opd", label: "OPD follow-up only" },
-          ],
-        },
         { id: "counsellorNotes", type: "textarea", label: "Counsellor notes", span: 2, hint: "Visible to counsellor in full" },
         { id: "doctorAdvice", type: "textarea", label: "Doctor advice to patient", span: 2 },
         { id: "conversionPriority", type: "select", label: "Conversion priority", defaultValue: "normal", options: [

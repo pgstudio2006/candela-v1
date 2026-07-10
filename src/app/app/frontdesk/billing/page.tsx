@@ -77,12 +77,11 @@ function BillingContent() {
     finalized?: boolean;
   }) => {
     setRoutingFlash(result.routingNote);
+    setReceiptVisitId(result.visitId);
     if (result.finalized) {
-      setReceiptVisitId(result.visitId);
       setPendingRoute(result.routeHref);
     } else {
       setPendingRoute(null);
-      setReceiptVisitId(null);
     }
   };
 

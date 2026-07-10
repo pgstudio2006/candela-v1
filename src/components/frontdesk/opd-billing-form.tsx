@@ -322,8 +322,8 @@ export function OpdBillingForm({
                     <SelectTrigger className="h-9 text-[13px]">
                       <SelectValue placeholder="Search and select service..." />
                     </SelectTrigger>
-                    <SelectContent>
-                      <div className="mb-2 px-2">
+                    <SelectContent className="min-w-[320px]">
+                      <div className="sticky top-0 z-10 bg-popover px-2 py-2">
                         <Input
                           type="text"
                           placeholder="Search services..."
@@ -338,7 +338,11 @@ export function OpdBillingForm({
                           (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase()))
                         )
                         .map((svc: BillingPackage) => (
-                          <SelectItem key={svc.id} value={svc.id} className="py-3">
+                          <SelectItem
+                            key={svc.id}
+                            value={svc.id}
+                            className="py-3 [&>[data-slot=select-item-text]]:whitespace-normal"
+                          >
                             <div className="flex flex-col gap-0.5">
                               <p className="text-[13px] font-medium leading-tight">{svc.label}</p>
                               {svc.description && (
@@ -365,8 +369,8 @@ export function OpdBillingForm({
                     <SelectTrigger className="h-9 text-[13px]">
                       <SelectValue placeholder="Search and select package..." />
                     </SelectTrigger>
-                    <SelectContent>
-                      <div className="mb-2 px-2">
+                    <SelectContent className="min-w-[320px]">
+                      <div className="sticky top-0 z-10 bg-popover px-2 py-2">
                         <Input
                           type="text"
                           placeholder="Search packages..."
@@ -381,7 +385,11 @@ export function OpdBillingForm({
                           (pkg.description && pkg.description.toLowerCase().includes(packageSearch.toLowerCase()))
                         )
                         .map((pkg: BillingPackage) => (
-                          <SelectItem key={pkg.id} value={pkg.id} className="py-3">
+                          <SelectItem
+                            key={pkg.id}
+                            value={pkg.id}
+                            className="py-3 [&>[data-slot=select-item-text]]:whitespace-normal"
+                          >
                             <div className="flex flex-col gap-0.5">
                               <p className="text-[13px] font-medium leading-tight">{pkg.label}</p>
                               {pkg.description && (
@@ -738,7 +746,11 @@ export function OpdBillingForm({
               ? "Skip billing & release to queue"
               : existingInvoice
                 ? "Collect balance & generate bill"
-                : submitLabel}
+                : paymentScope === "partial"
+                  ? "Collect partial payment"
+                  : paymentScope === "defer"
+                    ? "Defer billing & release to queue"
+                    : submitLabel}
           </AttioButton>
         </>
       )}

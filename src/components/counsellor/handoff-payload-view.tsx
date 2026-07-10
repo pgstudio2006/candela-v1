@@ -14,7 +14,17 @@ type HandoffPayloadViewProps = {
 
 export function HandoffPayloadView({ item, patient, visit }: HandoffPayloadViewProps) {
   const c = item.payload;
-  const recommendedPkgLabel = item.packageLabel || (c.handoff?.packageId ? String(c.handoff.packageId) : c.packageId ? String(c.packageId) : "—");
+  const handoff = c.handoff ?? {};
+  const recommendedPkgLabel =
+    item.packageLabel ||
+    (handoff.packageLabel ? String(handoff.packageLabel) : c.packageId ? String(c.packageId) : "—");
+  const serviceIds = String(handoff.serviceIds ?? "")
+    .split(",")
+    .filter(Boolean);
+  const serviceLabels = String(handoff.serviceLabels ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   return (
     <div className="space-y-4">
@@ -31,7 +41,22 @@ export function HandoffPayloadView({ item, patient, visit }: HandoffPayloadViewP
           <div><dt className="text-[var(--attio-text-tertiary)]">Billing</dt><dd><StatusBadge label={visit.billing} variant={visit.billing === "paid" ? "success" : "warning"} /></dd></div>
           {visit.deferredReason && <div className="sm:col-span-2 text-amber-800">Deferred: {visit.deferredReason}</div>}
           <div><dt className="text-[var(--attio-text-tertiary)]">Priority</dt><dd><StatusBadge label={item.priority} variant={item.priority === "high" ? "warning" : "neutral"} /></dd></div>
-          {item.packageId && <div className="sm:col-span-2"><dt className="text-[var(--attio-text-tertiary)]">Doctor recommended package</dt><dd className="font-medium text-[var(--attio-accent)]">{recommendedPkgLabel}</dd></div>}
+          {recommendedPkgLabel !== "—" && (
+            <div className="sm:col-span-2">
+              <dt className="text-[var(--attio-text-tertiary)]">Doctor recommended package</dt>
+              <dd className="font-medium text-[var(--attio-accent)]">{recommendedPkgLabel}</dd>
+            </div>
+          )}
+          {serviceIds.length > 0 && (
+            <div className="sm:col-span-2">
+              <dt className="text-[var(--attio-text-tertiary)]">Doctor recommended services</dt>
+              <dd className="mt-1 space-y-1">
+                {serviceLabels.map((label, i) => (
+                  <p key={serviceIds[i] ?? i} className="font-medium">{label}</p>
+                ))}
+              </dd>
+            </div>
+          )}
         </dl>
       </Panel>
 
@@ -79,12 +104,15 @@ export function HandoffPayloadView({ item, patient, visit }: HandoffPayloadViewP
         </Panel>
       )}
 
-      {c.handoff && fieldEntries(c.handoff).length > 0 && (
+      {c.handoff &&
+        fieldEntries(c.handoff).filter(([k]) => !["serviceIds", "serviceLabels", "packageId", "packageLabel"].includes(k)).length > 0 && (
         <Panel title="Commercial handoff fields">
           <dl className="space-y-2 text-[13px]">
-            {fieldEntries(c.handoff).map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-4"><dt className="text-[var(--attio-text-tertiary)]">{humanizeFieldKey(k)}</dt><dd className="text-right">{String(v)}</dd></div>
-            ))}
+            {fieldEntries(c.handoff)
+              .filter(([k]) => !["serviceIds", "serviceLabels", "packageId", "packageLabel"].includes(k))
+              .map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-4"><dt className="text-[var(--attio-text-tertiary)]">{humanizeFieldKey(k)}</dt><dd className="text-right">{String(v)}</dd></div>
+              ))}
           </dl>
         </Panel>
       )}
