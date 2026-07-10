@@ -111,10 +111,13 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     prescriptionTemplates.find((t) => t.id === "doc_rx_saini")?.id ?? prescriptionTemplates[0]?.id,
   );
   const [savingExam, setSavingExam] = useState(false);
+  const [examSaved, setExamSaved] = useState(false);
   const [savingDx, setSavingDx] = useState(false);
   const [savingTx, setSavingTx] = useState(false);
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [selectedHandoffServiceId, setSelectedHandoffServiceId] = useState<string>("");
+  const [selectedHandoffPackageId, setSelectedHandoffPackageId] = useState<string>("");
 
   const visit = getVisit(visitId);
   const patient = visit ? getPatient(visit.patientId) : undefined;
@@ -168,6 +171,8 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       setSkipCounsellor(consult.skipCounsellor);
       setNotes(consult.notes);
       setCompleted(consult.status === "completed");
+      setSelectedHandoffServiceId(String(consult.handoff?.serviceId ?? ""));
+      setSelectedHandoffPackageId(String(consult.handoff?.packageId ?? consult.packageId ?? ""));
     }
   }, [consult]);
 
@@ -231,6 +236,35 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       printPdfBytes(pdfBytes, "Prescription");
     } catch (error) {
       toast("Could not generate prescription PDF", "error");
+    }
+  };
+
+  const updateHandoffSelection = (updates: Record<string, string | number | boolean>) => {
+    const next = { ...handoffValues, ...updates };
+    setHandoffValues(next);
+    updateConsultation(visitId, { handoff: next });
+  };
+
+  const handleSelectHandoffService = (svc: BillingPackage) => {
+    const selected = selectedHandoffServiceId === svc.id ? "" : svc.id;
+    setSelectedHandoffServiceId(selected);
+    updateHandoffSelection({
+      serviceId: selected,
+      serviceLabel: selected ? svc.label : "",
+    });
+  };
+
+  const handleSelectHandoffPackage = (pkg: BillingPackage) => {
+    const selected = selectedHandoffPackageId === pkg.id ? "" : pkg.id;
+    setSelectedHandoffPackageId(selected);
+    updateHandoffSelection({
+      packageId: selected,
+      packageLabel: selected ? pkg.label : "",
+    });
+    if (selected) {
+      updateConsultation(visitId, { packageId: selected });
+    } else {
+      updateConsultation(visitId, { packageId: undefined });
     }
   };
 
@@ -409,13 +443,22 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               formKey={`exam-${visitId}-${consult?.startedAt ?? ""}`}
               initialValues={consult?.examination}
               onValuesChange={(data) => patchConsultSectionLocal(visitId, "examination", data)}
-              submitLabel={savingExam ? "Saving..." : "Save examination"}
+              submitStatus={savingExam ? "saving" : examSaved ? "saved" : "idle"}
+              submitLabel={examSaved ? "Draft saved" : "Save examination"}
               onSubmit={async (data) => {
                 setSavingExam(true);
                 await saveConsultSection(visitId, "examination", data);
                 setSavingExam(false);
+                setExamSaved(true);
+                setTimeout(() => setExamSaved(false), 3000);
               }}
             />
+            {examSaved && (
+              <p className="mt-3 flex items-center gap-1.5 text-[12px] text-emerald-600">
+                <CheckCircle2 className="size-3.5" />
+                Draft saved
+              </p>
+            )}
           </Panel>
           <AiScribePanel
             language={scribeLang}
@@ -508,7 +551,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       )}
 
       {tab === "treatment" && (
-        <div className={CONSULT_SIDEBAR_SPLIT}>
+        <div className={CONSULT_FORM_SPLIT}>
           <Panel title="Treatment plan">
             <PublishedSchemaForm
               schema={txSchema}
@@ -522,30 +565,6 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 setSavingTx(false);
               }}
             />
-          </Panel>
-          <Panel title="Care packages">
-            {loadingData ? (
-              <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading packages...</p>
-            ) : (
-              <ul className="space-y-2">
-                {apiPackages.map((pkg: BillingPackage) => (
-                  <button
-                    key={pkg.id}
-                    type="button"
-                    onClick={() => updateConsultation(visitId, { packageId: pkg.id })}
-                    className={cn(
-                      "w-full rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-[var(--attio-hover)]",
-                      consult?.packageId === pkg.id && "border-[var(--attio-accent)] bg-blue-50/50",
-                    )}
-                  >
-                    <p className="text-[13px] font-medium">{pkg.label}</p>
-                    <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                      ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
-                    </p>
-                  </button>
-                ))}
-              </ul>
-            )}
           </Panel>
         </div>
       )}
@@ -583,7 +602,64 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               }}
             />
           </Panel>
-          <Panel title="Complete consultation">
+          <div className="space-y-6">
+            <Panel title="Services & packages">
+              {loadingData ? (
+                <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading...</p>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Services</p>
+                    <ul className="max-h-48 space-y-2 overflow-y-auto">
+                      {apiServices.map((svc: BillingPackage) => (
+                        <button
+                          key={svc.id}
+                          type="button"
+                          onClick={() => handleSelectHandoffService(svc)}
+                          className={cn(
+                            "w-full rounded-lg border px-3 py-2 text-left text-[13px] transition-colors hover:bg-[var(--attio-hover)]",
+                            selectedHandoffServiceId === svc.id && "border-[var(--attio-accent)] bg-blue-50/50",
+                          )}
+                        >
+                          <p className="font-medium">{svc.label}</p>
+                          <p className="text-[12px] text-[var(--attio-text-tertiary)]">
+                            ₹{svc.amount.toLocaleString("en-IN")}
+                          </p>
+                        </button>
+                      ))}
+                      {apiServices.length === 0 && (
+                        <p className="text-[12px] text-[var(--attio-text-tertiary)]">No services available.</p>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Packages</p>
+                    <ul className="max-h-48 space-y-2 overflow-y-auto">
+                      {apiPackages.map((pkg: BillingPackage) => (
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          onClick={() => handleSelectHandoffPackage(pkg)}
+                          className={cn(
+                            "w-full rounded-lg border px-3 py-2 text-left text-[13px] transition-colors hover:bg-[var(--attio-hover)]",
+                            selectedHandoffPackageId === pkg.id && "border-[var(--attio-accent)] bg-blue-50/50",
+                          )}
+                        >
+                          <p className="font-medium">{pkg.label}</p>
+                          <p className="text-[12px] text-[var(--attio-text-tertiary)]">
+                            ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
+                          </p>
+                        </button>
+                      ))}
+                      {apiPackages.length === 0 && (
+                        <p className="text-[12px] text-[var(--attio-text-tertiary)]">No packages available.</p>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </Panel>
+            <Panel title="Complete consultation">
             <div className="space-y-4 text-[13px] text-[var(--attio-text-secondary)]">
               <p>
                 {recommendCounsellor && !skipCounsellor
@@ -650,6 +726,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
             </div>
           </Panel>
         </div>
+      </div>
       )}
     </PageChrome>
   );

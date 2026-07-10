@@ -10,6 +10,7 @@ type PublishedSchemaFormBaseProps = {
   onSubmit?: (data: Record<string, string | number | boolean>) => void;
   onValuesChange?: (data: Record<string, string | number | boolean>) => void;
   submitLabel?: string;
+  submitStatus?: "idle" | "saving" | "saved";
   hideSubmit?: boolean;
   className?: string;
   initialValues?: Record<string, string | number | boolean>;

@@ -395,6 +395,7 @@ export function SchemaForm({
   schema,
   onSubmit,
   submitLabel = "Save",
+  submitStatus = "idle",
   hideSubmit = false,
   className,
   initialValues,
@@ -406,6 +407,7 @@ export function SchemaForm({
   schema: FormSchema;
   onSubmit?: (data: Record<string, string | number | boolean>) => void;
   submitLabel?: string;
+  submitStatus?: "idle" | "saving" | "saved";
   hideSubmit?: boolean;
   className?: string;
   initialValues?: Record<string, string | number | boolean>;
@@ -547,9 +549,17 @@ export function SchemaForm({
       {onSubmit && !hideSubmit && (
         <button
           type="submit"
-          className="h-8 rounded-md bg-[var(--attio-text)] px-3 text-[12px] font-medium text-white hover:bg-[#333]"
+          disabled={submitStatus === "saving"}
+          className={cn(
+            "h-8 rounded-md px-3 text-[12px] font-medium text-white transition-colors",
+            submitStatus === "saved"
+              ? "bg-emerald-600 hover:bg-emerald-700"
+              : submitStatus === "saving"
+                ? "bg-[var(--attio-text)]/70 cursor-wait"
+                : "bg-[var(--attio-text)] hover:bg-[#333]",
+          )}
         >
-          {submitLabel}
+          {submitStatus === "saved" ? "Draft saved" : submitStatus === "saving" ? "Saving..." : submitLabel}
         </button>
       )}
     </form>

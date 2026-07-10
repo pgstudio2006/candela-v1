@@ -12,7 +12,7 @@ import { formatStageStatus } from "@/lib/frontdesk-workflow";
 import { ArrowLeft, CreditCard, ListOrdered, Pencil, Printer, UserCog } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
 
 export default function PatientRecordPage() {
@@ -22,6 +22,12 @@ export default function PatientRecordPage() {
   const patient = getPatient(id);
   const patientVisits = patient ? getPatientVisits(patient.id) : [];
   const activeVisit = patientVisits.find((v) => !["completed", "with_doctor"].includes(v.stage));
+  const billingTotals = useMemo(() => {
+    const billed = patientVisits.filter((v) => v.billAmount);
+    const paid = billed.reduce((sum, v) => sum + (v.amountPaid ?? 0), 0);
+    const pending = billed.reduce((sum, v) => sum + (v.balanceDue ?? 0), 0);
+    return { billed, paid, pending };
+  }, [patientVisits]);
   const { setActivePatientId } = useSession();
   const [reprintVisitId, setReprintVisitId] = useState<string | null>(null);
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
@@ -276,11 +282,25 @@ export default function PatientRecordPage() {
         </TabsContent>
 
         <TabsContent value="billing" className="mt-4">
-          <Panel title="Billing summary">
+          <Panel
+            title="Billing summary"
+            action={
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-[10px] text-[var(--attio-text-tertiary)]">Total paid</p>
+                  <p className="text-[13px] font-semibold text-emerald-600">₹{billingTotals.paid.toLocaleString("en-IN")}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-[var(--attio-text-tertiary)]">Total pending</p>
+                  <p className="text-[13px] font-semibold text-amber-600">₹{billingTotals.pending.toLocaleString("en-IN")}</p>
+                </div>
+              </div>
+            }
+          >
             <p className="text-[13px] text-[var(--attio-text-secondary)]">
               Outstanding ledger: {patient.balance > 0 ? `₹${patient.balance.toLocaleString("en-IN")}` : "None"}
             </p>
-            {patientVisits.filter((v) => v.billAmount).map((v) => (
+            {billingTotals.billed.map((v) => (
               <div key={v.id} className="mt-3 rounded-lg border border-[var(--attio-border-subtle)] p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-[13px] font-medium">Visit {v.id}</p>
