@@ -153,7 +153,7 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   const date = formatConsultDate(consult.completedAt ?? consult.startedAt ?? new Date().toISOString());
 
   // White-out the pre-printed patient info block while preserving the rest of the letterhead.
-  const patientInfoRect = { x: 156, y: 410, width: 420, height: 250 };
+  const patientInfoRect = { x: 140, y: 410, width: 440, height: 260 };
   page.drawRectangle({
     x: patientInfoRect.x,
     y: patientInfoRect.y,
@@ -165,7 +165,7 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   // Draw system patient info inside the cleared area.
   let infoY = patientInfoRect.y + patientInfoRect.height - 16;
   const col1 = patientInfoRect.x + 12;
-  const col2 = patientInfoRect.x + 215;
+  const col2 = patientInfoRect.x + 190;
   const rowH = 21;
 
   drawText(page, "Patient Information", col1, infoY, bold, FONT.title);
