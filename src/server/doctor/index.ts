@@ -314,7 +314,8 @@ export async function startConsultation(ctx: ServerContext, visitId: string) {
     });
     const junior = asRecord(juniorExam?.data);
     const exam = asRecord(existing.examination);
-    if (juniorExam && !exam.chiefComplaint && !exam.juniorImpression) {
+    const hasExamValues = Object.values(exam).some((v) => v !== "" && v !== false && v !== undefined && v !== null);
+    if (juniorExam && !hasExamValues) {
       const fromJunior = juniorExamToConsultFields(junior);
       const updated = await prisma.consultation.update({
         where: { visitId },

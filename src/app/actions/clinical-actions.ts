@@ -22,7 +22,7 @@ import {
   updatePatient,
 } from "@/server/clinical";
 import { getVisitInvoiceForBilling } from "@/server/invoicing";
-import { requireAuth, requireModule } from "@/server/auth";
+import { requireAuth, requireAnyModule, requireModule } from "@/server/auth";
 import { runAction, type ActionResult } from "@/server/action-result";
 import type { ClinicalSnapshot } from "@/server/clinical";
 import { SCHEMA_DEPARTMENT } from "@/lib/schema-registry";
@@ -37,14 +37,14 @@ export async function getClinicalSnapshotAction(): Promise<ActionResult<Clinical
 
 export async function getActiveReferralDoctorsAction() {
   return runAction(async () => {
-    const ctx = await requireModule("frontdesk");
+    const ctx = await requireAnyModule("frontdesk", "admin");
     return getActiveReferralDoctors(ctx);
   });
 }
 
 export async function getReferralDoctorWithPatientsAction(referralDoctorId: string) {
   return runAction(async () => {
-    const ctx = await requireModule("frontdesk");
+    const ctx = await requireAnyModule("frontdesk", "admin");
     return getReferralDoctorWithPatients(ctx, referralDoctorId);
   });
 }
