@@ -247,21 +247,50 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       activeTab={tab}
       onTabChange={(id) => setTab(id as TabId)}
       actions={
-        !completed && (
-          <AttioButton variant="primary" className="gap-1.5" onClick={finishConsult} disabled={completing}>
-            {completing ? (
-              <>
-                <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                Completing...
-              </>
-            ) : (
-              <>
-                <Send className="size-3.5" />
-                Complete consult
-              </>
-            )}
-          </AttioButton>
-        )
+        <div className="flex flex-wrap items-center gap-2">
+          {!completed && prescriptionTemplates.length > 0 && (
+            <>
+              {prescriptionTemplates.length > 1 && (
+                <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v ?? undefined)}>
+                  <SelectTrigger className="h-9 w-[220px] bg-white text-[13px] text-[var(--attio-text)]">
+                    <SelectValue placeholder="Select prescription template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {prescriptionTemplates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <AttioButton
+                variant="secondary"
+                className="gap-1.5"
+                onClick={handlePrintPrescription}
+                disabled={!consult}
+              >
+                <Printer className="size-3.5" />
+                Print prescription
+              </AttioButton>
+            </>
+          )}
+          {!completed && (
+            <AttioButton variant="primary" className="gap-1.5" onClick={finishConsult} disabled={completing}>
+              {completing ? (
+                <>
+                  <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Completing...
+                </>
+              ) : (
+                <>
+                  <Send className="size-3.5" />
+                  Complete consult
+                </>
+              )}
+            </AttioButton>
+          )}
+        </div>
       }
     >
       <Link
@@ -523,26 +552,6 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
 
       {tab === "prescription" && consult && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {prescriptionTemplates.length > 1 && (
-              <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v ?? undefined)}>
-                <SelectTrigger className="h-9 w-[220px] text-[13px]">
-                  <SelectValue placeholder="Select prescription template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {prescriptionTemplates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <AttioButton variant="secondary" className="gap-1.5" onClick={handlePrintPrescription}>
-              <Printer className="size-3.5" />
-              Print prescription
-            </AttioButton>
-          </div>
           <Panel title="Prescription (e-Rx) — fully editable">
             <PrescriptionEditor
               lines={consult.prescription}
