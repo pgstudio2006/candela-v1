@@ -33,6 +33,7 @@ export default function PatientEditPage() {
     if (!patient) return undefined;
     const { firstName, lastName } = splitName(patient.name);
     return {
+      fullName: patient.name,
       firstName,
       lastName,
       phone: patient.phone,

@@ -34,6 +34,62 @@ function categoryLabel(category: string) {
     .join(" ");
 }
 
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+const ACCEPTED_TYPES = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt";
+
+async function compressImageFile(file: File, maxBytes = MAX_UPLOAD_BYTES): Promise<File> {
+  if (!file.type.startsWith("image/") || file.size <= maxBytes) return file;
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      const maxDimension = 1600;
+      if (width > maxDimension || height > maxDimension) {
+        const scale = Math.min(maxDimension / width, maxDimension / height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      let quality = 0.85;
+      const attempt = () => {
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+            if (blob.size <= maxBytes || quality <= 0.45) {
+              const out = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+              resolve(out);
+            } else {
+              quality = Math.max(0.4, quality - 0.15);
+              attempt();
+            }
+          },
+          "image/jpeg",
+          quality,
+        );
+      };
+      attempt();
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+}
+
 export function PatientDocumentsPanel({ patientId, visitId }: { patientId: string; visitId?: string }) {
   const [documents, setDocuments] = useState<PatientDocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,15 +110,25 @@ export function PatientDocumentsPanel({ patientId, visitId }: { patientId: strin
     void load();
   }, [load]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] ?? null;
-    if (f && f.size > 5 * 1024 * 1024) {
-      setError("File size must be under 5 MB.");
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.files?.[0] ?? null;
+    if (!raw) {
+      setFile(null);
+      return;
+    }
+    if (raw.size > 10 * 1024 * 1024) {
+      setError("File is too large. Please choose a file under 10 MB.");
+      setFile(null);
+      return;
+    }
+    const processed = await compressImageFile(raw);
+    if (processed.size > MAX_UPLOAD_BYTES) {
+      setError("File size must be under 4 MB even after compression.");
       setFile(null);
       return;
     }
     setError(null);
-    setFile(f);
+    setFile(processed);
   };
 
   const handleUpload = async () => {
@@ -147,7 +213,12 @@ export function PatientDocumentsPanel({ patientId, visitId }: { patientId: strin
           </div>
           <div className="space-y-1 sm:col-span-2">
             <Label className="text-[12px]">File</Label>
-            <Input type="file" onChange={handleFileChange} className="h-9 text-[13px]" />
+            <Input
+              type="file"
+              accept={ACCEPTED_TYPES}
+              onChange={handleFileChange}
+              className="h-9 text-[13px]"
+            />
             {file && (
               <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                 {file.name} · {formatFileSize(file.size)}

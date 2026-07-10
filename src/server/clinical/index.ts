@@ -1433,15 +1433,16 @@ export async function updatePatient(
   });
   if (!existing) throw new ServerActionError("NOT_FOUND", "Patient not found.");
 
-  const deptId = String(data.department ?? existing.departmentId ?? "dept_spine");
-  const first = String(data.firstName ?? "").trim();
-  const last = String(data.lastName ?? "").trim();
+  const normalized = normalizeRegisterPatientInput(data);
+  const deptId = String(normalized.department ?? existing.departmentId ?? "dept_spine");
+  const first = String(normalized.firstName ?? "").trim();
+  const last = String(normalized.lastName ?? "").trim();
   const name = `${first} ${last}`.trim() || existing.name || "Patient";
-  const phone = String(data.phone ?? existing.phone);
+  const phone = String(normalized.phone ?? existing.phone);
   const uhid = existing.uhid;
 
   await assertNoDuplicatePatient(ctx, phone, uhid, patientId);
-  const registration = buildPatientRegistrationPayload(data);
+  const registration = buildPatientRegistrationPayload(normalized);
 
   await prisma.patient.update({
     where: { id: patientId },
@@ -1449,9 +1450,9 @@ export async function updatePatient(
       name,
       fullName: name,
       phone,
-      email: String(data.email ?? "") || null,
-      age: data.dob ? ageFromDob(String(data.dob)) : existing.age,
-      gender: String(data.gender ?? existing.gender ?? "O"),
+      email: String(normalized.email ?? "") || null,
+      age: normalized.dob ? ageFromDob(String(normalized.dob)) : existing.age,
+      gender: String(normalized.gender ?? existing.gender ?? "O"),
       department: deptLabel(deptId),
       departmentId: deptId,
       tags: registration.tags,

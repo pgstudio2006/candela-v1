@@ -36,8 +36,11 @@ export function normalizeRegisterPatientInput(
   const firstFromFull = nameParts[0] ?? "";
   const lastFromFull = nameParts.slice(1).join(" ");
 
-  const normalizedFirstName = firstName || firstFromFull;
-  const normalizedLastName = lastName || lastFromFull;
+  // Always derive first/last from the full name when it is present. This prevents
+  // duplication when a form accidentally submits the full name in the firstName
+  // field while the fullName field also contains the same value.
+  const normalizedFirstName = fullName ? firstFromFull : firstName;
+  const normalizedLastName = fullName ? lastFromFull : lastName;
 
   return {
     ...data,
