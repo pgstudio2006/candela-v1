@@ -29,12 +29,13 @@ export type PharmacyNavItem = {
 
 export const PHARMACY_NAV: PharmacyNavItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/app/pharmacy", icon: LayoutDashboard, group: "workspace" },
+  { id: "new-order", label: "New order", href: "/app/pharmacy/patient-select", icon: ClipboardList, group: "operations" },
   { id: "prescriptions", label: "Prescriptions", href: "/app/pharmacy/prescriptions", icon: ClipboardList, group: "operations" },
   { id: "billing", label: "Billing", href: "/app/pharmacy/billing", icon: Receipt, group: "operations" },
   { id: "ipd", label: "IPD", href: "/app/pharmacy/ipd", icon: BedDouble, group: "operations" },
   { id: "indents", label: "Ward indents", href: "/app/pharmacy/indents", icon: FileText, group: "operations" },
   { id: "returns", label: "Returns", href: "/app/pharmacy/returns", icon: RotateCcw, group: "operations" },
-  { id: "inventory", label: "Inventory", href: "/app/pharmacy/inventory", icon: Warehouse, group: "supply" },
+  { id: "inventory", label: "Stock", href: "/app/pharmacy/inventory", icon: Warehouse, group: "supply" },
   { id: "drugs", label: "Drugs & formulary", href: "/app/pharmacy/drugs", icon: Pill, group: "supply" },
   { id: "suppliers", label: "Suppliers", href: "/app/pharmacy/suppliers", icon: Truck, group: "supply", managerOnly: true, purchaseOnly: true },
   { id: "purchase-orders", label: "Purchase orders", href: "/app/pharmacy/purchase-orders", icon: ShoppingCart, group: "supply", managerOnly: true, purchaseOnly: true },
@@ -73,6 +74,6 @@ export function canAccessPharmacyNav(
     const purchasePaths = ["dashboard", "inventory", "drugs", "suppliers", "purchase-orders", "expiry", "reports", "settings"];
     return purchasePaths.includes(item.id);
   }
-  const opdPaths = ["dashboard", "prescriptions", "billing", "ipd", "indents", "returns", "inventory", "expiry", "reports", "settings"];
+  const opdPaths = ["dashboard", "new-order", "prescriptions", "billing", "ipd", "indents", "returns", "inventory", "expiry", "reports", "settings"];
   return opdPaths.includes(item.id);
 }

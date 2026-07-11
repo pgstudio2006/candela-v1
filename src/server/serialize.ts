@@ -1,5 +1,6 @@
 /** Strip Date/BigInt/Decimal before server actions cross the wire. */
 export function serializeForClient<T>(value: T): T {
+  if (value === undefined) return undefined as T;
   return JSON.parse(
     JSON.stringify(value, (_key, v) => {
       if (typeof v === "bigint") return v.toString();

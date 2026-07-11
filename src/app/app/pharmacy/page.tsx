@@ -27,9 +27,14 @@ export default function PharmacyDashboardPage() {
       title="Pharmacy command center"
       meta="Prescriptions · inventory · procurement · compliance — live store"
       actions={
-        <Link href="/app/pharmacy/prescriptions" className="inline-flex h-8 items-center rounded-md bg-[var(--attio-text)] px-3 text-[12px] font-medium text-white">
-          Open Rx queue
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/app/pharmacy/patient-select" className="inline-flex h-8 items-center rounded-md border px-3 text-[12px] font-medium hover:bg-[var(--attio-hover)]">
+            New order
+          </Link>
+          <Link href="/app/pharmacy/prescriptions" className="inline-flex h-8 items-center rounded-md bg-[var(--attio-text)] px-3 text-[12px] font-medium text-white">
+            Open Rx queue
+          </Link>
+        </div>
       }
     >
       <MetricStrip metrics={kpis} />

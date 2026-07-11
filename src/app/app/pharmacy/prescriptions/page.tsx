@@ -2,6 +2,7 @@
 
 import { RxWorkspaceModal } from "@/components/pharmacy/rx-workspace";
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
+import { useFrontdeskStore } from "@/components/frontdesk/frontdesk-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, StatusBadge } from "@/components/frontdesk/ui";
 import { PharmacyDialog, PharmacyInput, PharmacySelect, FormRow } from "@/components/pharmacy/ui";
@@ -20,6 +21,7 @@ export default function PharmacyPrescriptionsPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { getActivePrescriptions, prescriptions, createManualPrescription } = usePharmacyStore();
+  const { getPatient } = useFrontdeskStore();
   const [selected, setSelected] = useState<Prescription | null>(null);
   const [filter, setFilter] = useState<string>("active");
   const [sourceFilter, setSourceFilter] = useState<"all" | "opd" | "ipd" | "walk_in">("all");
@@ -41,6 +43,11 @@ export default function PharmacyPrescriptionsPage() {
     const pAge = searchParams.get("age");
     const pType = searchParams.get("patientType");
     if (patientId) {
+      const patient = getPatient(patientId);
+      setPatientName(patient?.name ?? "");
+      setUhid(patient?.uhid ?? "");
+      setMobile(patient?.phone ?? "");
+      setAge(patient?.age ? String(patient.age) : "");
       setPatientType("registered");
     } else if (name) {
       setPatientName(name);
