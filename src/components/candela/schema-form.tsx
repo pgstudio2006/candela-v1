@@ -418,17 +418,31 @@ export function SchemaForm({
 }) {
   const [values, setValues] = useState(() => defaultValues(schema, initialValues));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const initialKey = useMemo(() => JSON.stringify(initialValues ?? {}), [initialValues]);
   const fingerprint = useMemo(() => schemaFingerprint(schema), [schema]);
-  const resetKey = `${formKey ?? schema.id}:${initialKey}:${fingerprint}`;
+  const resetKey = `${formKey ?? schema.id}:${fingerprint}`;
   const lastResetKey = useRef(resetKey);
+  const lastInitialValues = useRef(initialValues);
 
   useEffect(() => {
     if (lastResetKey.current === resetKey) return;
     lastResetKey.current = resetKey;
     setValues(defaultValues(schema, initialValues));
     setErrors({});
-  }, [resetKey, schema, initialValues]);
+    lastInitialValues.current = initialValues;
+  }, [resetKey, schema, fingerprint, initialValues]);
+
+  useEffect(() => {
+    const same = JSON.stringify(initialValues ?? {}) === JSON.stringify(lastInitialValues.current ?? {});
+    if (same) return;
+    const untouched = JSON.stringify(values) === JSON.stringify(defaultValues(schema, lastInitialValues.current));
+    if (!untouched) {
+      lastInitialValues.current = initialValues;
+      return;
+    }
+    setValues(defaultValues(schema, initialValues));
+    setErrors({});
+    lastInitialValues.current = initialValues;
+  }, [initialValues, schema, values]);
 
   const set = (id: string, v: string | number | boolean) => {
     setValues((prev) => {
