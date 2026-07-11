@@ -571,9 +571,16 @@ async function assertIpdDischargeAllowed(ctx: ServerContext, admission: { id: st
     where: { id: admission.visitId, tenantId: scope.tenantId, branchId: scope.branchId },
     select: { balanceDue: true, amountPaid: true, billAmount: true },
   });
-  const balanceDue = visit?.balanceDue ?? 0;
+  const invoices = await prisma.invoice.findMany({
+    where: { visitId: admission.visitId, tenantId: scope.tenantId, branchId: scope.branchId },
+    select: { balanceAmount: true, amountPaid: true, totalAmount: true },
+  });
+  const invoiceBalance = invoices.reduce((sum, inv) => sum + Number(inv.balanceAmount ?? 0), 0);
+  const invoiceTotal = invoices.reduce((sum, inv) => sum + Number(inv.totalAmount ?? 0), 0);
+  const invoicePaid = invoices.reduce((sum, inv) => sum + Number(inv.amountPaid ?? 0), 0);
+  const balanceDue = (visit?.balanceDue ?? 0) + invoiceBalance;
   const cart = parseCart(admission.cart);
-  if (balanceDue > 0 || (visit && (visit.amountPaid ?? 0) < (visit.billAmount ?? 0))) {
+  if (balanceDue > 0 || (visit && (visit.amountPaid ?? 0) < (visit.billAmount ?? 0)) || invoicePaid < invoiceTotal) {
     throw new ServerActionError("VALIDATION", "Cannot discharge while IPD bill is unpaid. Complete billing first.");
   }
   if (cart.length > 0) {

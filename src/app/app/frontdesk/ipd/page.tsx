@@ -7,6 +7,7 @@ import {
   transferIpdAdmissionAction,
   updateIpdAdmissionAction,
 } from "@/app/actions/ipd-actions";
+import { getPatientInvoicesAction } from "@/app/actions/clinical-actions";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, MetricStrip, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { PatientSearchField } from "@/components/frontdesk/patient-search-field";
@@ -56,6 +57,21 @@ export default function FrontdeskIpdPage() {
     }
   }, [selectedBed, snapshot]);
 
+  useEffect(() => {
+    if (!selectedAdmission) {
+      setPatientInvoices([]);
+      return;
+    }
+    let cancelled = false;
+    void getPatientInvoicesAction(selectedAdmission.patientId).then((result) => {
+      if (cancelled) return;
+      if (result.ok && result.data) setPatientInvoices(result.data.invoices);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAdmission]);
+
   const metrics = useMemo(() => {
     if (!snapshot) return [];
     return [
@@ -69,6 +85,7 @@ export default function FrontdeskIpdPage() {
   const [admitWardId, setAdmitWardId] = useState(selectedBed?.wardId ?? (snapshot?.wards[0]?.wardId ?? ""));
   const [transferWardId, setTransferWardId] = useState("");
   const [transferBedId, setTransferBedId] = useState("");
+  const [patientInvoices, setPatientInvoices] = useState<Extract<Awaited<ReturnType<typeof getPatientInvoicesAction>>, { ok: true }>["data"]["invoices"]>([]);
 
   useEffect(() => {
     setAdmitWardId(selectedBed?.wardId ?? (snapshot?.wards[0]?.wardId ?? ""));
@@ -151,6 +168,12 @@ export default function FrontdeskIpdPage() {
 
   const handleFinalDischarge = async () => {
     if (!selectedAdmission) return;
+    if (!paymentClear) {
+      toast("Final discharge is blocked until payment is cleared and the service cart is empty.", "error");
+      return;
+    }
+    const confirmed = window.confirm("This will discharge the patient and free the bed. Continue?");
+    if (!confirmed) return;
     const result = await updateIpdAdmissionAction(selectedAdmission.id, { status: "discharged" });
     if (result.ok) {
       toast("Patient discharged and bed freed", "success");
@@ -193,11 +216,16 @@ export default function FrontdeskIpdPage() {
     }, 250);
   };
 
+  const invoiceBalance = patientInvoices.reduce((sum, inv) => sum + (inv.balanceAmount ?? 0), 0);
+  const invoiceTotal = patientInvoices.reduce((sum, inv) => sum + (inv.totalAmount ?? 0), 0);
+  const invoicePaid = patientInvoices.reduce((sum, inv) => sum + (inv.amountPaid ?? 0), 0);
   const paymentClear =
     selectedAdmission &&
     (selectedAdmission.balanceDue ?? 0) <= 0 &&
     (selectedAdmission.amountPaid ?? 0) >= (selectedAdmission.billAmount ?? 0) &&
-    selectedAdmission.cart.length === 0;
+    selectedAdmission.cart.length === 0 &&
+    invoiceBalance <= 0 &&
+    invoicePaid >= invoiceTotal;
 
   const selectedWard = snapshot?.wards.find((w) => w.wardId === admitWardId);
   const transferWard = snapshot?.wards.find((w) => w.wardId === transferWardId);
