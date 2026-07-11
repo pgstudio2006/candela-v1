@@ -34,7 +34,7 @@ export async function requireNurseEpisode(ctx: ServerContext, visitId: string) {
 
 export async function assertNurseOwnsEpisode(ctx: ServerContext, visitId: string, nurseId: string) {
   const episode = await requireNurseEpisode(ctx, visitId);
-  if (episode.nurseId !== nurseId) {
+  if (episode.nurseId !== nurseId && episode.nurseId !== ctx.userId) {
     throw new ServerActionError(
       "FORBIDDEN",
       `Episode claimed by ${episode.nurseName}. Ask them to release or contact a supervisor.`,

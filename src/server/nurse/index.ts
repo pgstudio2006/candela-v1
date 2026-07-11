@@ -20,6 +20,7 @@ import {
   validateStartSession,
   validateUploadConsent,
 } from "@/lib/nurse-validation";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getClinicalSnapshot } from "@/server/clinical";
 import { writeIpdRoundLog } from "@/server/ipd";
@@ -36,7 +37,7 @@ import {
 import { writePlatformAudit } from "@/server/platform-audit";
 import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 
-const NURSING_STAGES = ["nursing_queue", "nursing_active"] as const;
+const NURSING_STAGES = ["nursing_queue", "nursing_active", "ipd_admitted"] as const;
 
 function asNursingHandoff(value: {
   visitId: string;
@@ -194,7 +195,7 @@ export type NurseSnapshot = {
 };
 
 export async function getNurseSnapshot(ctx: ServerContext): Promise<NurseSnapshot> {
-  const { operatorId, operatorName } = await resolveNurseOperator(ctx);
+  const { operatorId, operatorName, ward } = await resolveNurseOperator(ctx);
   const clinical = await getClinicalSnapshot(ctx);
   const branchVisitIds = new Set(clinical.visits.map((v) => v.id));
   const nursingVisits = clinical.visits.filter((v) =>
@@ -202,9 +203,17 @@ export async function getNurseSnapshot(ctx: ServerContext): Promise<NurseSnapsho
   );
   const nursingVisitIds = nursingVisits.map((v) => v.id);
 
+  const handoffWhere: Prisma.NursingHandoffWhereInput = { visitId: { in: nursingVisitIds } };
+  if (ward) {
+    handoffWhere.OR = [
+      { treatmentPath: { not: "ipd" } },
+      { treatmentPath: "ipd", ipdWard: ward },
+    ];
+  }
+
   const [handoffRows, episodeRows] = await Promise.all([
     prisma.nursingHandoff.findMany({
-      where: { visitId: { in: nursingVisitIds } },
+      where: handoffWhere,
       orderBy: { createdAt: "asc" },
     }),
     prisma.nursingEpisode.findMany({
@@ -235,7 +244,7 @@ export async function claimEpisode(ctx: ServerContext, visitId: string): Promise
     if (existing.status === "completed") {
       throw new ServerActionError("VALIDATION", "This nursing episode is already completed.");
     }
-    if (existing.nurseId !== operatorId) {
+    if (existing.nurseId !== operatorId && existing.nurseId !== ctx.userId) {
       throw new ServerActionError(
         "FORBIDDEN",
         `Episode claimed by ${existing.nurseName}. Ask them to release or contact a supervisor.`,
