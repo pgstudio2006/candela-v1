@@ -1,6 +1,8 @@
 "use server";
 
+import type { OpdReceiptPayload } from "@/lib/opd-receipt";
 import type { BillingResult, CounselBillingInput } from "@/server/clinical";
+import { getVisitReceipt } from "@/server/invoicing";
 import {
   bookAppointment,
   cancelAppointment,
@@ -198,6 +200,17 @@ export async function getPatientInvoicesAction(patientId: string) {
     const ctx = await requireModule("frontdesk");
     const invoices = await getPatientInvoices(ctx, patientId);
     return { invoices };
+  });
+}
+
+export async function getPatientInvoiceReceiptsAction(patientId: string): Promise<ActionResult<OpdReceiptPayload[]>> {
+  return runAction(async () => {
+    const ctx = await requireAuth();
+    const invoices = (await getPatientInvoices(ctx, patientId)).filter((inv) => inv.visitId);
+    const receipts = await Promise.all(
+      invoices.map((inv) => getVisitReceipt(ctx, inv.visitId!, inv.id).catch(() => null)),
+    );
+    return receipts.filter((r): r is OpdReceiptPayload => Boolean(r));
   });
 }
 

@@ -14,6 +14,7 @@ export type PatientDocumentListItem = {
   category: string;
   label: string | null;
   fileName: string;
+  fileUrl: string | null;
   mimeType: string | null;
   size: number | null;
   uploadedBy: string | null;
@@ -37,6 +38,7 @@ export async function listPatientDocumentsAction(
       category: r.category,
       label: r.label,
       fileName: r.fileName,
+      fileUrl: r.fileUrl,
       mimeType: r.mimeType,
       size: r.size,
       uploadedBy: r.uploadedBy,

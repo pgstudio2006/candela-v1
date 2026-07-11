@@ -2,8 +2,9 @@
 
 import type { DoctorTemplate, PrescriptionLine, TreatmentMode } from "@/design-system/doctor-data";
 import type { DocumentTemplate } from "@/design-system/document-templates";
-import { requireModule } from "@/server/auth";
+import { requireAnyModule, requireModule } from "@/server/auth";
 import { runAction, type ActionResult } from "@/server/action-result";
+import { prisma } from "@/lib/prisma";
 import { resolveDoctorIdForContext } from "@/server/clinical/roster";
 import {
   addDocumentTemplate,
@@ -99,6 +100,18 @@ export async function saveIpdRoundAction(ipdId: string, note: Record<string, str
 export async function getIpdRoundHistoryAction(ipdId: string) {
   const ctx = await requireModule("doctor");
   return getIpdRoundHistory(ctx, ipdId);
+}
+
+export async function getIpdRoundHistoryForVisitAction(visitId: string) {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("doctor", "nurse", "admin");
+    const admission = await prisma.ipdAdmission.findFirst({
+      where: { visitId, tenantId: ctx.tenantId, branchId: ctx.branchId },
+      select: { id: true },
+    });
+    if (!admission) return [];
+    return getIpdRoundHistory(ctx, admission.id);
+  });
 }
 
 export async function listDoctorAuditLogsAction(input?: { limit?: number; cursor?: string }) {

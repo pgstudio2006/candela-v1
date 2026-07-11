@@ -27,6 +27,7 @@ import { writeIpdRoundLog } from "@/server/ipd";
 import { createNursePharmacyOrder as createNursePharmacyOrderInPharmacy } from "@/server/pharmacy";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
+import { resolveDoctorProfile } from "@/server/clinical/roster";
 import { resolveNurseOperator } from "@/server/module-operator";
 import {
   assertNurseOwnsEpisode,
@@ -809,13 +810,46 @@ export async function createNurseTask(
 ): Promise<NurseTask> {
   const { operatorId, operatorName } = await resolveNurseOperator(ctx);
   const episodeRow = await assertNurseOwnsEpisode(ctx, visitId, operatorId);
+  return createNurseTaskInner(ctx, visitId, episodeRow, input.title, input.assignedBy, operatorName);
+}
+
+export async function createNurseTaskForDoctor(
+  ctx: ServerContext,
+  visitId: string,
+  input: { title: string; assignedBy?: string; assignedToNurseId?: string; assignedToNurseName?: string },
+): Promise<NurseTask | null> {
+  const episodeRow = await requireNurseEpisode(ctx, visitId);
+  const episode = asEpisode(episodeRow);
+  const profile = await resolveDoctorProfile(ctx).catch(() => null);
+  const assignedBy = input.assignedBy?.trim() || profile?.name || "Doctor";
+  const task = await createNurseTaskInner(ctx, visitId, episodeRow, input.title, assignedBy, assignedBy);
+  if (input.assignedToNurseId || input.assignedToNurseName) {
+    const enriched: NurseTask = {
+      ...task,
+      notes: [task.notes, input.assignedToNurseName ? `Assigned to: ${input.assignedToNurseName}` : ""].filter(Boolean).join(" · "),
+    };
+    const tasks = episode.tasks.map((t) => (t.id === task.id ? enriched : t));
+    await prisma.nursingEpisode.update({ where: { visitId }, data: { tasks } });
+    return enriched;
+  }
+  return task;
+}
+
+async function createNurseTaskInner(
+  ctx: ServerContext,
+  visitId: string,
+  episodeRow: Awaited<ReturnType<typeof requireNurseEpisode>>,
+  title: string,
+  assignedBy?: string,
+  actorName?: string,
+): Promise<NurseTask> {
   const episode = asEpisode(episodeRow);
   const task: NurseTask = {
     id: `nt_${visitId}_${Date.now()}`,
     visitId,
-    title: input.title.trim().slice(0, 200),
+    title: title.trim().slice(0, 200),
     status: "pending",
-    assignedBy: input.assignedBy?.trim().slice(0, 120) || episode.doctorName || "Doctor",
+    assignedBy: assignedBy?.trim().slice(0, 120) || episode.doctorName || "Doctor",
     assignedAt: new Date().toISOString(),
   };
   const tasks = [...episode.tasks, task];
@@ -829,7 +863,7 @@ export async function createNurseTask(
     action: "task_created",
     entityType: "visit",
     entityId: visitId,
-    summary: `Task added by ${operatorName}: ${task.title}`,
+    summary: `Task added by ${actorName ?? assignedBy ?? "Doctor"}: ${task.title}`,
     payload: { taskId: task.id },
   });
   return task;

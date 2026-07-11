@@ -106,16 +106,24 @@ export function IpdDischargeSummaryPanel({ admissionId, onSaved }: { admissionId
           {isDoctorReady && <StatusBadge label="Ready for discharge" variant="success" />}
           {isDischarged && <StatusBadge label="Discharged" variant="success" />}
         </div>
-        {mode === "discharge" && !isDischarged && (
+        {mode === "discharge" && !isDischarged && !isDoctorReady && (
           <AttioButton
             variant="primary"
             onClick={() => void markReady()}
             disabled={markingReady || !dischargeSummarySaved}
           >
-            {markingReady ? "Marking ready…" : isDoctorReady ? "Ready for discharge" : "Mark ready for discharge"}
+            {markingReady ? "Marking ready…" : "Mark ready for discharge"}
           </AttioButton>
         )}
+        {mode === "discharge" && isDoctorReady && (
+          <StatusBadge label="Ready for discharge" variant="success" />
+        )}
       </div>
+      {mode === "discharge" && !isDischarged && !dischargeSummarySaved && (
+        <p className="mt-2 text-[11px] text-[var(--attio-text-tertiary)]">
+          Save the discharge summary above to enable the “Mark ready for discharge” button.
+        </p>
+      )}
       {mode && (
         <div className="mt-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">

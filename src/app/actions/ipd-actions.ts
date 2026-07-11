@@ -3,6 +3,8 @@
 import type { IpdAdmissionInput, IpdAdmissionStatus, IpdCartItem } from "@/design-system/ipd-data";
 import { runAction, type ActionResult } from "@/server/action-result";
 import { requireAnyModule, requireModule } from "@/server/auth";
+import { prisma } from "@/lib/prisma";
+import { createNurseTaskForDoctor } from "@/server/nurse";
 import {
   addIpdCartItem,
   updateIpdCartItem,
@@ -143,10 +145,36 @@ export async function generateDischargeSummaryAction(id: string): Promise<Action
   });
 }
 
-export async function saveIpdTaskAction(ipdId: string, input: { text: string; assignee?: string }): Promise<ActionResult<{ id: string }>> {
+export async function getNurseOptionsAction(): Promise<ActionResult<Array<{ id: string; name: string }>>> {
   return runAction(async () => {
     const ctx = await requireAnyModule("doctor", "nurse", "admin");
-    return saveIpdTask(ctx, ipdId, input);
+    const staff = await prisma.adminStaff.findMany({
+      where: { branchId: ctx.branchId, role: "nurse" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+    return staff.map((s) => ({ id: s.id, name: s.name }));
+  });
+}
+
+export async function saveIpdTaskAction(
+  ipdId: string,
+  input: { text: string; assignee?: string; visitId?: string; assignedToNurseId?: string; assignedToNurseName?: string },
+): Promise<ActionResult<{ id: string; nurseTaskId?: string }>> {
+  return runAction(async () => {
+    const ctx = await requireModule("doctor");
+    const ipdTask = await saveIpdTask(ctx, ipdId, { text: input.text, assignee: input.assignee });
+    let nurseTaskId: string | undefined;
+    if (input.visitId) {
+      const nurseTask = await createNurseTaskForDoctor(ctx, input.visitId, {
+        title: input.text,
+        assignedBy: input.assignee,
+        assignedToNurseId: input.assignedToNurseId,
+        assignedToNurseName: input.assignedToNurseName,
+      });
+      if (nurseTask) nurseTaskId = nurseTask.id;
+    }
+    return { id: ipdTask.id, nurseTaskId };
   });
 }
 

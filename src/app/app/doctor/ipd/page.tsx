@@ -36,6 +36,21 @@ export default function DoctorIpdPage() {
     setRoundHistory(rows);
   }, []);
 
+  const handleSaveRound = useCallback(
+    async (data: Record<string, string | number | boolean>) => {
+      if (!selected) return;
+      await saveIpdRound(selected.id, data);
+      await loadHistory(selected.id);
+    },
+    [selected, saveIpdRound, loadHistory],
+  );
+
+  const handleRefresh = useCallback(() => {
+    if (!selected) return;
+    void loadHistory(selected.id);
+    void refresh({ silent: true });
+  }, [selected, loadHistory, refresh]);
+
   useEffect(() => {
     if (activeIpd) void loadHistory(activeIpd);
     else setRoundHistory([]);
@@ -96,16 +111,12 @@ export default function DoctorIpdPage() {
           <IpdRoundWorkspace
             admission={selected}
             patient={getPatient(selected.patientId)}
+            patientId={selected.patientId}
+            visitId={selected.visitId}
             roundHistory={roundHistory}
             schema={schema}
-            onSaveRound={(data) => {
-              saveIpdRound(selected.id, data);
-              void loadHistory(selected.id);
-            }}
-            onRefresh={() => {
-              void loadHistory(selected.id);
-              void refresh({ silent: true });
-            }}
+            onSaveRound={handleSaveRound}
+            onRefresh={handleRefresh}
           />
         ) : (
           <Panel title="Select a patient">

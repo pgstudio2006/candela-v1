@@ -1,17 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { IpdRoundAiScribe } from "@/components/doctor/ipd-round-ai-scribe";
+import { PrescriptionEditor } from "@/components/doctor/prescription-editor";
 import { PublishedSchemaForm } from "@/components/candela/published-schema-form";
 import { IpdDischargeSummaryPanel } from "@/components/ipd-discharge-summary";
 import { useToast } from "@/components/ui/toast-provider";
-import { saveIpdTaskAction, updateIpdTaskStatusAction } from "@/app/actions/ipd-actions";
+import { getNurseOptionsAction, saveIpdTaskAction, updateIpdTaskStatusAction } from "@/app/actions/ipd-actions";
+import { listPatientDocumentsAction, type PatientDocumentListItem } from "@/app/actions/patient-document-actions";
 import type { IpdPatient } from "@/design-system/doctor-data";
 import type { Patient } from "@/design-system/frontdesk-data";
+import type { PrescriptionLine } from "@/design-system/doctor-data";
 import type { IpdRoundRecord } from "@/server/doctor";
 import type { FormSchema } from "@/design-system/frontdesk-schemas";
 import {
@@ -25,11 +28,15 @@ import {
   Stethoscope,
   ClipboardList,
   User,
+  UploadCloud,
+  Eye,
 } from "lucide-react";
 
 export type IpdRoundWorkspaceProps = {
   admission: IpdPatient;
   patient?: Patient;
+  patientId?: string;
+  visitId?: string;
   roundHistory: IpdRoundRecord[];
   schema: FormSchema;
   onSaveRound: (data: Record<string, string | number | boolean>) => void | Promise<void>;
@@ -53,6 +60,28 @@ function latestVitals(rounds: IpdRoundRecord[]): VitalsSnapshot {
     if (v.pulse || v.bp || v.spo2 || v.temp) return v;
   }
   return {};
+}
+
+function parseMedicineLine(line: string): {
+  drug?: string;
+  dose?: string;
+  frequency?: string;
+  duration?: string;
+  instructions?: string;
+} {
+  const clean = line.trim();
+  if (!clean) return {};
+  const match = clean.match(
+    /^(.*?)\s*(?:[-–:])?\s*(\d+(?:\.\d+)?\s*(?:tab|tabs|cap|caps|ml|mg|g|units?|iu|drops?|inj|syrup|ointment|cream|gel|powder|puff|supp))?\s*(OD|BD|TDS|QID|SOS|HS|STAT)?\s*(?:x|for|×)?\s*(\d+\s*(?:day|days|d|week|weeks|w|month|months|m)?)?\s*(.*)$/i,
+  );
+  if (!match) return { drug: clean };
+  return {
+    drug: match[1]?.trim() || clean,
+    dose: match[2]?.trim(),
+    frequency: match[3]?.trim(),
+    duration: match[4]?.trim(),
+    instructions: match[5]?.trim(),
+  };
 }
 
 function formatDateTime(iso: string) {
@@ -209,7 +238,16 @@ function VitalCard({
   );
 }
 
-export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, onSaveRound, onRefresh }: IpdRoundWorkspaceProps) {
+export function IpdRoundWorkspace({
+  admission,
+  patient,
+  patientId,
+  visitId,
+  roundHistory,
+  schema,
+  onSaveRound,
+  onRefresh,
+}: IpdRoundWorkspaceProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("summary");
   const [roundValues, setRoundValues] = useState<Record<string, string | number | boolean>>({});
@@ -217,7 +255,17 @@ export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, on
 
   const [taskText, setTaskText] = useState("");
   const [taskAssignee, setTaskAssignee] = useState("");
+  const [taskAssigneeName, setTaskAssigneeName] = useState("");
   const [taskSaving, setTaskSaving] = useState(false);
+  const [nurseOptions, setNurseOptions] = useState<Array<{ id: string; name: string }>>([]);
+
+  const [medicationLines, setMedicationLines] = useState<PrescriptionLine[]>([]);
+  const [labOrderText, setLabOrderText] = useState("");
+  const [radiologyOrderText, setRadiologyOrderText] = useState("");
+  const [orderSaving, setOrderSaving] = useState(false);
+
+  const [patientReports, setPatientReports] = useState<PatientDocumentListItem[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
 
   const vitals = useMemo(() => latestVitals(roundHistory), [roundHistory]);
   const doctorRounds = useMemo(
@@ -225,7 +273,10 @@ export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, on
     [roundHistory],
   );
   const nurseRounds = useMemo(
-    () => roundHistory.filter((r) => r.actorRole === "nurse" || r.kind === "nurse_round").sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
+    () =>
+      roundHistory
+        .filter((r) => r.actorRole === "nurse" || r.kind === "nurse_round" || r.kind === "nurse_vitals" || r.kind === "nurse_note")
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
     [roundHistory],
   );
   const medicines = useMemo(() => extractMedicines(roundHistory), [roundHistory]);
@@ -235,20 +286,104 @@ export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, on
   const tasks = useMemo(() => extractTasks(roundHistory), [roundHistory]);
   const statusVariant = admission.status === "discharge_planned" ? "warning" : "info";
 
+  // Live sync with nurse vitals / rounds
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void onRefresh();
+    }, 10_000);
+    return () => window.clearInterval(id);
+  }, [onRefresh]);
+
+  // Load branch nurses for task assignment
+  useEffect(() => {
+    void getNurseOptionsAction().then((res) => {
+      if (res.ok && res.data) setNurseOptions(res.data);
+    });
+  }, []);
+
+  // Load frontdesk-uploaded patient reports
+  const loadReports = async () => {
+    if (!patientId) return;
+    setReportsLoading(true);
+    const [report, lab, radiology] = await Promise.all([
+      listPatientDocumentsAction(patientId, "report"),
+      listPatientDocumentsAction(patientId, "lab_report"),
+      listPatientDocumentsAction(patientId, "radiology_report"),
+    ]);
+    const all = [
+      ...(report.ok ? report.data : []),
+      ...(lab.ok ? lab.data : []),
+      ...(radiology.ok ? radiology.data : []),
+    ].sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    setPatientReports(all);
+    setReportsLoading(false);
+  };
+
+  useEffect(() => {
+    void loadReports();
+  }, [patientId]);
+
   const handleSaveRound = async (data: Record<string, string | number | boolean>) => {
     await onSaveRound(data);
     setRoundValues({});
     setRoundFormKey((k) => k + 1);
   };
 
+  const formatMedicinesText = (lines: PrescriptionLine[]) =>
+    lines
+      .filter((l) => l.drug.trim())
+      .map((l) => {
+        const parts = [l.drug, l.dose, l.frequency, l.days ? `× ${l.days} days` : "", l.duration, l.instructions].filter(Boolean);
+        return parts.join(" - ").replace(/\s+/g, " ").trim();
+      })
+      .join("\n");
+
+  const addMedicationOrder = async () => {
+    const lines = medicationLines.filter((l) => l.drug.trim());
+    if (!lines.length) return toast("Add at least one medicine", "error");
+    setOrderSaving(true);
+    await onSaveRound({ medicines: formatMedicinesText(lines) });
+    toast("Medication ordered and sent to pharmacy", "success");
+    setMedicationLines([]);
+    setOrderSaving(false);
+    await onRefresh();
+  };
+
+  const addLabOrder = async () => {
+    if (!labOrderText.trim()) return toast("Enter a lab order", "error");
+    setOrderSaving(true);
+    await onSaveRound({ labReports: labOrderText.trim() });
+    toast("Lab order added", "success");
+    setLabOrderText("");
+    setOrderSaving(false);
+    await onRefresh();
+  };
+
+  const addRadiologyOrder = async () => {
+    if (!radiologyOrderText.trim()) return toast("Enter a radiology order", "error");
+    setOrderSaving(true);
+    await onSaveRound({ radiologyReports: radiologyOrderText.trim() });
+    toast("Radiology order added", "success");
+    setRadiologyOrderText("");
+    setOrderSaving(false);
+    await onRefresh();
+  };
+
   const addTask = async () => {
     if (!taskText.trim()) return toast("Enter a task description", "error");
     setTaskSaving(true);
-    const res = await saveIpdTaskAction(admission.id, { text: taskText.trim(), assignee: taskAssignee.trim() || undefined });
+    const res = await saveIpdTaskAction(admission.id, {
+      text: taskText.trim(),
+      assignee: taskAssigneeName.trim() || undefined,
+      visitId,
+      assignedToNurseId: taskAssignee || undefined,
+      assignedToNurseName: taskAssigneeName || undefined,
+    });
     if (res.ok) {
-      toast("Task assigned", "success");
+      toast("Task assigned to nurse", "success");
       setTaskText("");
       setTaskAssignee("");
+      setTaskAssigneeName("");
       await onRefresh();
     } else {
       toast((res as { error?: string }).error ?? "Failed to save task", "error");
@@ -433,10 +568,48 @@ export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, on
         </TabsContent>
 
         <TabsContent value="orders" className="mt-4 space-y-4">
-          <Panel title="Order management">
+          <Panel title="Medication order">
             <p className="mb-3 text-[12px] text-[var(--attio-text-secondary)]">
-              Add medicines, labs, imaging and procedures in the Progress Notes tab using the SOAP fields, medicines, lab reports, radiology reports and next-procedure fields. They will appear automatically in the Medication Chart, Labs & Reports and below.
+              Add medicines like a consultation prescription. On ordering, the prescription is pushed to the pharmacy and appears in the Medication Chart.
             </p>
+            <PrescriptionEditor lines={medicationLines} onChange={setMedicationLines} />
+            <div className="mt-3 flex justify-end">
+              <AttioButton onClick={() => void addMedicationOrder()} disabled={orderSaving} variant="primary">
+                {orderSaving ? "Ordering…" : "Order medications & send to pharmacy"}
+              </AttioButton>
+            </div>
+          </Panel>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel title="Lab order">
+              <Textarea
+                value={labOrderText}
+                onChange={(e) => setLabOrderText(e.target.value)}
+                placeholder="e.g. CBC, KFT, LFT, serum electrolytes…"
+                className="min-h-[80px] text-[13px]"
+              />
+              <div className="mt-3 flex justify-end">
+                <AttioButton onClick={() => void addLabOrder()} disabled={orderSaving}>
+                  {orderSaving ? "Adding…" : "Add lab order"}
+                </AttioButton>
+              </div>
+            </Panel>
+            <Panel title="Radiology order">
+              <Textarea
+                value={radiologyOrderText}
+                onChange={(e) => setRadiologyOrderText(e.target.value)}
+                placeholder="e.g. Chest X-ray PA view, ultrasound abdomen…"
+                className="min-h-[80px] text-[13px]"
+              />
+              <div className="mt-3 flex justify-end">
+                <AttioButton onClick={() => void addRadiologyOrder()} disabled={orderSaving}>
+                  {orderSaving ? "Adding…" : "Add radiology order"}
+                </AttioButton>
+              </div>
+            </Panel>
+          </div>
+
+          <Panel title="Current order summary">
             <div className="grid gap-4 sm:grid-cols-2">
               <OrderSection title="Current medication orders" items={medicines} icon={<Pill className="size-4" />} />
               <OrderSection title="Lab orders" items={labs} icon={<FlaskConical className="size-4" />} />
@@ -451,20 +624,33 @@ export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, on
             {medicines.length === 0 ? (
               <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No medication chart entries yet.</p>
             ) : (
-              <ul className="divide-y divide-[var(--attio-border-subtle)]">
-                {medicines.map((med, i) => (
-                  <li key={i} className="flex items-start gap-3 py-3 text-[13px]">
-                    <Pill className="mt-0.5 size-4 text-[var(--attio-accent)]" />
-                    <span className="text-[var(--attio-text)]">{med}</span>
-                  </li>
-                ))}
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {medicines.map((med, i) => {
+                  const parsed = parseMedicineLine(med);
+                  return (
+                    <li key={i} className="rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] p-3">
+                      <div className="mb-2 flex items-center gap-2 text-[13px] font-medium text-[var(--attio-text)]">
+                        <Pill className="size-4 text-[var(--attio-accent)]" />
+                        {parsed.drug || med}
+                      </div>
+                      {parsed.drug && (
+                        <div className="grid grid-cols-2 gap-2 text-[12px] text-[var(--attio-text-secondary)]">
+                          {parsed.dose && <div><span className="text-[var(--attio-text-tertiary)]">Dose:</span> {parsed.dose}</div>}
+                          {parsed.frequency && <div><span className="text-[var(--attio-text-tertiary)]">Frequency:</span> {parsed.frequency}</div>}
+                          {parsed.duration && <div><span className="text-[var(--attio-text-tertiary)]">Duration:</span> {parsed.duration}</div>}
+                          {parsed.instructions && <div className="col-span-2"><span className="text-[var(--attio-text-tertiary)]">Instructions:</span> {parsed.instructions}</div>}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Panel>
         </TabsContent>
 
         <TabsContent value="labs" className="mt-4 space-y-4">
-          <Panel title="Lab results">
+          <Panel title="Lab orders">
             {labs.length === 0 ? (
               <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No lab orders yet.</p>
             ) : (
@@ -478,9 +664,9 @@ export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, on
               </ul>
             )}
           </Panel>
-          <Panel title="Imaging reports">
+          <Panel title="Radiology orders">
             {imaging.length === 0 ? (
-              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No imaging reports yet.</p>
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No imaging orders yet.</p>
             ) : (
               <ul className="divide-y divide-[var(--attio-border-subtle)]">
                 {imaging.map((img, i) => (
@@ -492,22 +678,77 @@ export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, on
               </ul>
             )}
           </Panel>
+          <Panel
+            title="Uploaded reports"
+            action={
+              patientId ? (
+                <AttioButton variant="secondary" className="h-7 gap-1.5 text-[11px]" onClick={() => void loadReports()} disabled={reportsLoading}>
+                  <UploadCloud className="size-3.5" />
+                  {reportsLoading ? "Loading…" : "Refresh"}
+                </AttioButton>
+              ) : undefined
+            }
+          >
+            {patientReports.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">
+                No uploaded lab or radiology reports yet. Front desk uploads will appear here.
+              </p>
+            ) : (
+              <ul className="divide-y divide-[var(--attio-border-subtle)]">
+                {patientReports.map((doc) => (
+                  <li key={doc.id} className="flex items-start justify-between gap-3 py-3">
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-[var(--attio-text)] truncate">{doc.label || doc.fileName}</p>
+                      <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                        {doc.fileName} · {doc.category} · {new Date(doc.uploadedAt).toLocaleString("en-IN")}
+                        {doc.uploadedBy ? ` · by ${doc.uploadedBy}` : ""}
+                      </p>
+                    </div>
+                    <a
+                      href={doc.fileUrl ?? "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-[var(--attio-border)] bg-white px-2 text-[12px] font-medium hover:bg-[var(--attio-surface)] disabled:opacity-50"
+                    >
+                      <Eye className="size-3.5" />
+                      View
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
         </TabsContent>
 
         <TabsContent value="tasks" className="mt-4 space-y-4">
           <Panel title="Task and follow-up">
-            <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px]">
+            <div className="grid gap-3 sm:grid-cols-[1fr_180px_120px]">
               <div className="space-y-1">
                 <label className="text-[12px] text-[var(--attio-text-tertiary)]">Task for nursing</label>
                 <Input value={taskText} onChange={(e) => setTaskText(e.target.value)} placeholder="e.g. Repeat ECG at 2 PM" className="h-9 text-[13px]" />
               </div>
               <div className="space-y-1">
-                <label className="text-[12px] text-[var(--attio-text-tertiary)]">Assignee</label>
-                <Input value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)} placeholder="Nurse name" className="h-9 text-[13px]" />
+                <label className="text-[12px] text-[var(--attio-text-tertiary)]">Assign to ward nurse</label>
+                <select
+                  value={taskAssignee}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setTaskAssignee(id);
+                    setTaskAssigneeName(nurseOptions.find((n) => n.id === id)?.name ?? "");
+                  }}
+                  className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-2 text-[13px]"
+                >
+                  <option value="">Select nurse</option>
+                  {nurseOptions.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-end">
-                <AttioButton onClick={() => void addTask()} disabled={taskSaving} className="w-full">
-                  Assign task
+                <AttioButton onClick={() => void addTask()} disabled={taskSaving || !taskText.trim()} className="w-full">
+                  {taskSaving ? "Assigning…" : "Assign task"}
                 </AttioButton>
               </div>
             </div>

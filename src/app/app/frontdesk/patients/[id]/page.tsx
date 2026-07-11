@@ -14,7 +14,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
-import { getPatientInvoicesAction } from "@/app/actions/clinical-actions";
+import { getPatientInvoicesAction, getPatientInvoiceReceiptsAction } from "@/app/actions/clinical-actions";
+import { generateCombinedInvoicePdf, printPdfBytes } from "@/lib/invoice-pdf";
 
 export default function PatientRecordPage() {
   const params = useParams();
@@ -33,6 +34,7 @@ export default function PatientRecordPage() {
   const [reprintVisitId, setReprintVisitId] = useState<string | null>(null);
   const [reprintInvoiceId, setReprintInvoiceId] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<Extract<Awaited<ReturnType<typeof getPatientInvoicesAction>>, { ok: true }>["data"]["invoices"]>([]);
+  const [printingAll, setPrintingAll] = useState(false);
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
   const [selectedCounsellor, setSelectedCounsellor] = useState("");
   const [reassigning, setReassigning] = useState(false);
@@ -309,6 +311,31 @@ export default function PatientRecordPage() {
                   <p className="text-[10px] text-[var(--attio-text-tertiary)]">Total pending</p>
                   <p className="text-[13px] font-semibold text-amber-600">₹{billingTotals.pending.toLocaleString("en-IN")}</p>
                 </div>
+                <AttioButton
+                  variant="primary"
+                  className="h-8 gap-1.5 text-[11px]"
+                  disabled={printingAll || invoices.length === 0}
+                  onClick={async () => {
+                    if (!patient) return;
+                    setPrintingAll(true);
+                    const result = await getPatientInvoiceReceiptsAction(patient.id);
+                    if (!result.ok || !result.data?.length) {
+                      setPrintingAll(false);
+                      return;
+                    }
+                    try {
+                      const bytes = await generateCombinedInvoicePdf(result.data);
+                      printPdfBytes(bytes, `${patient.uhid ?? patient.id}_all_invoices.pdf`);
+                    } catch (err) {
+                      console.error("Print all bills failed", err);
+                    } finally {
+                      setPrintingAll(false);
+                    }
+                  }}
+                >
+                  <Printer className="size-3.5" />
+                  {printingAll ? "Preparing…" : "Print all bills"}
+                </AttioButton>
               </div>
             }
           >

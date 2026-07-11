@@ -560,3 +560,28 @@ export function downloadPdfBytes(bytes: Uint8Array, filename: string) {
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
+export async function generateCombinedInvoicePdf(receipts: OpdReceiptPayload[]): Promise<Uint8Array> {
+  if (receipts.length === 0) throw new Error("No invoices to print.");
+  if (receipts.length === 1) return generateInvoicePdf(receipts[0]);
+  const templateBytes = await fetch(TEMPLATE_URL).then((res) => {
+    if (!res.ok) throw new Error("Invoice template PDF not found.");
+    return res.arrayBuffer();
+  });
+  const merged = await PDFDocument.create();
+  for (const receipt of receipts) {
+    const templateDoc = await PDFDocument.load(templateBytes);
+    const [page] = await merged.copyPages(templateDoc, [0]);
+    merged.addPage(page);
+    const target = merged.getPages()[merged.getPageCount() - 1];
+    const font = await merged.embedFont(StandardFonts.Helvetica);
+    const bold = await merged.embedFont(StandardFonts.HelveticaBold);
+    const meta = formatInvoiceMeta(receipt.issuedAt);
+    const layout = computeTableLayout(receipt, meta, font, bold);
+    drawInvoiceTitle(target, font, bold);
+    drawPatientInfoTable(target, receipt, meta, font, bold, layout);
+    drawBillingTable(target, receipt, font, bold, layout);
+    drawNotes(target, receipt, font, layout);
+  }
+  return merged.save();
+}

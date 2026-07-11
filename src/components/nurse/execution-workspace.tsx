@@ -10,6 +10,8 @@ import { requiredConsentsComplete, TREATMENT_BAYS, consentProgress } from "@/des
 import { useNursePoll } from "@/hooks/use-nurse-poll";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
 import { saveNurseIpdNoteAction } from "@/app/actions/nurse-actions";
+import { getIpdRoundHistoryForVisitAction } from "@/app/actions/doctor-actions";
+import type { IpdRoundRecord } from "@/server/doctor";
 import { saveSubmissionAction } from "@/app/actions/clinical-actions";
 import { validateFormValues } from "@/lib/schema-registry";
 import { cn } from "@/lib/utils";
@@ -60,6 +62,8 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
   const [ipdNote, setIpdNote] = useState("");
   const [savingIpdNote, setSavingIpdNote] = useState(false);
   const [ipdNoteMessage, setIpdNoteMessage] = useState<string | null>(null);
+  const [ipdRounds, setIpdRounds] = useState<IpdRoundRecord[]>([]);
+  const [loadingIpdRounds, setLoadingIpdRounds] = useState(false);
   const [vitals, setVitals] = useState({
     bpSystolic: 120,
     bpDiastolic: 80,
@@ -98,6 +102,18 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
       });
     }
   }, [episode?.vitals]);
+
+  const loadIpdRounds = async () => {
+    if (handoff?.treatmentPath !== "ipd") return;
+    setLoadingIpdRounds(true);
+    const result = await getIpdRoundHistoryForVisitAction(visitId);
+    setIpdRounds((result.ok ? result.data : []) ?? []);
+    setLoadingIpdRounds(false);
+  };
+
+  useEffect(() => {
+    void loadIpdRounds();
+  }, [handoff?.treatmentPath, visitId]);
 
   if (!handoff || !patient) {
     return (
@@ -193,6 +209,46 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
           >
             {savingIpdNote ? "Saving…" : "Log note for doctor round"}
           </AttioButton>
+        </Panel>
+      )}
+
+      {handoff.treatmentPath === "ipd" && (
+        <Panel
+          title={`IPD round notes (${ipdRounds.length})`}
+          action={
+            <AttioButton
+              variant="secondary"
+              className="h-7 text-[11px]"
+              disabled={loadingIpdRounds}
+              onClick={() => void loadIpdRounds()}
+            >
+              {loadingIpdRounds ? "Loading…" : "Refresh"}
+            </AttioButton>
+          }
+        >
+          {loadingIpdRounds ? (
+            <p className="py-6 text-center text-[13px] text-[var(--attio-text-tertiary)]">Loading round notes…</p>
+          ) : ipdRounds.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-[var(--attio-text-tertiary)]">No IPD round notes yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {ipdRounds.map((round) => (
+                <li key={round.id} className="rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] p-3">
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-[var(--attio-text)]">{round.actorName}</span>
+                      <StatusBadge label={round.actorRole} variant={round.actorRole === "doctor" ? "info" : "neutral"} />
+                      <span className="text-[var(--attio-text-tertiary)]">{round.kind}</span>
+                    </div>
+                    <span className="text-[var(--attio-text-tertiary)]">
+                      {new Date(round.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                    </span>
+                  </div>
+                  <pre className="whitespace-pre-wrap font-sans text-[12px] text-[var(--attio-text-secondary)]">{round.content}</pre>
+                </li>
+              ))}
+            </ul>
+          )}
         </Panel>
       )}
 
