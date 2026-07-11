@@ -158,6 +158,16 @@ export function OpdBillingForm({
   const previousPaid = isBalancePayment ? Number(visit?.amountPaid ?? 0) : previousPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const balanceAfterPay = Math.max(0, net - splitTotal);
 
+  // Keep full-payment amount in sync with the bill total so submission works.
+  useEffect(() => {
+    if (skipBilling || paymentScope === "defer" || paymentScope !== "full") return;
+    setPaymentSplits((prev) => {
+      const mode = prev[0]?.mode ?? "cash";
+      if (prev.length === 1 && prev[0].amount === net && prev[0].mode === mode) return prev;
+      return [{ mode, amount: net }];
+    });
+  }, [paymentScope, net, skipBilling]);
+
   useEffect(() => {
     if (!visit?.ipdAdmissionId || lines.length > 0) return;
     let cancelled = false;
