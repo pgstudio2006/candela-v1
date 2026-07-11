@@ -8,6 +8,22 @@ export type ScribeDraft = {
   prescription: Omit<PrescriptionLine, "id">[];
 };
 
+export type IpdRoundScribeDraft = {
+  summary: string;
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
+  medicines: string;
+  labReports: string;
+  radiologyReports: string;
+  progress: string;
+  complications: string;
+  nextProcedure: string;
+  observation: string;
+  advice: string;
+};
+
 export type CopilotMessage = {
   role: "user" | "assistant" | "system";
   content: string;

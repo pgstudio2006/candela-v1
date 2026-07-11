@@ -25,6 +25,10 @@ import { backfillBranchScope } from "@/server/branch-scope";
 import { loadClinicalRoster } from "@/server/clinical/roster";
 import { createVisitInvoice } from "@/server/invoicing";
 import { computeGstInvoice, parseBranchGstSettings } from "@/lib/gst-invoicing";
+import {
+  generateDischargeSummaryFromRounds,
+  generateDeathSummaryFromRounds,
+} from "@/lib/ai/ipd-summary-generator";
 
 export type { IpdSnapshot } from "@/design-system/ipd-data";
 
@@ -264,6 +268,75 @@ export async function getIpdAdmission(ctx: ServerContext, id: string) {
     cart: (admission.cart as unknown as IpdCartItem[] | null) ?? [],
   };
   return detail;
+}
+
+export async function getIpdAdmissionsByPatient(
+  ctx: ServerContext,
+  patientId: string,
+): Promise<
+  Array<{
+    id: string;
+    visitId: string | null;
+    ward: string;
+    bed: string;
+    category: string;
+    admittedAt: string;
+    dischargedAt: string | null;
+    deathDeclaredAt: string | null;
+    status: string;
+    diagnosis: string;
+    doctorName: string;
+    rounds: IpdRoundLogEntry[];
+    dischargeSummary: unknown;
+    deathSummary: unknown;
+  }>
+> {
+  const scope = branchScope(ctx);
+  const admissions = await prisma.ipdAdmission.findMany({
+    where: { patientId, tenantId: scope.tenantId, branchId: scope.branchId },
+    include: { ward: true, bed: true },
+    orderBy: { admittedAt: "desc" },
+  });
+
+  const result: Awaited<ReturnType<typeof getIpdAdmissionsByPatient>> = [];
+  for (const a of admissions) {
+    const logs = await prisma.ipdRoundLog.findMany({
+      where: {
+        tenantId: scope.tenantId,
+        branchId: scope.branchId,
+        OR: [{ ipdAdmissionId: a.id }, { visitId: a.visitId ?? undefined }],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    result.push({
+      id: a.id,
+      visitId: a.visitId,
+      ward: a.ward.label,
+      bed: a.bed.label,
+      category: a.ward.category,
+      admittedAt: a.admittedAt.toISOString(),
+      dischargedAt: a.dischargedAt?.toISOString() ?? null,
+      deathDeclaredAt: a.deathDeclaredAt?.toISOString() ?? null,
+      status: a.status,
+      diagnosis: a.diagnosis,
+      doctorName: a.doctorName,
+      rounds: logs.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        at: row.createdAt.toISOString(),
+        actorName: row.actorName,
+        actorRole: row.actorRole,
+        content: row.content ?? "",
+        data:
+          row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+            ? (row.payload as Record<string, string | number | boolean>)
+            : null,
+      })),
+      dischargeSummary: a.dischargeSummary,
+      deathSummary: a.deathSummary,
+    });
+  }
+  return result;
 }
 
 export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput) {
@@ -890,14 +963,43 @@ export async function generateDischargeSummary(ctx: ServerContext, id: string): 
   const admission = await loadAdmissionForSummary(ctx, id);
   const patientName = patientDisplayName(admission.patient) ?? admission.patientId;
   const today = new Date().toISOString();
-  return {
-    admissionDate: admission.admittedAt.toISOString(),
-    dischargeDate: today,
+  const rounds = await getIpdRoundLog(ctx, id);
+
+  let ai = {
     diagnosis: admission.diagnosis,
     procedures: "",
     medications: "",
     followUp: "",
     notes: `Discharge summary for ${patientName} admitted under ${admission.doctorName} in ${admission.ward.label} bed ${admission.bed.label}.`,
+  };
+
+  try {
+    ai = await generateDischargeSummaryFromRounds(
+      {
+        patientName,
+        uhid: admission.patient.uhid,
+        age: admission.patient.age ?? undefined,
+        gender: admission.patient.gender ?? undefined,
+        ward: admission.ward.label,
+        bed: admission.bed.label,
+        doctorName: admission.doctorName,
+        diagnosis: admission.diagnosis,
+        admittedAt: admission.admittedAt.toISOString(),
+      },
+      rounds,
+    );
+  } catch (err) {
+    console.error("[ipd] AI discharge summary generation failed:", err);
+  }
+
+  return {
+    admissionDate: admission.admittedAt.toISOString(),
+    dischargeDate: today,
+    diagnosis: ai.diagnosis,
+    procedures: ai.procedures,
+    medications: ai.medications,
+    followUp: ai.followUp,
+    notes: ai.notes,
     preparedBy: ctx.userId ?? "",
     preparedAt: today,
   };
@@ -938,15 +1040,45 @@ export async function generateDeathSummary(ctx: ServerContext, id: string): Prom
   const admission = await loadAdmissionForSummary(ctx, id);
   const patientName = patientDisplayName(admission.patient) ?? admission.patientId;
   const today = new Date().toISOString();
-  return {
-    admissionDate: admission.admittedAt.toISOString(),
-    deathDate: today,
+  const rounds = await getIpdRoundLog(ctx, id);
+
+  let ai = {
     diagnosis: admission.diagnosis,
     causeOfDeath: "",
     contributingConditions: "",
     procedures: "",
     medications: "",
     notes: `Death summary for ${patientName} admitted under ${admission.doctorName} in ${admission.ward.label} bed ${admission.bed.label}.`,
+  };
+
+  try {
+    ai = await generateDeathSummaryFromRounds(
+      {
+        patientName,
+        uhid: admission.patient.uhid,
+        age: admission.patient.age ?? undefined,
+        gender: admission.patient.gender ?? undefined,
+        ward: admission.ward.label,
+        bed: admission.bed.label,
+        doctorName: admission.doctorName,
+        diagnosis: admission.diagnosis,
+        admittedAt: admission.admittedAt.toISOString(),
+      },
+      rounds,
+    );
+  } catch (err) {
+    console.error("[ipd] AI death summary generation failed:", err);
+  }
+
+  return {
+    admissionDate: admission.admittedAt.toISOString(),
+    deathDate: today,
+    diagnosis: ai.diagnosis,
+    causeOfDeath: ai.causeOfDeath,
+    contributingConditions: ai.contributingConditions,
+    procedures: ai.procedures,
+    medications: ai.medications,
+    notes: ai.notes,
     preparedBy: ctx.userId ?? "",
     preparedAt: today,
   };

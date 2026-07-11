@@ -1,5 +1,5 @@
 import { openRouterChat } from "@/lib/ai/openrouter-client";
-import type { ScribeDraft } from "@/lib/ai/scribe-types";
+import type { IpdRoundScribeDraft, ScribeDraft } from "@/lib/ai/scribe-types";
 
 const SCRIBE_SYSTEM = `You are a clinical documentation assistant for an Indian MSK/spine hospital.
 Convert doctor-patient conversation transcripts into structured OPD consult fields.
@@ -77,5 +77,72 @@ export async function analyzeScribeTranscript(input: {
     diagnosis: parsed.diagnosis ?? {},
     treatment: parsed.treatment ?? {},
     prescription: Array.isArray(parsed.prescription) ? parsed.prescription : [],
+  };
+}
+
+const IPD_ROUND_SYSTEM = `You are a clinical documentation assistant for an Indian hospital.
+Convert an IPD ward-round conversation or dictated note into structured round fields.
+Return ONLY valid JSON matching this schema:
+{
+  "summary": "1-2 sentence round summary",
+  "subjective": "patient's complaints and subjective status",
+  "objective": "vitals, physical exam, observable findings",
+  "assessment": "clinical assessment/diagnosis",
+  "plan": "immediate management plan",
+  "medicines": "medicines ordered or changed, with dose/frequency if mentioned",
+  "labReports": "relevant lab reports or orders",
+  "radiologyReports": "relevant imaging reports or orders",
+  "progress": "overall progress since admission/last round",
+  "complications": "any complications or concerns",
+  "nextProcedure": "next planned procedure or intervention",
+  "observation": "monitoring/observation instructions",
+  "advice": "advice to patient/relative and diet/activity counsel"
+}
+Use empty strings for fields not mentioned. Do not invent critical findings not supported by the transcript.`;
+
+export async function analyzeIpdRoundTranscript(input: {
+  transcript: string;
+  language: string;
+  patientContext?: string;
+}): Promise<IpdRoundScribeDraft> {
+  const user = [
+    `Language: ${input.language}`,
+    input.patientContext ? `Patient context: ${input.patientContext}` : "",
+    "Transcript:",
+    input.transcript.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const { content } = await openRouterChat({
+    messages: [
+      { role: "system", content: IPD_ROUND_SYSTEM },
+      { role: "user", content: user },
+    ],
+    jsonMode: true,
+    temperature: 0.1,
+  });
+
+  let parsed: IpdRoundScribeDraft;
+  try {
+    parsed = JSON.parse(content) as IpdRoundScribeDraft;
+  } catch {
+    throw new Error("AI returned invalid structured IPD round JSON.");
+  }
+
+  return {
+    summary: parsed.summary ?? "",
+    subjective: parsed.subjective ?? "",
+    objective: parsed.objective ?? "",
+    assessment: parsed.assessment ?? "",
+    plan: parsed.plan ?? "",
+    medicines: parsed.medicines ?? "",
+    labReports: parsed.labReports ?? "",
+    radiologyReports: parsed.radiologyReports ?? "",
+    progress: parsed.progress ?? "",
+    complications: parsed.complications ?? "",
+    nextProcedure: parsed.nextProcedure ?? "",
+    observation: parsed.observation ?? "",
+    advice: parsed.advice ?? "",
   };
 }

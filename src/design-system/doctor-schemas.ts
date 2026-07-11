@@ -113,12 +113,32 @@ export const DOCTOR_IPD_ROUND_SCHEMA: FormSchema = {
   sections: [
     {
       id: "round",
-      label: "Round",
+      label: "Round assessment",
       fields: [
         { id: "subjective", type: "textarea", label: "Subjective", required: true, span: 2 },
-        { id: "objective", type: "textarea", label: "Objective", span: 2 },
+        { id: "objective", type: "textarea", label: "Objective", required: true, span: 2 },
         { id: "assessment", type: "textarea", label: "Assessment", required: true, span: 2 },
         { id: "plan", type: "textarea", label: "Plan", required: true, span: 2 },
+      ],
+    },
+    {
+      id: "orders",
+      label: "Orders & reports",
+      fields: [
+        { id: "medicines", type: "textarea", label: "Medicines", required: true, span: 2, hint: "Connected to pharmacy when saved" },
+        { id: "labReports", type: "textarea", label: "Lab reports", required: true, span: 2 },
+        { id: "radiologyReports", type: "textarea", label: "Radiology reports", required: true, span: 2 },
+      ],
+    },
+    {
+      id: "course",
+      label: "Course & follow-up",
+      fields: [
+        { id: "progress", type: "textarea", label: "Progress since admission / last round", required: true, span: 2 },
+        { id: "complications", type: "textarea", label: "Complications / concerns", required: true, span: 2 },
+        { id: "nextProcedure", type: "textarea", label: "Next procedure / intervention", required: true, span: 2 },
+        { id: "observation", type: "textarea", label: "Observation / monitoring", required: true, span: 2 },
+        { id: "advice", type: "textarea", label: "Advice to patient / relatives", required: true, span: 2 },
       ],
     },
   ],

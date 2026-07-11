@@ -4,10 +4,12 @@ import { getIpdRoundHistoryAction } from "@/app/actions/doctor-actions";
 import { PublishedSchemaForm } from "@/components/candela/published-schema-form";
 import { useDoctorStore } from "@/components/doctor/doctor-store";
 import { useDoctorFormSchema } from "@/components/doctor/use-doctor-form-schema";
+import { IpdRoundAiScribe } from "@/components/doctor/ipd-round-ai-scribe";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { IpdDischargeSummaryPanel } from "@/components/ipd-discharge-summary";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
+import type { IpdRoundScribeDraft } from "@/lib/ai/scribe-types";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/components/candela/session-provider";
 import Link from "next/link";
@@ -25,6 +27,8 @@ export default function DoctorIpdPage() {
   const schema = useDoctorFormSchema("doctor-ipd-round");
   const [activeIpd, setActiveIpd] = useState<string | null>(null);
   const [roundHistory, setRoundHistory] = useState<RoundRecord[]>([]);
+  const [roundValues, setRoundValues] = useState<Record<string, string | number | boolean>>({});
+  const [roundFormKey, setRoundFormKey] = useState(0);
 
   const myPatients = ipdPatients.filter((ip) => ip.attendingDoctorId === activeDoctorId);
 
@@ -38,6 +42,8 @@ export default function DoctorIpdPage() {
   useEffect(() => {
     if (activeIpd) void loadHistory(activeIpd);
     else setRoundHistory([]);
+    setRoundValues({});
+    setRoundFormKey((k) => k + 1);
   }, [activeIpd, loadHistory]);
 
   return (
@@ -103,12 +109,23 @@ export default function DoctorIpdPage() {
                   <pre className="whitespace-pre-wrap font-sans">{selected.lastRoundNote}</pre>
                 </div>
               )}
+              <IpdRoundAiScribe
+                patientContext={`${getPatient(selected.patientId)?.name ?? selected.patientId} · ${selected.diagnosis}`}
+                onDraftAccepted={(draft: IpdRoundScribeDraft) => {
+                  setRoundValues({ ...draft });
+                  setRoundFormKey((k) => k + 1);
+                }}
+              />
               <PublishedSchemaForm
+                key={`ipd-${selected.id}-${roundFormKey}`}
                 schema={schema}
-                formKey={`ipd-${selected.id}`}
+                initialValues={roundValues}
                 submitLabel="Save round note"
+                onValuesChange={setRoundValues}
                 onSubmit={(data) => {
                   saveIpdRound(selected.id, data);
+                  setRoundValues({});
+                  setRoundFormKey((k) => k + 1);
                   void loadHistory(selected.id);
                 }}
               />

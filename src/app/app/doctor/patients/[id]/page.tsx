@@ -5,6 +5,7 @@ import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { PatientDocumentsPanel } from "@/components/patient-documents";
 import { PatientConsentsPanel } from "@/components/patient-consents";
+import { PatientIpdRecord } from "@/components/doctor/patient-ipd-record";
 import { consultPrimaryDiagnosis, formatConsultDate } from "@/lib/doctor-records";
 import { parseScribeSessions } from "@/lib/scribe-transcript";
 import { formatStageStatus } from "@/lib/frontdesk-workflow";
@@ -51,6 +52,7 @@ export default function DoctorPatientDetailPage() {
       meta={`${patient.uhid} · ${patient.department} · ${patient.age}y ${patient.gender}`}
       tabs={[
         { id: "timeline", label: "Clinical timeline" },
+        { id: "ipd", label: "IPD" },
         { id: "scribe", label: "AI Scribe" },
         { id: "overview", label: "Overview" },
         { id: "documents", label: "Documents" },
@@ -212,6 +214,10 @@ export default function DoctorPatientDetailPage() {
             </div>
           </Panel>
         </div>
+      )}
+
+      {tab === "ipd" && (
+        <PatientIpdRecord patientId={patientId} patientName={patient.name} />
       )}
 
       {tab === "timeline" && (

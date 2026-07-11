@@ -1,15 +1,16 @@
-import { analyzeScribeTranscript } from "@/lib/ai/scribe-analyze";
+import { analyzeIpdRoundTranscript, analyzeScribeTranscript } from "@/lib/ai/scribe-analyze";
 import { requireApiAuth } from "@/server/ai/api-auth";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
-  const auth = await requireApiAuth(["doctor"]);
+  const auth = await requireApiAuth(["doctor", "nurse"]);
   if ("error" in auth) return auth.error;
 
   const body = (await req.json()) as {
     transcript?: string;
     language?: string;
     patientContext?: string;
+    mode?: "opd" | "ipd-round";
   };
 
   const transcript = body.transcript?.trim();
@@ -18,6 +19,16 @@ export async function POST(req: Request) {
   }
 
   try {
+    const mode = body.mode ?? "opd";
+    if (mode === "ipd-round") {
+      const draft = await analyzeIpdRoundTranscript({
+        transcript,
+        language: body.language ?? "en",
+        patientContext: body.patientContext,
+      });
+      return NextResponse.json({ draft });
+    }
+
     const draft = await analyzeScribeTranscript({
       transcript,
       language: body.language ?? "en",

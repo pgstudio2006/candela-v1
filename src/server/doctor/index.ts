@@ -12,7 +12,7 @@ import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { DocumentTemplate } from "@/design-system/document-templates";
 import { validateCompleteConsultation } from "@/lib/doctor-validation";
 import { visitVisibleInDoctorWorkspace } from "@/lib/doctor-queue";
-import { isInReceptionQueue, isRedFlagVisit } from "@/lib/frontdesk-workflow";
+import { isInReceptionQueue, isRedFlagVisit, patientDisplayName } from "@/lib/frontdesk-workflow";
 import { prisma } from "@/lib/prisma";
 import { getClinicalSnapshot } from "@/server/clinical";
 import { resolveDoctorIdForContext, resolveDoctorProfile } from "@/server/clinical/roster";
@@ -30,12 +30,38 @@ import { sendWhatsAppAsync } from "@/server/whatsapp/service";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 import { branchScope, tenantScope } from "@/server/tenancy";
+import { pushPrescriptionFromDoctor } from "@/server/pharmacy";
 
 const PATAUDI_BRANCH_ID = "branch_pataudi";
 
 function asRecord(value: unknown): Record<string, string | number | boolean> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, string | number | boolean>;
+}
+
+function parseMedicineTextToLines(
+  text: string,
+): Array<{ drug: string; dose: string; frequency: string; duration: string; instructions: string }> {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(
+        /^(.*?)\s*(?:[-–:])?\s*(\d+(?:\.\d+)?\s*(?:tab|tabs|cap|caps|ml|mg|g|units?|iu|drops?|inj|syrup|ointment|cream|gel|powder|puff|supp))?\s*(OD|BD|TDS|QID|SOS|HS|STAT)?\s*(?:x|for|×)?\s*(\d+\s*(?:day|days|d|week|weeks|w|month|months|m)?)?\s*(.*)$/i,
+      );
+      if (!match) {
+        return { drug: line, dose: "1 tab", frequency: "OD", duration: "1 day", instructions: "" };
+      }
+      const [, drug, dose, frequency, duration, instructions] = match;
+      return {
+        drug: (drug ?? line).trim(),
+        dose: (dose ?? "1 tab").trim() || "1 tab",
+        frequency: (frequency ?? "OD").trim().toUpperCase() || "OD",
+        duration: (duration ?? "1 day").trim() || "1 day",
+        instructions: (instructions ?? "").trim(),
+      };
+    });
 }
 
 function mapConsultation(row: {
@@ -905,7 +931,22 @@ export async function saveIpdRound(
     throw new ServerActionError("FORBIDDEN", "You are not the attending doctor for this admission.");
   }
 
-  const text = `S: ${note.subjective}\nO: ${note.objective}\nA: ${note.assessment}\nP: ${note.plan}`;
+  const text = [
+    `S: ${note.subjective || ""}`,
+    `O: ${note.objective || ""}`,
+    `A: ${note.assessment || ""}`,
+    `P: ${note.plan || ""}`,
+    note.medicines ? `Medicines:\n${note.medicines}` : "",
+    note.labReports ? `Lab reports:\n${note.labReports}` : "",
+    note.radiologyReports ? `Radiology reports:\n${note.radiologyReports}` : "",
+    note.progress ? `Progress: ${note.progress}` : "",
+    note.complications ? `Complications: ${note.complications}` : "",
+    note.nextProcedure ? `Next procedure: ${note.nextProcedure}` : "",
+    note.observation ? `Observation: ${note.observation}` : "",
+    note.advice ? `Advice: ${note.advice}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   const now = new Date().toISOString();
   const submissionId = `ipd_round_${ipdId}_${Date.now()}`;
 
@@ -942,6 +983,35 @@ export async function saveIpdRound(
       },
     }),
   ]);
+
+  const medicineText = typeof note.medicines === "string" ? note.medicines.trim() : "";
+  if (medicineText) {
+    try {
+      const patient = await prisma.patient.findUnique({ where: { id: ipd.patientId } });
+      if (!patient) throw new Error("Patient not found for IPD prescription.");
+      const lines = parseMedicineTextToLines(medicineText).map((l) => ({
+        drug: l.drug,
+        dose: l.dose,
+        frequency: l.frequency,
+        duration: l.duration,
+        instructions: l.instructions,
+      }));
+      if (lines.length) {
+        await pushPrescriptionFromDoctor(ctx, {
+          visitId: ipd.visitId,
+          patientId: ipd.patientId,
+          patientName: patientDisplayName(patient) ?? ipd.patientId,
+          uhid: patient?.uhid ?? "",
+          doctorId,
+          doctorName: profile.name,
+          lines,
+          source: "ipd",
+        });
+      }
+    } catch (err) {
+      console.error("[doctor] push IPD prescription to pharmacy failed:", err);
+    }
+  }
 
   await writePlatformAudit({
     ctx,

@@ -15,6 +15,7 @@ import {
   generateDeathSummary,
   generateIpdFinalBill,
   getIpdAdmission,
+  getIpdAdmissionsByPatient,
   getIpdCart,
   getIpdRoundConfigs,
   getIpdSnapshot,
@@ -51,6 +52,13 @@ export async function getIpdAdmissionAction(id: string) {
   return runAction(async () => {
     const ctx = await requireModule("frontdesk");
     return getIpdAdmission(ctx, id);
+  });
+}
+
+export async function getIpdAdmissionsByPatientAction(patientId: string) {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("doctor", "frontdesk", "admin", "nurse");
+    return getIpdAdmissionsByPatient(ctx, patientId);
   });
 }
 

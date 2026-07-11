@@ -673,10 +673,12 @@ export async function pushPrescriptionFromDoctor(
     doctorName: string;
     lines: Array<{ id?: string; drug: string; dose: string; frequency: string; days?: number; duration?: string; instructions?: string }>;
     priority?: Prescription["priority"];
+    source?: Prescription["source"];
   },
 ) {
+  const source = input.source ?? "opd";
   const state = await readState(ctx);
-  const rx = buildPrescriptionFromLines({ ...input, source: "opd" });
+  const rx = buildPrescriptionFromLines({ ...input, source });
   if (!rx) return null;
 
   const next: PharmacyStateShape = {
@@ -688,7 +690,7 @@ export async function pushPrescriptionFromDoctor(
         at: new Date().toISOString(),
         actor: input.doctorName,
         type: "rx_received",
-        summary: `Prescription from consult ${input.visitId} — ${input.lines.length} item(s)`,
+        summary: `Prescription from ${source} ${input.visitId} — ${input.lines.length} item(s)`,
         refId: rx.id,
       },
       ...state.activities,
@@ -706,7 +708,7 @@ export async function pushPrescriptionFromDoctor(
         patientId: input.patientId,
         doctorId: input.doctorId,
         doctorName: input.doctorName,
-        source: "opd",
+        source,
         priority: rx.priority,
         status: "pending",
         branchId: ctx.branchId,
@@ -730,7 +732,7 @@ export async function pushPrescriptionFromDoctor(
     entityType: "prescription",
     entityId: rx.id,
     summary: `Rx queued for ${input.patientName} from ${input.doctorName}`,
-    payload: { visitId: input.visitId, lineCount: input.lines.length, priority: rx.priority },
+    payload: { visitId: input.visitId, lineCount: input.lines.length, priority: rx.priority, source },
   });
 
   return rx.id;
