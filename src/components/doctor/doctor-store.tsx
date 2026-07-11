@@ -518,7 +518,16 @@ export function DoctorStoreProvider({ children }: { children: ReactNode }) {
         if (!result.ok) {
           return { ok: false, error: result.error };
         }
-        await refresh();
+        syncDoctor((prev) => ({
+          ...prev,
+          visits: prev.visits.map((v) => (v.id === visitId ? { ...v, stage: "completed" } : v)),
+          consultations: prev.consultations.map((c) =>
+            c.visitId === visitId
+              ? { ...c, status: "completed", completedAt: new Date().toISOString(), treatmentMode: opts.treatmentMode }
+              : c,
+          ),
+        }));
+        await refresh({ silent: true });
         return { ok: true };
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Something went wrong.";

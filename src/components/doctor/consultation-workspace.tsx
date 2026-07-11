@@ -115,8 +115,11 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [savingExam, setSavingExam] = useState(false);
   const [examSaved, setExamSaved] = useState(false);
   const [savingDx, setSavingDx] = useState(false);
+  const [dxSaved, setDxSaved] = useState(false);
   const [savingTx, setSavingTx] = useState(false);
+  const [txSaved, setTxSaved] = useState(false);
   const [savingHandoff, setSavingHandoff] = useState(false);
+  const [handoffSaved, setHandoffSaved] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [selectedHandoffServiceIds, setSelectedHandoffServiceIds] = useState<string[]>([]);
   const [selectedHandoffPackageId, setSelectedHandoffPackageId] = useState<string>("");
@@ -305,7 +308,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       onTabChange={(id) => setTab(id as TabId)}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {!completed && prescriptionTemplates.length > 0 && (
+          {!completed && (isPataudi || prescriptionTemplates.length > 0) && (
             <>
               {prescriptionTemplates.length > 1 && (
                 <Select value={selectedTemplateId} onValueChange={(v) => setSelectedTemplateId(v ?? undefined)}>
@@ -439,25 +442,29 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       )}
 
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--attio-border)] bg-white px-4 py-3">
-        <span className="text-[12px] font-medium text-[var(--attio-text-secondary)]">Treatment mode</span>
-        {(["opd", "ipd", "daycare"] as TreatmentMode[]).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => {
-              setTreatmentMode(mode);
-              updateConsultation(visitId, { treatmentMode: mode });
-            }}
-            className={cn(
-              "rounded-full border px-3 py-1 text-[12px] capitalize transition-colors",
-              treatmentMode === mode
-                ? "border-[var(--attio-accent)] bg-[var(--attio-accent)]/10 text-[var(--attio-accent)]"
-                : "border-[var(--attio-border)] text-[var(--attio-text-secondary)] hover:bg-[var(--attio-hover)]",
-            )}
-          >
-            {mode}
-          </button>
-        ))}
+        {!isPataudi && (
+          <>
+            <span className="text-[12px] font-medium text-[var(--attio-text-secondary)]">Treatment mode</span>
+            {(["opd", "ipd", "daycare"] as TreatmentMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setTreatmentMode(mode);
+                  updateConsultation(visitId, { treatmentMode: mode });
+                }}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-[12px] capitalize transition-colors",
+                  treatmentMode === mode
+                    ? "border-[var(--attio-accent)] bg-[var(--attio-accent)]/10 text-[var(--attio-accent)]"
+                    : "border-[var(--attio-border)] text-[var(--attio-text-secondary)] hover:bg-[var(--attio-hover)]",
+                )}
+              >
+                {mode}
+              </button>
+            ))}
+          </>
+        )}
 
         <div className="ml-auto flex flex-wrap gap-2">
           {!isPataudi && (
@@ -575,13 +582,22 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               formKey={`dx-${visitId}-${consult?.startedAt ?? ""}`}
               initialValues={consult?.diagnosis}
               onValuesChange={(data) => patchConsultSectionLocal(visitId, "diagnosis", data)}
-              submitLabel={savingDx ? "Saving..." : "Save diagnosis"}
+              submitStatus={savingDx ? "saving" : dxSaved ? "saved" : "idle"}
+              submitLabel={dxSaved ? "Draft saved" : "Save diagnosis"}
               onSubmit={async (data) => {
                 setSavingDx(true);
                 await saveConsultSection(visitId, "diagnosis", data);
                 setSavingDx(false);
+                setDxSaved(true);
+                setTimeout(() => setDxSaved(false), 3000);
               }}
             />
+            {dxSaved && (
+              <p className="mt-3 flex items-center gap-1.5 text-[12px] text-emerald-600">
+                <CheckCircle2 className="size-3.5" />
+                Draft saved
+              </p>
+            )}
           </Panel>
           <Panel title="Templates">
             <p className="mb-3 text-[12px] text-[var(--attio-text-secondary)]">
@@ -621,13 +637,22 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               formKey={`tx-${visitId}-${consult?.startedAt ?? ""}`}
               initialValues={consult?.treatment}
               onValuesChange={(data) => patchConsultSectionLocal(visitId, "treatment", data)}
-              submitLabel={savingTx ? "Saving..." : "Save treatment"}
+              submitStatus={savingTx ? "saving" : txSaved ? "saved" : "idle"}
+              submitLabel={txSaved ? "Draft saved" : "Save treatment"}
               onSubmit={async (data) => {
                 setSavingTx(true);
                 await saveConsultSection(visitId, "treatment", data);
                 setSavingTx(false);
+                setTxSaved(true);
+                setTimeout(() => setTxSaved(false), 3000);
               }}
             />
+            {txSaved && (
+              <p className="mt-3 flex items-center gap-1.5 text-[12px] text-emerald-600">
+                <CheckCircle2 className="size-3.5" />
+                Draft saved
+              </p>
+            )}
           </Panel>
         </div>
       )}
@@ -656,14 +681,23 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               schema={handoffSchema}
               formKey={`handoff-${visitId}`}
               initialValues={handoffValues}
-              submitLabel={savingHandoff ? "Saving..." : "Save handoff notes"}
+              submitStatus={savingHandoff ? "saving" : handoffSaved ? "saved" : "idle"}
+              submitLabel={handoffSaved ? "Draft saved" : "Save handoff notes"}
               onSubmit={async (data) => {
                 setSavingHandoff(true);
                 setHandoffValues(data);
                 await updateConsultation(visitId, { handoff: data });
                 setSavingHandoff(false);
+                setHandoffSaved(true);
+                setTimeout(() => setHandoffSaved(false), 3000);
               }}
             />
+            {handoffSaved && (
+              <p className="mt-3 flex items-center gap-1.5 text-[12px] text-emerald-600">
+                <CheckCircle2 className="size-3.5" />
+                Draft saved
+              </p>
+            )}
           </Panel>
           <div className="space-y-6">
             <Panel title="Services & packages">

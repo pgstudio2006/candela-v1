@@ -5,14 +5,19 @@ import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, MetricStrip, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
 import { isRedFlagVisit } from "@/lib/frontdesk-workflow";
+import { useSession } from "@/components/candela/session-provider";
 import { Stethoscope } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+const PATAUDI_BRANCH_ID = "branch_pataudi";
+
 export default function DoctorDashboardPage() {
   useDoctorPoll();
   const router = useRouter();
+  const { session } = useSession();
+  const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
   const [tab, setTab] = useState("overview");
   const {
     getDashboardKpis,
@@ -26,7 +31,9 @@ export default function DoctorDashboardPage() {
     startConsultation,
   } = useDoctorStore();
 
-  const kpis = getDashboardKpis();
+  const kpis = getDashboardKpis().filter(
+    (k) => !isPataudi || (k.label !== "Counsellor queue" && k.label !== "Templates used"),
+  );
   const queue = getOpdQueue();
   const next = queue[0];
 
@@ -55,7 +62,7 @@ export default function DoctorDashboardPage() {
         priority: "high",
       });
     }
-    if (counsellorQueue.length > 0) {
+    if (!isPataudi && counsellorQueue.length > 0) {
       items.push({
         id: "cq",
         text: `${counsellorQueue.length} patient(s) in counsellor queue from your consults`,
@@ -65,7 +72,7 @@ export default function DoctorDashboardPage() {
       });
     }
     return items;
-  }, [next, getPatient, ipdPatients, activeDoctorId, counsellorQueue]);
+  }, [next, getPatient, ipdPatients, activeDoctorId, isPataudi, counsellorQueue]);
 
   const recentConsults = consultations
     .filter((c) => c.status === "completed")
