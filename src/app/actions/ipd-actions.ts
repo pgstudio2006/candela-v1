@@ -55,7 +55,7 @@ export async function getIpdSnapshotAction(): Promise<ActionResult<IpdSnapshot>>
 
 export async function getIpdAdmissionAction(id: string) {
   return runAction(async () => {
-    const ctx = await requireModule("frontdesk");
+    const ctx = await requireAnyModule("doctor", "frontdesk", "nurse", "admin");
     return getIpdAdmission(ctx, id);
   });
 }

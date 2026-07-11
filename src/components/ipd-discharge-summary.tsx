@@ -27,7 +27,11 @@ export function IpdDischargeSummaryPanel({ admissionId, onSaved }: { admissionId
 
   const refreshAdmission = async () => {
     const res = await getIpdAdmissionAction(admissionId);
-    if (res.ok) setAdmission(res.data);
+    if (res.ok) {
+      setAdmission(res.data);
+    } else {
+      toast(res.error ?? "Failed to load admission", "error");
+    }
   };
 
   useEffect(() => {
