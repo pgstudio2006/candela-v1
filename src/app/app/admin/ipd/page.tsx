@@ -52,7 +52,7 @@ export default function AdminIpdPage() {
   }, []);
 
   const totalBeds = wards.reduce((sum, w) => sum + w.beds.filter((b) => b.active).length, 0);
-  const occupiedBeds = wards.reduce((sum, w) => sum + w.beds.filter((b) => b.occupied).length, 0);
+  const occupiedBeds = wards.reduce((sum, w) => sum + w.beds.filter((b) => b.active && b.occupied).length, 0);
 
   const handleCreateWard = async () => {
     if (!wardForm.label.trim()) return toast("Ward name is required", "error");

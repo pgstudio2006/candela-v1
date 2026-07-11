@@ -23,7 +23,7 @@ import {
   requireDoctorVisit,
 } from "@/server/doctor/guards";
 import { ensureVisitDoctorAssignment } from "@/server/doctor/visit-claim";
-import { ensureIpdWardBed, writeIpdRoundLog, getIpdRoundLog } from "@/server/ipd";
+import { ensureIpdWardBed, writeIpdRoundLog, getIpdRoundLog, findOnDutyNurseForWard } from "@/server/ipd";
 import { ServerActionError } from "@/server/errors";
 import { notifyPrescriptionWhatsapp } from "@/server/notifications";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
@@ -636,15 +636,8 @@ export async function completeConsultation(
         },
       });
 
-      // Auto-assign nurse based on ward
-      const assignedNurse = await tx.adminStaff.findFirst({
-        where: {
-          branchId: ctx.branchId,
-          role: "nurse",
-          onDuty: true,
-          ...(wardLabel ? { ward: wardLabel as any } : {}),
-        },
-      });
+      // Auto-assign nurse based on ward (fall back to any on-duty nurse)
+      const assignedNurse = await findOnDutyNurseForWard(tx, ctx, wardLabel);
 
       await tx.nursingHandoff.upsert({
         where: { visitId },

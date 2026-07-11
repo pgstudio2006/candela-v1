@@ -32,9 +32,11 @@ export type IpdBedSummary = {
   wardId: string;
   ward: string;
   category: IpdWard["category"];
+  active: boolean;
   beds: Array<{
     id: string;
     label: string;
+    active: boolean;
     occupied: boolean;
     admission?: {
       id: string;

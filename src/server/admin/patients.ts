@@ -106,7 +106,7 @@ export async function searchAdminPatients(
     ],
   };
 
-  const [rows, total] = await Promise.all([
+  const [rows, total, departments] = await Promise.all([
     prisma.patient.findMany({
       where,
       orderBy: { updatedAt: "desc" },
@@ -114,10 +114,20 @@ export async function searchAdminPatients(
       take: pageSize,
     }),
     prisma.patient.count({ where }),
+    prisma.adminDepartment.findMany({ where: scope, select: { id: true, label: true } }),
   ]);
 
+  const deptMap = new Map(departments.map((d) => [d.id, d.label]));
+
   return {
-    patients: rows.map(mapPrismaPatientRow),
+    patients: rows.map((row) => {
+      const p = mapPrismaPatientRow(row);
+      const deptId = p.departmentId || p.department;
+      if (deptId && deptMap.has(deptId)) {
+        p.department = deptMap.get(deptId)!;
+      }
+      return p;
+    }),
     total,
     page,
     pageSize,

@@ -71,12 +71,28 @@ type WardWithBeds = {
   label: string;
   category: string;
   active: boolean;
-  beds: {
-    id: string;
-    label: string;
-    active: boolean;
-  }[];
+  beds: IpdBedRow[];
 };
+
+export async function findOnDutyNurseForWard(
+  tx: any,
+  ctx: Pick<ServerContext, "branchId">,
+  wardLabel?: string | null,
+) {
+  const baseWhere = {
+    branchId: ctx.branchId,
+    role: "nurse",
+    onDuty: true,
+    active: true,
+  };
+  if (wardLabel) {
+    const wardMatch = await tx.adminStaff.findFirst({
+      where: { ...baseWhere, ward: wardLabel },
+    });
+    if (wardMatch) return wardMatch;
+  }
+  return tx.adminStaff.findFirst({ where: baseWhere });
+}
 
 function toWardDto(row: {
   id: string;
@@ -103,23 +119,8 @@ export async function getIpdWards(ctx: ServerContext): Promise<WardWithBeds[]> {
       beds: { orderBy: { createdAt: "asc" } },
     },
   });
-  return rows.map((w) => ({
-    id: w.id,
-    label: w.label,
-    category: w.category,
-    active: w.active,
-    beds: w.beds.map((b) => ({ id: b.id, label: b.label, active: b.active })),
-  }));
-}
 
-export async function getIpdSnapshot(ctx: ServerContext): Promise<IpdSnapshot> {
-  await ensureHospitalBootstrap();
-  await backfillBranchScope(ctx);
-  const scope = branchScope(ctx);
-
-  const wardRows = await getIpdWards(ctx);
-  const wardIds = wardRows.map((w) => w.id);
-
+  const wardIds = rows.map((w) => w.id);
   const activeAdmissions = await prisma.ipdAdmission.findMany({
     where: {
       tenantId: scope.tenantId,
@@ -128,7 +129,6 @@ export async function getIpdSnapshot(ctx: ServerContext): Promise<IpdSnapshot> {
       status: { in: ["admitted", "discharge_planned"] },
     },
     include: { patient: { select: { id: true, name: true, fullName: true, uhid: true } } },
-    orderBy: { createdAt: "desc" },
   });
 
   const admissionByBedId = new Map(
@@ -147,37 +147,48 @@ export async function getIpdSnapshot(ctx: ServerContext): Promise<IpdSnapshot> {
     ]),
   );
 
-  const allBeds = await prisma.ipdBed.findMany({
-    where: { wardId: { in: wardIds } },
-    orderBy: { createdAt: "asc" },
-  });
-  const bedsByWard = new Map<string, typeof allBeds>();
-  for (const bed of allBeds) {
-    const list = bedsByWard.get(bed.wardId) ?? [];
-    list.push(bed);
-    bedsByWard.set(bed.wardId, list);
-  }
-
-  const wards: IpdBedSummary[] = wardRows.map((ward) => {
-    const beds = (bedsByWard.get(ward.id) ?? []).map((bed) => {
-      const admission = admissionByBedId.get(bed.id);
+  return rows.map((w) => ({
+    id: w.id,
+    label: w.label,
+    category: w.category,
+    active: w.active,
+    beds: w.beds.map((b) => {
+      const admission = admissionByBedId.get(b.id);
       return {
-        id: bed.id,
-        label: bed.label,
+        id: b.id,
+        wardId: w.id,
+        label: b.label,
+        active: b.active,
         occupied: Boolean(admission),
         admission,
       };
-    });
-    return {
-      wardId: ward.id,
-      ward: ward.label,
-      category: ward.category as IpdWard["category"],
-      beds,
-    };
-  });
+    }),
+  }));
+}
 
-  const totalBeds = wards.reduce((sum, w) => sum + w.beds.length, 0);
-  const occupiedBeds = wards.reduce((sum, w) => sum + w.beds.filter((b) => b.occupied).length, 0);
+export async function getIpdSnapshot(ctx: ServerContext): Promise<IpdSnapshot> {
+  await ensureHospitalBootstrap();
+  await backfillBranchScope(ctx);
+  const scope = branchScope(ctx);
+
+  const wardRows = await getIpdWards(ctx);
+
+  const wards: IpdBedSummary[] = wardRows.map((ward) => ({
+    wardId: ward.id,
+    ward: ward.label,
+    category: ward.category as IpdWard["category"],
+    active: ward.active,
+    beds: ward.beds.map((bed) => ({
+      id: bed.id,
+      label: bed.label,
+      active: bed.active,
+      occupied: bed.occupied,
+      admission: bed.admission,
+    })),
+  }));
+
+  const totalBeds = wards.reduce((sum, w) => sum + w.beds.filter((b) => b.active).length, 0);
+  const occupiedBeds = wards.reduce((sum, w) => sum + w.beds.filter((b) => b.active && b.occupied).length, 0);
 
   const [registeredPatients, roster] = await Promise.all([
     prisma.patient.findMany({
@@ -370,14 +381,7 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
       },
     });
 
-    const assignedNurse = await tx.adminStaff.findFirst({
-      where: {
-        branchId: ctx.branchId,
-        role: "nurse",
-        onDuty: true,
-        ...(wardLabel ? { ward: wardLabel as any } : {}),
-      },
-    });
+    const assignedNurse = await findOnDutyNurseForWard(tx, ctx, wardLabel);
 
     if (assignedNurse) {
       await tx.nursingEpisode.create({
