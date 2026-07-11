@@ -23,7 +23,7 @@ import { patientDisplayName } from "@/lib/frontdesk-workflow";
 import { resolveDoctorName } from "@/lib/clinical-roster";
 import { backfillBranchScope } from "@/server/branch-scope";
 import { loadClinicalRoster } from "@/server/clinical/roster";
-import { upsertVisitInvoice } from "@/server/invoicing";
+import { createVisitInvoice } from "@/server/invoicing";
 import { computeGstInvoice, parseBranchGstSettings } from "@/lib/gst-invoicing";
 
 export type { IpdSnapshot } from "@/design-system/ipd-data";
@@ -286,7 +286,7 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
 
   const patient = await prisma.patient.findFirst({
     where: { id: input.patientId, tenantId: scope.tenantId, branchId: scope.branchId },
-    select: { id: true, name: true, fullName: true },
+    select: { id: true, name: true, fullName: true, uhid: true },
   });
   if (!patient) throw new ServerActionError("NOT_FOUND", "Patient not found in this branch.");
   const patientName = patientDisplayName(patient) ?? input.patientId;
@@ -338,6 +338,73 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
         status: "admitted",
       },
     });
+
+    const wardLabel = bed.ward.label;
+    await tx.nursingHandoff.upsert({
+      where: { visitId },
+      update: {
+        ipdWard: wardLabel,
+        ipdBed: bed.label,
+      },
+      create: {
+        id: `nh_${visitId}`,
+        visitId,
+        patientId: input.patientId,
+        patientName,
+        uhid: patient.uhid ?? "",
+        doctorId: input.doctorId,
+        doctorName,
+        treatmentPath: "ipd",
+        packageId: "",
+        packageLabel: "",
+        billingStatus: "pending",
+        amountPaid: 0,
+        balanceDue: 0,
+        netAmount: 0,
+        commercialConsent: false,
+        billingHandoff: Prisma.JsonNull,
+        consultation: Prisma.JsonNull,
+        ipdWard: wardLabel,
+        ipdBed: bed.label,
+        sentAt: now,
+      },
+    });
+
+    const assignedNurse = await tx.adminStaff.findFirst({
+      where: {
+        branchId: ctx.branchId,
+        role: "nurse",
+        onDuty: true,
+        ...(wardLabel ? { ward: wardLabel as any } : {}),
+      },
+    });
+
+    if (assignedNurse) {
+      await tx.nursingEpisode.create({
+        data: {
+          id: `ep_${visitId}`,
+          visitId,
+          patientId: input.patientId,
+          nurseId: assignedNurse.id,
+          nurseName: assignedNurse.name,
+          branchId: ctx.branchId,
+          treatmentPath: "ipd",
+          packageLabel: "",
+          packageId: "",
+          doctorName,
+          doctorId: input.doctorId,
+          billingStatus: "pending",
+          balanceDue: 0,
+          status: "queued",
+          priority: "high",
+          queuedAt: now,
+          consents: [],
+          sessions: [],
+          internalNotes: "",
+          tasks: [],
+        },
+      });
+    }
   });
 
   const opd = await prisma.opdVisit.findUnique({ where: { id: visitId } });
@@ -577,8 +644,14 @@ export async function generateIpdFinalBill(
     : [{ mode: input.mode ?? "cash", amount: net }];
   const collected = splits.reduce((s, p) => s + p.amount, 0);
 
+  const previousBillAmount = visit.billAmount ?? 0;
+  const previousAmountPaid = visit.amountPaid ?? 0;
+  const newBillAmount = previousBillAmount + net;
+  const newAmountPaid = previousAmountPaid + collected;
+  const newBalance = Math.max(0, newBillAmount - newAmountPaid);
+
   await prisma.$transaction(async (tx) => {
-    await upsertVisitInvoice(
+    await createVisitInvoice(
       ctx,
       {
         visitId,
@@ -588,7 +661,7 @@ export async function generateIpdFinalBill(
         discount: input.discount ?? 0,
         collected,
         mode: splits.length === 1 ? splits[0].mode : "split",
-        paymentScope: "full",
+        paymentScope: newBalance === 0 ? "full" : "partial",
         lines: packageLines.map((line) => ({
           label: line.label,
           quantity: line.quantity,
@@ -607,10 +680,10 @@ export async function generateIpdFinalBill(
     await tx.opdVisit.update({
       where: { id: visitId },
       data: {
-        billing: collected >= net ? "paid" : "partial",
-        billAmount: net,
-        amountPaid: collected,
-        balanceDue: Math.max(0, net - collected),
+        billing: newBalance === 0 ? "paid" : "partial",
+        billAmount: newBillAmount,
+        amountPaid: newAmountPaid,
+        balanceDue: newBalance > 0 ? newBalance : null,
       },
     });
   });
@@ -618,7 +691,10 @@ export async function generateIpdFinalBill(
   const updated = await prisma.opdVisit.findUnique({ where: { id: visitId } });
   if (updated) await syncVisitFromOpdVisit(ctx, updated);
 
-  const invoice = await prisma.invoice.findUnique({ where: { visitId } });
+  const invoice = await prisma.invoice.findFirst({
+    where: { visitId, ...branchScope(ctx) },
+    orderBy: { createdAt: "desc" },
+  });
   const patientName = patientDisplayName(admission.patient) ?? admission.patientId;
 
   await writePlatformAudit({

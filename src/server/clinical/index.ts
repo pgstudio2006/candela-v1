@@ -15,7 +15,7 @@ import { billingFromPayment, resolveOpdFirstRoute, resolvePostCounselRoute, trea
 import { prisma } from "@/lib/prisma";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
-import { upsertVisitInvoice, getVisitReceipt } from "@/server/invoicing";
+import { createVisitInvoice, getVisitReceipt } from "@/server/invoicing";
 import {
   billingCollectedTotal,
   billingSubtotal,
@@ -838,17 +838,14 @@ export async function processBilling(
 
   const net = gstInvoice.grandTotal;
 
-  // Load any existing invoice so partial payments can accumulate.
-  const existingInvoice = await prisma.invoice.findUnique({
-    where: { visitId },
-    include: { payments: true },
-  });
-  const previousPaid = existingInvoice ? Number(existingInvoice.amountPaid) : (visit.amountPaid ?? 0);
+  const previousBillAmount = visit.billAmount ?? 0;
+  const previousAmountPaid = visit.amountPaid ?? 0;
   const previousBalance = visit.balanceDue ?? 0;
   const currentCollected = billingCollectedTotal(payload, net);
-  const totalPaid = previousPaid + currentCollected;
-  const remainingBalance = Math.max(0, net - totalPaid);
-  const isFinal = remainingBalance === 0 && totalPaid > 0;
+  const newBillAmount = previousBillAmount + net;
+  const newAmountPaid = previousAmountPaid + currentCollected;
+  const newBalance = Math.max(0, newBillAmount - newAmountPaid);
+  const isFinal = newBalance === 0 && newAmountPaid > 0;
 
   const isIpd = visit.treatmentPath === "ipd" || Boolean(visit.ipdAdmissionId);
 
@@ -860,13 +857,13 @@ export async function processBilling(
         routeHref: "/app/frontdesk/ipd",
         routingNote: isFinal
           ? "IPD bill paid in full — returned to ward."
-          : `IPD billing updated — ₹${totalPaid.toLocaleString("en-IN")} collected · ₹${remainingBalance.toLocaleString("en-IN")} outstanding.`,
+          : `IPD billing updated — ₹${newAmountPaid.toLocaleString("en-IN")} collected · ₹${newBalance.toLocaleString("en-IN")} outstanding.`,
       }
     : paymentScope === "defer" || payload.skipBilling
-      ? resolveOpdFirstRoute({ paymentScope: "defer", mode: "defer", visitId, netAmount: net, collected: 0 })
+      ? resolveOpdFirstRoute({ paymentScope: "defer", mode: "defer", visitId, netAmount: newBillAmount, collected: 0 })
       : isFinal
-        ? resolveOpdFirstRoute({ paymentScope: "full", mode, visitId, netAmount: net, collected: totalPaid })
-        : resolveOpdFirstRoute({ paymentScope: "partial", mode, visitId, netAmount: net, collected: currentCollected });
+        ? resolveOpdFirstRoute({ paymentScope: "full", mode, visitId, netAmount: newBillAmount, collected: newAmountPaid })
+        : resolveOpdFirstRoute({ paymentScope: "partial", mode, visitId, netAmount: newBillAmount, collected: currentCollected });
 
   const invoicePaymentScope = payload.skipBilling || paymentScope === "defer" ? "defer" : isFinal ? "full" : "partial";
 
@@ -883,16 +880,9 @@ export async function processBilling(
   const assignedDoctorId = data.doctorId ? String(data.doctorId) : undefined;
   const assignedDoctorName = data.doctorName ? String(data.doctorName) : undefined;
 
-  // Merge prior payment splits with the new ones so the invoice keeps the full history.
-  const priorPayload = (existingInvoice?.payload as Record<string, unknown> | null) ?? {};
-  const priorSplits: PaymentSplit[] = Array.isArray(priorPayload.paymentSplits)
-    ? (priorPayload.paymentSplits as PaymentSplit[])
-    : existingInvoice?.payments.map((p) => ({ mode: p.mode, amount: Number(p.amount) })) ?? [];
-  const accumulatedSplits: PaymentSplit[] = [...priorSplits, ...payload.paymentSplits];
-
   await prisma.$transaction(async (tx) => {
     // Adjust patient balance by the change in outstanding balance, not the whole balance.
-    const balanceDelta = remainingBalance - previousBalance;
+    const balanceDelta = newBalance - previousBalance;
     await tx.patient.update({
       where: { id: visit.patientId },
       data: { balance: { increment: balanceDelta } },
@@ -903,9 +893,9 @@ export async function processBilling(
         stage: route.stage,
         billing: isFinal ? "paid" : billingFromPayment(paymentScope, mode),
         token: assignedToken,
-        billAmount: net,
-        amountPaid: totalPaid,
-        balanceDue: remainingBalance > 0 ? remainingBalance : null,
+        billAmount: newBillAmount,
+        amountPaid: newAmountPaid,
+        balanceDue: newBalance > 0 ? newBalance : null,
         treatmentPath: isIpd ? visit.treatmentPath : "opd",
         routingNote: route.routingNote,
         deferredReason:
@@ -925,8 +915,8 @@ export async function processBilling(
         data: { cart: [] as unknown as object },
       });
     }
-    if (payload.packageLines.length > 0 || totalPaid > 0) {
-      await upsertVisitInvoice(
+    if (payload.packageLines.length > 0 || currentCollected > 0) {
+      await createVisitInvoice(
         ctx,
         {
           visitId,
@@ -936,15 +926,15 @@ export async function processBilling(
           discount: payload.discount,
           discountMode: payload.discountMode,
           discountPercent: payload.discountPercent,
-          collected: totalPaid,
-          mode: isFinal ? primaryPaymentMode({ ...payload, paymentSplits: accumulatedSplits }) : mode,
+          collected: currentCollected,
+          mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
           paymentScope: invoicePaymentScope,
           lines: payload.packageLines.map((line) => ({
             label: line.label,
             quantity: line.quantity,
             taxableAmount: line.amount * line.quantity,
           })),
-          paymentSplits: accumulatedSplits,
+          paymentSplits: payload.paymentSplits,
           gstOverride: {
             gstRatePercent: payload.gstRatePercent,
             taxMode: gstTaxMode,
@@ -968,7 +958,10 @@ export async function processBilling(
     summary: `Billing ₹${net} (${mode}) — ${route.routingLabel}`,
   });
 
-  const invoice = await prisma.invoice.findUnique({ where: { visitId } });
+  const invoice = await prisma.invoice.findFirst({
+    where: { visitId, ...branchScope(ctx) },
+    orderBy: { createdAt: "desc" },
+  });
 
   // WhatsApp: only send invoice confirmation once the bill is fully paid.
   if (isFinal) {
@@ -1158,7 +1151,7 @@ export async function processCounselBilling(
   const updated = await prisma.opdVisit.findUnique({ where: { id: visitId } });
   if (updated) await syncVisitFromOpdVisit(ctx, updated);
 
-  await upsertVisitInvoice(ctx, {
+  await createVisitInvoice(ctx, {
     visitId,
     patientId: handoff.patientId,
     label: handoff.quote.packageLabel ?? "Counsellor package",
@@ -1178,7 +1171,10 @@ export async function processCounselBilling(
     summary: `Post-counsel billing ₹${net}`,
   });
 
-  const counselInvoice = await prisma.invoice.findUnique({ where: { visitId } });
+  const counselInvoice = await prisma.invoice.findFirst({
+    where: { visitId, ...branchScope(ctx) },
+    orderBy: { createdAt: "desc" },
+  });
   const counselVisit = await prisma.opdVisit.findUnique({ where: { id: visitId } });
 
   return {

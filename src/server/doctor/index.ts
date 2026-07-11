@@ -646,37 +646,37 @@ export async function completeConsultation(
         },
       });
 
-      if (assignedNurse) {
-        await tx.nursingHandoff.upsert({
-          where: { visitId },
-          update: {
-            ipdWard: wardLabel,
-            ipdBed: String(opts.handoff.bed ?? "A-14"),
-          },
-          create: {
-            id: `nh_${visitId}`,
-            visitId,
-            patientId: visit.patientId,
-            patientName: (visit as any).patientName ?? "",
-            uhid: (visit as any).uhid ?? "",
-            doctorId,
-            doctorName: visit.doctorName ?? "",
-            treatmentPath: "ipd",
-            packageId: packageId || "",
-            packageLabel: pkg?.label ?? "",
-            billingStatus: (visit as any).billingStatus ?? "pending",
-            amountPaid: visit.amountPaid ?? 0,
-            balanceDue: visit.balanceDue ?? 0,
-            netAmount: (visit.amountPaid ?? 0) + (visit.balanceDue ?? 0),
-            commercialConsent: false,
-            billingHandoff: opts.handoff,
-            consultation: updatedConsult,
-            ipdWard: wardLabel,
-            ipdBed: String(opts.handoff.bed ?? "A-14"),
-            sentAt: completedAt,
-          },
-        });
+      await tx.nursingHandoff.upsert({
+        where: { visitId },
+        update: {
+          ipdWard: wardLabel,
+          ipdBed: String(opts.handoff.bed ?? "A-14"),
+        },
+        create: {
+          id: `nh_${visitId}`,
+          visitId,
+          patientId: visit.patientId,
+          patientName: (visit as any).patientName ?? "",
+          uhid: (visit as any).uhid ?? "",
+          doctorId,
+          doctorName: visit.doctorName ?? "",
+          treatmentPath: "ipd",
+          packageId: packageId || "",
+          packageLabel: pkg?.label ?? "",
+          billingStatus: (visit as any).billingStatus ?? "pending",
+          amountPaid: visit.amountPaid ?? 0,
+          balanceDue: visit.balanceDue ?? 0,
+          netAmount: (visit.amountPaid ?? 0) + (visit.balanceDue ?? 0),
+          commercialConsent: false,
+          billingHandoff: opts.handoff,
+          consultation: updatedConsult,
+          ipdWard: wardLabel,
+          ipdBed: String(opts.handoff.bed ?? "A-14"),
+          sentAt: completedAt,
+        },
+      });
 
+      if (assignedNurse) {
         // Create nursing episode for assigned nurse
         await tx.nursingEpisode.create({
           data: {

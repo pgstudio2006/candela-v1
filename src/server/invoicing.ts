@@ -50,7 +50,7 @@ export async function getVisitInvoiceForBilling(ctx: ServerContext, visitId: str
   };
 }
 
-export async function upsertVisitInvoice(
+export async function createVisitInvoice(
   ctx: ServerContext,
   input: {
     visitId: string;
@@ -92,12 +92,12 @@ export async function upsertVisitInvoice(
 
   const net = gstInvoice.grandTotal;
   const balance = Math.max(0, net - input.collected);
-  const invoiceId = `inv_${input.visitId}`;
-  const invoiceNumber = `NV-${input.visitId.slice(-8).toUpperCase()}`;
+  const timestamp = Date.now();
+  const invoiceId = `inv_${input.visitId}_${timestamp}`;
+  const invoiceNumber = `NV-${input.visitId.slice(-8).toUpperCase()}-${timestamp.toString(36).slice(-4)}`;
 
-  await tx.invoice.upsert({
-    where: { visitId: input.visitId },
-    create: {
+  await tx.invoice.create({
+    data: {
       id: invoiceId,
       ...scope,
       patientId: input.patientId,
@@ -122,33 +122,12 @@ export async function upsertVisitInvoice(
         packageLines: input.packageLines ?? [],
       },
     },
-    update: {
-      status: balance > 0 ? "partial" : input.collected > 0 ? "paid" : "pending",
-      subtotal: gstInvoice.taxableSubtotal,
-      discount: input.discount,
-      taxAmount: gstInvoice.taxTotal,
-      totalAmount: net,
-      amountPaid: input.collected,
-      balanceAmount: balance,
-      paymentScope: input.paymentScope,
-      payload: {
-        gst: gstSettings,
-        cgstTotal: gstInvoice.cgstTotal,
-        sgstTotal: gstInvoice.sgstTotal,
-        igstTotal: gstInvoice.igstTotal,
-        paymentSplits: input.paymentSplits ?? [],
-        discountMode: input.discountMode,
-        discountPercent: input.discountPercent,
-        packageLines: input.packageLines ?? [],
-      },
-    },
   });
 
-  await tx.invoiceLine.deleteMany({ where: { invoiceId } });
   for (const [i, line] of gstInvoice.lines.entries()) {
     await tx.invoiceLine.create({
       data: {
-        id: `line_${input.visitId}_${i}`,
+        id: `line_${input.visitId}_${timestamp}_${i}`,
         invoiceId,
         label: line.label,
         category: "opd",
@@ -173,22 +152,23 @@ export async function upsertVisitInvoice(
     (input.collected > 0 ? [{ mode: input.mode, amount: input.collected }] : []);
 
   if (splits.length > 0) {
-    await tx.payment.deleteMany({ where: { invoiceId } });
     for (const [index, split] of splits.entries()) {
       await tx.payment.create({
         data: {
-          id: `pay_${input.visitId}_${Date.now()}_${index}`,
+          id: `pay_${input.visitId}_${timestamp}_${index}`,
           ...scope,
           invoiceId,
           amount: split.amount,
           mode: split.mode,
           status: "captured",
-          referenceNo: `${split.mode.toUpperCase()}-${Date.now()}-${index}`,
+          referenceNo: `${split.mode.toUpperCase()}-${timestamp}-${index}`,
           paidAt: new Date(),
         },
       });
     }
   }
+
+  return { invoiceId, invoiceNumber, status: balance > 0 ? "partial" : input.collected > 0 ? "paid" : "pending" };
 }
 
 const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "cheque", "wallet", "other"]);
@@ -228,8 +208,9 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string): Prom
   const branch = await prisma.branch.findUnique({ where: { id: ctx.branchId } });
   const branchGst = parseBranchGstSettings(branch?.meta);
 
-  const invoice = await prisma.invoice.findUnique({
-    where: { visitId },
+  const invoice = await prisma.invoice.findFirst({
+    where: { visitId, ...branchScope(ctx) },
+    orderBy: { createdAt: "desc" },
     include: {
       lines: { orderBy: { createdAt: "asc" } },
       payments: { orderBy: { paidAt: "desc" }, take: 1 },

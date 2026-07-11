@@ -157,7 +157,7 @@ export function OpdBillingForm({
   const balanceAfterPay = Math.max(0, net - previousPaid - splitTotal);
 
   useEffect(() => {
-    if (!visit?.ipdAdmissionId || existingInvoice || lines.length > 0) return;
+    if (!visit?.ipdAdmissionId || lines.length > 0) return;
     let cancelled = false;
     void getIpdCartAction(visit.ipdAdmissionId).then((res) => {
       if (cancelled) return;
@@ -176,7 +176,7 @@ export function OpdBillingForm({
     return () => {
       cancelled = true;
     };
-  }, [visit?.ipdAdmissionId, existingInvoice]);
+  }, [visit?.ipdAdmissionId]);
 
   useEffect(() => {
     if (!visit?.id) {
@@ -190,24 +190,7 @@ export function OpdBillingForm({
       if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
         setExistingInvoice(inv);
         setPreviousPayments(inv.paymentSplits);
-        if (inv.packageLines?.length) {
-          setLines(
-            inv.packageLines.map((l) => ({
-              ...l,
-              key: `${l.packageId}_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-            })),
-          );
-        } else if (inv.lines?.length) {
-          setLines(
-            inv.lines.map((l, i) => ({
-              packageId: `line_${i}`,
-              label: l.label,
-              amount: l.quantity > 0 ? l.unitPrice / l.quantity : l.unitPrice,
-              quantity: l.quantity,
-              key: `reconstructed_${i}_${Date.now()}`,
-            })),
-          );
-        }
+        // Second payment should only bill new services; keep previous lines off the form.
         if (inv.discountMode) {
           setDiscountMode(inv.discountMode);
           if (inv.discountMode === "percent") setDiscountPercent(inv.discountPercent ?? 0);

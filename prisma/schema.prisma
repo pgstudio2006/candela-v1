@@ -1167,7 +1167,7 @@ model Invoice {
   tenantId        String
   branchId        String
   patientId       String?
-  visitId         String?       @unique
+  visitId         String?
   invoiceNumber   String
   status          String
   subtotal        Decimal       @default(0)
