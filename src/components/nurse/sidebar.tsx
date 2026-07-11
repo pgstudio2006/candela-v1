@@ -6,6 +6,7 @@ import { SectionLabel } from "@/components/frontdesk/page-chrome";
 import { SidebarIcon } from "@/components/frontdesk/sidebar-icon";
 import { NURSE_NAV } from "@/design-system/nurse-nav";
 import { DEPARTMENTS } from "@/design-system/mock-data";
+import { isPataudiBranch } from "@/lib/auth-types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +42,7 @@ export function NurseSidebar({
 }: NurseSidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const navItems = NURSE_NAV.filter((item) => item.id !== "pharmacy" || !isPataudiBranch(branchName));
 
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_KEY);
@@ -99,7 +101,7 @@ export function NurseSidebar({
       <ScrollArea className="min-h-0 flex-1 px-2 py-2">
         {!collapsed && <SectionLabel>Workspace</SectionLabel>}
         <nav className={cn("space-y-0.5", !collapsed && "mb-3")}>
-          {NURSE_NAV.map((item) => {
+          {navItems.map((item) => {
             const active =
               item.href === "/app/nurse" ? pathname === item.href : pathname.startsWith(item.href);
             return (

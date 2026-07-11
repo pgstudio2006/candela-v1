@@ -24,6 +24,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getClinicalSnapshot, saveSubmission } from "@/server/clinical";
 import { writeIpdRoundLog } from "@/server/ipd";
+import { createNursePharmacyOrder as createNursePharmacyOrderInPharmacy } from "@/server/pharmacy";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
 import { resolveNurseOperator } from "@/server/module-operator";
@@ -761,6 +762,42 @@ export async function updateEpisodeNotes(ctx: ServerContext, visitId: string, no
     where: { visitId },
     data: { internalNotes: notes.slice(0, 4000) },
   });
+}
+
+export async function createNursePharmacyOrder(
+  ctx: ServerContext,
+  visitId: string,
+  input: {
+    patientName: string;
+    uhid: string;
+    lines: Array<{ drug: string; dose: string; frequency: string; duration: string; instructions?: string }>;
+    priority?: "routine" | "urgent" | "stat";
+  },
+) {
+  const { operatorId, operatorName } = await resolveNurseOperator(ctx);
+  const episodeRow = await assertNurseOwnsEpisode(ctx, visitId, operatorId);
+  const episode = asEpisode(episodeRow);
+  if (!input.lines.length) {
+    throw new ServerActionError("VALIDATION", "Add at least one medicine line.");
+  }
+  const rxId = await createNursePharmacyOrderInPharmacy(ctx, {
+    visitId,
+    patientName: input.patientName,
+    uhid: input.uhid,
+    nurseName: operatorName,
+    lines: input.lines,
+    priority: input.priority,
+  });
+  await writePlatformAudit({
+    ctx,
+    module: "nurse",
+    action: "pharmacy_order_created",
+    entityType: "visit",
+    entityId: visitId,
+    summary: `IPD pharmacy order created by ${operatorName} for ${input.patientName}`,
+    payload: { rxId, lineCount: input.lines.length },
+  });
+  return { rxId, episodeId: episode.id };
 }
 
 export async function createNurseTask(
