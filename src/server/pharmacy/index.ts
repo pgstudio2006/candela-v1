@@ -32,6 +32,7 @@ import {
   mutateVerifyPrescription,
   resolveStaffOperator,
 } from "@/lib/pharmacy-state-mutations";
+import type { DispenseResult } from "@/lib/pharmacy-state-mutations";
 import { validateDispenseQuantities, validateRejectReason } from "@/lib/pharmacy-validation";
 import { prisma } from "@/lib/prisma";
 import type { ServerContext } from "@/server/context";
@@ -68,6 +69,67 @@ async function withOperator(ctx: ServerContext, operatorId: string, fn: (state: 
   return next;
 }
 
+async function updateRelationalPrescriptionStatus(
+  rxId: string,
+  patch: Partial<{
+    status: string;
+    verifiedAt: Date;
+    dispensedAt: Date;
+    rejectReason: string;
+    counselingNotes: string;
+    witnessName: string;
+  }>,
+) {
+  try {
+    await prisma.prescription.update({ where: { id: rxId }, data: patch });
+  } catch {
+    // Walk-in / manual prescriptions may not exist in the relational table
+  }
+}
+
+function mapRelationalPrescription(row: {
+  id: string;
+  visitId: string;
+  patientId?: string | null;
+  doctorId?: string | null;
+  doctorName?: string | null;
+  source?: string | null;
+  priority?: string | null;
+  status: string;
+  rejectReason?: string | null;
+  counselingNotes?: string | null;
+  witnessName?: string | null;
+  prescriptionDate: Date;
+  verifiedAt?: Date | null;
+  dispensedAt?: Date | null;
+  updatedAt: Date;
+  lines: unknown;
+  meta?: unknown;
+}): Prescription {
+  const meta = (row.meta && typeof row.meta === "object" ? row.meta : {}) as Record<string, unknown>;
+  const lines = Array.isArray(row.lines) ? (row.lines as Prescription["lines"]) : [];
+  return {
+    id: row.id,
+    encounterId: row.visitId,
+    patientName: String(meta.patientName ?? "Patient"),
+    uhid: String(meta.uhid ?? ""),
+    mobile: meta.mobile ? String(meta.mobile) : undefined,
+    age: meta.age ? Number(meta.age) : undefined,
+    doctorName: row.doctorName ?? "Doctor",
+    source: (row.source as Prescription["source"]) ?? "opd",
+    priority: (row.priority as Prescription["priority"]) ?? "routine",
+    status: (row.status as Prescription["status"]) ?? "pending",
+    rejectReason: row.rejectReason ?? undefined,
+    counselingNotes: row.counselingNotes ?? undefined,
+    witnessName: row.witnessName ?? undefined,
+    createdAt: row.prescriptionDate.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    verifiedAt: row.verifiedAt?.toISOString() ?? undefined,
+    dispensedAt: row.dispensedAt?.toISOString() ?? undefined,
+    lines,
+  };
+}
+
 export async function getPharmacySnapshot(ctx: ServerContext, operatorId: string): Promise<PharmacySnapshot> {
   const state = await readState(ctx);
   let activeOperatorId = operatorId;
@@ -85,8 +147,20 @@ export async function getPharmacySnapshot(ctx: ServerContext, operatorId: string
     }
   }
 
+  const relationalRows = await prisma.prescription.findMany({
+    where: { branchId: ctx.branchId, status: { in: ["pending", "verified"] } },
+    orderBy: { prescriptionDate: "asc" },
+  });
+  const relationalRxs = relationalRows.map(mapRelationalPrescription);
+  const workspaceIds = new Set(state.prescriptions.map((r) => r.id));
+  const mergedPrescriptions = [
+    ...state.prescriptions,
+    ...relationalRxs.filter((r) => !workspaceIds.has(r.id)),
+  ];
+
   return {
     ...state,
+    prescriptions: mergedPrescriptions,
     operatorId: activeOperatorId,
     activeOperatorId,
     activeOperatorName,
@@ -117,6 +191,11 @@ export async function verifyPrescription(
     });
     return next;
   });
+  await updateRelationalPrescriptionStatus(rxId, {
+    status: "verified",
+    verifiedAt: new Date(),
+    counselingNotes,
+  });
 }
 
 export async function rejectPrescription(ctx: ServerContext, operatorId: string, rxId: string, reason: string) {
@@ -134,6 +213,7 @@ export async function rejectPrescription(ctx: ServerContext, operatorId: string,
     });
     return next;
   });
+  await updateRelationalPrescriptionStatus(rxId, { status: "rejected", rejectReason: validatedReason });
 }
 
 export async function dispensePrescription(
@@ -146,11 +226,17 @@ export async function dispensePrescription(
   newLines?: Prescription["lines"],
 ) {
   validateDispenseQuantities(quantities);
-  let dispenseResult: Awaited<ReturnType<typeof mutateDispensePrescription>>["result"] | null = null;
+  let dispenseResult: DispenseResult | null = null;
 
   await withOperator(ctx, operatorId, async (state, operator) => {
     const { state: next, result } = mutateDispensePrescription(state, rxId, operator, quantities, witnessName, batchIds, newLines);
     dispenseResult = result;
+
+    await updateRelationalPrescriptionStatus(rxId, {
+      status: result.allDone ? "dispensed" : "partially_dispensed",
+      dispensedAt: new Date(),
+      witnessName,
+    });
 
     await writePlatformAudit({
       ctx,
@@ -607,6 +693,28 @@ export async function pushPrescriptionFromDoctor(
   };
 
   await persistState(ctx, next);
+
+  await prisma.prescription.upsert({
+    where: { id: rx.id },
+    create: {
+      id: rx.id,
+      visitId: input.visitId,
+      patientId: input.patientId,
+      doctorId: input.doctorId,
+      doctorName: input.doctorName,
+      source: "opd",
+      priority: rx.priority,
+      status: "pending",
+      branchId: ctx.branchId,
+      lines: rx.lines as object,
+      meta: { patientName: input.patientName, uhid: input.uhid } as object,
+    },
+    update: {
+      status: "pending",
+      lines: rx.lines as object,
+      meta: { patientName: input.patientName, uhid: input.uhid } as object,
+    },
+  });
 
   await writePlatformAudit({
     ctx,
