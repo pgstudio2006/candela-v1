@@ -35,7 +35,7 @@ import {
 
 export async function getIpdWardsAction() {
   return runAction(async () => {
-    const ctx = await requireAnyModule("admin", "frontdesk");
+    const ctx = await requireAnyModule("admin", "frontdesk", "doctor");
     return getIpdWards(ctx);
   });
 }

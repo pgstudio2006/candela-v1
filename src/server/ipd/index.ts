@@ -83,7 +83,6 @@ export async function findOnDutyNurseForWard(
     branchId: ctx.branchId,
     role: "nurse",
     onDuty: true,
-    active: true,
   };
   if (wardLabel) {
     const wardMatch = await tx.adminStaff.findFirst({

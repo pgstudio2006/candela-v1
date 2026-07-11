@@ -33,6 +33,7 @@ export default function PharmacyDrugsPage() {
   });
 
   const canEdit = isManager() || isPurchase();
+  const canAdd = true;
 
   const reset = () => {
     setForm({
@@ -77,7 +78,7 @@ export default function PharmacyDrugsPage() {
       title="Drugs & formulary"
       meta="Generic · brand · Schedule H/H1 · HSN · GST · stock · suppliers"
       actions={
-        canEdit ? (
+        canAdd ? (
           <AttioButton variant="primary" onClick={() => { reset(); setOpen(true); }}>
             Add drug
           </AttioButton>

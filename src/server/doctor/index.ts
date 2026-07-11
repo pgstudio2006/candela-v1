@@ -604,9 +604,15 @@ export async function completeConsultation(
     });
 
     if (opts.treatmentMode === "ipd") {
+      const wardLabel = String(opts.handoff.ward ?? "").trim();
+      const bedLabel = String(opts.handoff.bed ?? "").trim();
+      if (!wardLabel || !bedLabel) {
+        throw new ServerActionError(
+          "VALIDATION",
+          "IPD admission requires a ward and bed. Select an available bed before completing the consultation.",
+        );
+      }
       ipdAdmissionId = `ipd_${visitId}`;
-      const wardLabel = String(opts.handoff.ward ?? "MSK Ward A");
-      const bedLabel = String(opts.handoff.bed ?? "A-14");
       const { wardId, bedId } = await ensureIpdWardBed(tx, ctx, wardLabel, bedLabel, "general");
       await tx.ipdAdmission.upsert({
         where: { visitId },
@@ -642,7 +648,7 @@ export async function completeConsultation(
         where: { visitId },
         update: {
           ipdWard: wardLabel,
-          ipdBed: String(opts.handoff.bed ?? "A-14"),
+          ipdBed: bedLabel,
         },
         create: {
           id: `nh_${visitId}`,
@@ -663,7 +669,7 @@ export async function completeConsultation(
           billingHandoff: opts.handoff,
           consultation: updatedConsult,
           ipdWard: wardLabel,
-          ipdBed: String(opts.handoff.bed ?? "A-14"),
+          ipdBed: bedLabel,
           sentAt: completedAt,
         },
       });
@@ -755,7 +761,8 @@ export async function completeConsultation(
         doctorName: visit.doctorName ?? doctorId,
         lines: consult.prescription as PrescriptionLine[],
       });
-    } catch {
+    } catch (err) {
+      console.error("[doctor] pushPrescriptionToPharmacy failed:", err);
       /* Rx bridge is best-effort — consult completion must still succeed */
     }
   }

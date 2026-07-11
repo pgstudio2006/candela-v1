@@ -667,6 +667,7 @@ export async function completeSession(
         "nurse-session-notes",
         values as Record<string, string | number | boolean>,
         { patientId: episode.patientId, visitId },
+        true,
       );
     }
 
@@ -702,6 +703,7 @@ export async function completeSession(
       "nurse-session-notes",
       values as Record<string, string | number | boolean>,
       { patientId: episode.patientId, visitId },
+      true,
     );
   }
 

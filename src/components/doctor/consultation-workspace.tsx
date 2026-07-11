@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { validateFormValues } from "@/lib/schema-registry";
 import { useToast } from "@/components/ui/toast-provider";
 import { getNurseScoresAction } from "@/app/actions/clinical-actions";
+import { getIpdWardsAction } from "@/app/actions/ipd-actions";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
 import {
   Select,
@@ -125,6 +126,10 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [selectedHandoffPackageId, setSelectedHandoffPackageId] = useState<string>("");
   const [handoffServiceSearch, setHandoffServiceSearch] = useState("");
   const [scoreEntries, setScoreEntries] = useState<{ id: string; submittedAt: string; data: Record<string, string | number | boolean> }[]>([]);
+  type IpdWardOption = { id: string; label: string; active: boolean; beds: Array<{ id: string; label: string; active: boolean; occupied: boolean }> };
+  const [ipdWards, setIpdWards] = useState<IpdWardOption[]>([]);
+  const [selectedIpdWardId, setSelectedIpdWardId] = useState("");
+  const [selectedIpdBedId, setSelectedIpdBedId] = useState("");
 
   const scoreSchema = usePublishedFormSchema("nurse-scores");
 
@@ -135,6 +140,30 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       if (res.ok) setScoreEntries(res.data);
     })();
   }, [visitId]);
+
+  useEffect(() => {
+    if (treatmentMode !== "ipd") {
+      setSelectedIpdWardId("");
+      setSelectedIpdBedId("");
+      return;
+    }
+    void (async () => {
+      const res = await getIpdWardsAction();
+      if (res.ok) setIpdWards(res.data as IpdWardOption[]);
+    })();
+  }, [treatmentMode]);
+
+  useEffect(() => {
+    if (treatmentMode !== "ipd" || ipdWards.length === 0) return;
+    const wardLabel = String(handoffValues.ward ?? "");
+    const bedLabel = String(handoffValues.bed ?? "");
+    const ward = ipdWards.find((w) => w.label === wardLabel) ?? ipdWards.find((w) => w.id === selectedIpdWardId);
+    const bed = ward?.beds.find((b) => b.label === bedLabel);
+    if (ward && bed) {
+      setSelectedIpdWardId(ward.id);
+      setSelectedIpdBedId(bed.id);
+    }
+  }, [treatmentMode, ipdWards, handoffValues.ward, handoffValues.bed]);
 
   const scoreLabels = useMemo(
     () => Object.fromEntries(scoreSchema?.sections.flatMap((s) => s.fields).map((f) => [f.id, f.label]) ?? []),
@@ -224,6 +253,12 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       Object.values(handoffErrors)[0];
     if (firstError) {
       toast(firstError, "error");
+      setCompleting(false);
+      return;
+    }
+
+    if (treatmentMode === "ipd" && (!handoffValues.ward || !handoffValues.bed)) {
+      toast("Select an IPD ward and bed before completing the consultation.", "error");
       setCompleting(false);
       return;
     }
@@ -463,6 +498,59 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 {mode}
               </button>
             ))}
+            {treatmentMode === "ipd" && (
+              <>
+                <span className="ml-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Ward</span>
+                <Select
+                  value={selectedIpdWardId}
+                  onValueChange={(value) => {
+                    const wardId = value ?? "";
+                    if (!wardId) return;
+                    setSelectedIpdWardId(wardId);
+                    setSelectedIpdBedId("");
+                    const ward = ipdWards.find((w) => w.id === wardId);
+                    if (ward) updateHandoffSelection({ ward: ward.label, bed: "" });
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-40 text-[12px]">
+                    <SelectValue placeholder="Select ward" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ipdWards.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>
+                        {w.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-[12px] font-medium text-[var(--attio-text-secondary)]">Bed</span>
+                <Select
+                  value={selectedIpdBedId}
+                  disabled={!selectedIpdWardId}
+                  onValueChange={(value) => {
+                    const bedId = value ?? "";
+                    if (!bedId) return;
+                    setSelectedIpdBedId(bedId);
+                    const ward = ipdWards.find((w) => w.id === selectedIpdWardId);
+                    const bed = ward?.beds.find((b) => b.id === bedId);
+                    if (ward && bed) updateHandoffSelection({ ward: ward.label, bed: bed.label });
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-40 text-[12px]">
+                    <SelectValue placeholder="Select bed" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ipdWards
+                      .find((w) => w.id === selectedIpdWardId)
+                      ?.beds.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.label}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </>
         )}
 

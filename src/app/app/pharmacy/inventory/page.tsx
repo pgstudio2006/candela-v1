@@ -46,6 +46,9 @@ export default function PharmacyInventoryPage() {
       meta="Medicine name · live stock · batch · expiry · supplier · shelf · box · description"
       actions={
         <div className="flex gap-2">
+          <Link href="/app/pharmacy/drugs">
+            <AttioButton variant="secondary">Add medicine</AttioButton>
+          </Link>
           <Link href="/app/pharmacy/suppliers">
             <AttioButton variant="secondary">Suppliers</AttioButton>
           </Link>

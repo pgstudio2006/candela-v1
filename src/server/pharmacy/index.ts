@@ -148,7 +148,10 @@ export async function getPharmacySnapshot(ctx: ServerContext, operatorId: string
   }
 
   const relationalRows = await prisma.prescription.findMany({
-    where: { branchId: ctx.branchId, status: { in: ["pending", "verified"] } },
+    where: {
+      branchId: ctx.branchId,
+      status: { in: ["pending", "verified", "dispensed", "partially_dispensed"] },
+    },
     orderBy: { prescriptionDate: "asc" },
   });
   const relationalRxs = relationalRows.map(mapRelationalPrescription);
@@ -694,27 +697,31 @@ export async function pushPrescriptionFromDoctor(
 
   await persistState(ctx, next);
 
-  await prisma.prescription.upsert({
-    where: { id: rx.id },
-    create: {
-      id: rx.id,
-      visitId: input.visitId,
-      patientId: input.patientId,
-      doctorId: input.doctorId,
-      doctorName: input.doctorName,
-      source: "opd",
-      priority: rx.priority,
-      status: "pending",
-      branchId: ctx.branchId,
-      lines: rx.lines as object,
-      meta: { patientName: input.patientName, uhid: input.uhid } as object,
-    },
-    update: {
-      status: "pending",
-      lines: rx.lines as object,
-      meta: { patientName: input.patientName, uhid: input.uhid } as object,
-    },
-  });
+  try {
+    await prisma.prescription.upsert({
+      where: { id: rx.id },
+      create: {
+        id: rx.id,
+        visitId: input.visitId,
+        patientId: input.patientId,
+        doctorId: input.doctorId,
+        doctorName: input.doctorName,
+        source: "opd",
+        priority: rx.priority,
+        status: "pending",
+        branchId: ctx.branchId,
+        lines: rx.lines as object,
+        meta: { patientName: input.patientName, uhid: input.uhid } as object,
+      },
+      update: {
+        status: "pending",
+        lines: rx.lines as object,
+        meta: { patientName: input.patientName, uhid: input.uhid } as object,
+      },
+    });
+  } catch (err) {
+    console.error("[pharmacy] relational prescription upsert failed:", err);
+  }
 
   await writePlatformAudit({
     ctx,
