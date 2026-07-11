@@ -15,6 +15,7 @@ import { hashPassword } from "@/server/revenue/password";
 import { ensureRevenueSeeded } from "@/server/revenue/bootstrap";
 import { readCrmWorkspace, writeCrmWorkspace } from "@/server/workspace-state";
 import { defaultCrmState } from "@/server/revenue/state-seeds";
+import { syncCrmAgentToPrisma } from "@/server/crm/sync";
 import type { CrmAgent } from "@/design-system/crm-data";
 
 function newStaffId() {
@@ -110,6 +111,7 @@ export async function syncCrmAgentFromStaff(
   state.agentPasswords[agentId] = explicitPassword;
   const { operatorId: _op, viewAsAgentId: _view, ...payload } = state;
   await writeCrmWorkspace(ctx, payload);
+  await syncCrmAgentToPrisma(ctx, agent);
 }
 
 export async function addStaffWithLogin(

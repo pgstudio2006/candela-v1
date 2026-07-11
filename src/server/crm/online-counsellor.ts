@@ -5,6 +5,9 @@ import { writePlatformAudit } from "@/server/platform-audit";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
 import { branchScope } from "@/server/tenancy";
 import { ServerActionError } from "@/server/errors";
+import { readCrmWorkspace, writeCrmWorkspace } from "@/server/workspace-state";
+import { defaultCrmState } from "@/server/revenue/state-seeds";
+import { syncCrmAgentToPrisma, syncCrmLeadToPrisma } from "@/server/crm/sync";
 
 export type LeadToPatientResult = {
   patientId: string;
@@ -127,6 +130,28 @@ export async function updateLeadStatus(
   });
 }
 
+async function updateWorkspaceLeadAfterConversion(
+  ctx: ServerContext,
+  leadId: string,
+  patientId: string,
+  uhid: string,
+  leadStatus: CrmLeadStatus = "patient",
+) {
+  const state = await readCrmWorkspace(ctx, () => defaultCrmState({}));
+  const leadIdx = state.leads.findIndex((l) => l.id === leadId);
+  if (leadIdx >= 0) {
+    state.leads[leadIdx] = {
+      ...state.leads[leadIdx],
+      patientId,
+      uhid,
+      leadStatus,
+      updatedAt: new Date().toISOString(),
+    };
+    const { operatorId: _op, viewAsAgentId: _view, ...payload } = state;
+    await writeCrmWorkspace(ctx, payload);
+  }
+}
+
 export async function convertLeadToPatient(
   ctx: ServerContext,
   leadId: string,
@@ -195,6 +220,7 @@ export async function convertLeadToPatient(
       leadStatus: "patient",
     },
   });
+  await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "patient");
 
   if (options.bookAppointment && options.doctorName) {
     await prisma.appointment.create({
@@ -216,6 +242,7 @@ export async function convertLeadToPatient(
       where: { id: leadId },
       data: { leadStatus: "appointment_booked" },
     });
+    await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "appointment_booked");
   }
 
   await prisma.activity.create({
@@ -261,7 +288,32 @@ export async function detectLeadByMobile(
     orderBy: { createdAt: "desc" },
   });
 
-  if (!lead) return { found: false };
+  if (!lead) {
+    const state = await readCrmWorkspace(ctx, () => defaultCrmState({}));
+    const workspaceLead = state.leads.find((l) => {
+      const p = l.phone.replace(/\s+/g, "").replace(/-/g, "");
+      const alt = l.alternatePhone?.replace(/\s+/g, "").replace(/-/g, "");
+      return p.includes(normalized) || p.includes(phone) || alt?.includes(normalized) || alt?.includes(phone);
+    });
+    if (!workspaceLead) return { found: false };
+    const agent = workspaceLead.assigneeId ? state.agents.find((a) => a.id === workspaceLead.assigneeId) : null;
+    if (agent) await syncCrmAgentToPrisma(ctx, agent);
+    await syncCrmLeadToPrisma(ctx, workspaceLead);
+    const syncedLead = await prisma.lead.findUnique({ where: { id: workspaceLead.id } });
+    return {
+      found: true,
+      leadId: workspaceLead.id,
+      leadName: workspaceLead.fullName,
+      leadStatus: workspaceLead.leadStatus ?? "fresh",
+      assigneeName: agent?.name ?? undefined,
+      patientId: workspaceLead.patientId ?? undefined,
+      uhid: workspaceLead.uhid ?? undefined,
+      lead: {
+        ...workspaceLead,
+        valueEstimate: workspaceLead.valueEstimate ?? undefined,
+      },
+    };
+  }
 
   const agent = lead.assigneeId ? await prisma.agent.findUnique({ where: { id: lead.assigneeId } }) : null;
 
@@ -298,6 +350,7 @@ export async function detectLeadByMobile(
       leadStatus: (lead.leadStatus ?? "fresh") as CrmLeadStatus,
       assigneeId: lead.assigneeId ?? undefined,
       stageId: lead.stageId,
+      formData: (lead.formData ?? undefined) as Record<string, string | number | boolean> | undefined,
     },
   };
 }
@@ -505,4 +558,34 @@ export async function updateCommissionStatus(
     entityId: commissionId,
     summary: `Commission ${commissionId} → ${status}`,
   });
+}
+
+export async function resolveWalkInCounsellor(
+  ctx: ServerContext,
+): Promise<{ id: string; name: string } | null> {
+  const state = await readCrmWorkspace(ctx, () => defaultCrmState({}));
+  const eligible = state.agents.filter(
+    (a) => a.active && (a.role === "counsellor" || a.role === "caller" || a.role === "team_lead") && !a.unavailableUntil,
+  );
+  if (eligible.length === 0) return null;
+
+  const rule =
+    state.rules.find((r) => r.active && r.strategy === "percentage" && r.source === "walk_in") ??
+    state.rules.find((r) => r.active && r.strategy === "percentage");
+
+  const weights = eligible.map((a) => {
+    const fromRule = rule?.agentWeights?.[a.id] ?? 0;
+    const fromAgent = a.leadWeightPercent ?? 0;
+    return { agent: a, weight: fromRule > 0 ? fromRule : fromAgent > 0 ? fromAgent : 1 };
+  });
+
+  const total = weights.reduce((sum, w) => sum + w.weight, 0);
+  if (total === 0) return { id: eligible[0].id, name: eligible[0].name };
+
+  let r = Math.random() * total;
+  for (const { agent, weight } of weights) {
+    r -= weight;
+    if (r <= 0) return { id: agent.id, name: agent.name };
+  }
+  return { id: weights[0].agent.id, name: weights[0].agent.name };
 }

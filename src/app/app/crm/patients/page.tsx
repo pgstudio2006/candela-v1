@@ -3,15 +3,54 @@
 import { useCrmStore } from "@/components/crm/crm-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
-import { FileText, Search, User } from "lucide-react";
+import { FileText, Search } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+type VisitRow = {
+  id: string;
+  token?: number;
+  stage: string;
+  doctorName: string | null;
+  createdAt: string;
+  billAmount: number;
+  amountPaid: number;
+  balanceDue: number;
+};
+
+type PatientRow = {
+  id: string;
+  uhid: string;
+  name: string | null;
+  fullName: string | null;
+  phone: string | null;
+  assignedCounsellorId: string | null;
+  assignedCounsellorName: string | null;
+  createdAt: string;
+  visits: VisitRow[];
+};
 
 export default function CrmPatientsPage() {
-  const { getFilteredLeads, agents } = useCrmStore();
+  const { getFilteredLeads, agents, isHierarchyLead } = useCrmStore();
   const [query, setQuery] = useState("");
+  const [patients, setPatients] = useState<PatientRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Show converted leads that have patientId
+  useEffect(() => {
+    void (async () => {
+      try {
+        const all = isHierarchyLead() ? "1" : "0";
+        const res = await fetch(`/api/crm/patients?all=${all}`, { credentials: "include" });
+        const json = await res.json();
+        if (json.ok) setPatients((json.data as PatientRow[]) ?? []);
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [isHierarchyLead]);
+
   const convertedLeads = useMemo(() => {
     const leads = getFilteredLeads();
     return leads
@@ -27,11 +66,23 @@ export default function CrmPatientsPage() {
       });
   }, [getFilteredLeads, query]);
 
+  const filteredPatients = useMemo(() => {
+    if (!query) return patients;
+    const q = query.toLowerCase();
+    return patients.filter(
+      (p) =>
+        (p.name ?? "").toLowerCase().includes(q) ||
+        (p.fullName ?? "").toLowerCase().includes(q) ||
+        (p.phone ?? "").includes(q) ||
+        (p.uhid ?? "").toLowerCase().includes(q),
+    );
+  }, [patients, query]);
+
   return (
     <PageChrome
       breadcrumbs={[{ label: "CRM", href: "/app/crm" }, { label: "Patients" }]}
-      title="Converted patients"
-      meta="Patients from online counsellor lead conversions"
+      title="My patients"
+      meta="Patients assigned to you from leads or walk-in routing"
     >
       <Panel title="Patient list">
         <div className="mb-4 flex items-center gap-2">
@@ -46,50 +97,78 @@ export default function CrmPatientsPage() {
           </div>
         </div>
 
-        {convertedLeads.length === 0 ? (
+        {loading ? (
+          <p className="py-6 text-center text-[13px] text-[var(--attio-text-tertiary)]">Loading patients…</p>
+        ) : filteredPatients.length === 0 && convertedLeads.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-[var(--attio-text-tertiary)]">
-            No converted patients yet. Convert leads to patients from the lead profile.
+            No assigned patients yet. Walk-in patients will be routed automatically.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-[var(--attio-border-subtle)] text-[11px] text-[var(--attio-text-tertiary)]">
-                  <th className="py-2 pr-4 font-medium">Patient</th>
-                  <th className="py-2 pr-4 font-medium">UHID</th>
-                  <th className="py-2 pr-4 font-medium">Phone</th>
-                  <th className="py-2 pr-4 font-medium">Counsellor</th>
-                  <th className="py-2 pr-4 font-medium">Status</th>
-                  <th className="py-2 pr-4 font-medium"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--attio-border-subtle)]">
-                {convertedLeads.map((l) => {
-                  const agent = agents.find((a) => a.id === l.assigneeId);
-                  return (
-                    <tr key={l.id}>
-                      <td className="py-2.5 pr-4 font-medium">{l.fullName}</td>
-                      <td className="py-2.5 pr-4 tabular-nums">{l.uhid ?? "—"}</td>
-                      <td className="py-2.5 pr-4 tabular-nums">{l.phone}</td>
-                      <td className="py-2.5 pr-4">{agent?.name ?? "—"}</td>
-                      <td className="py-2.5 pr-4">
-                        <StatusBadge label={l.leadStatus?.replace(/_/g, " ") ?? "fresh"} variant="info" />
-                      </td>
-                      <td className="py-2.5 pr-4">
-                        {l.patientId && (
-                          <Link href={`/app/crm/patients/${l.patientId}`}>
-                            <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1">
-                              <FileText className="size-3" />
-                              View
-                            </AttioButton>
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {filteredPatients.map((p) => (
+              <div key={p.id} className="rounded-lg border border-[var(--attio-border-subtle)] bg-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-semibold">{p.fullName || p.name || "—"}</p>
+                    <p className="text-[12px] text-[var(--attio-text-secondary)]">
+                      {p.uhid} · {p.phone ?? "—"} · {p.assignedCounsellorName ?? "Unassigned"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/app/frontdesk/patients/${p.id}`}>
+                      <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1">
+                        <FileText className="size-3" />
+                        View
+                      </AttioButton>
+                    </Link>
+                  </div>
+                </div>
+                {p.visits.length > 0 && (
+                  <div className="mt-3 border-t border-[var(--attio-border-subtle)] pt-2">
+                    <p className="mb-1 text-[11px] font-medium text-[var(--attio-text-tertiary)]">Visits</p>
+                    <div className="space-y-1">
+                      {p.visits.map((v) => (
+                        <div key={v.id} className="flex items-center justify-between text-[12px]">
+                          <span>
+                            Token {v.token ?? "—"} · {v.doctorName ?? "No doctor"} · {v.stage}
+                          </span>
+                          <span className="tabular-nums">
+                            Bill ₹{v.billAmount.toLocaleString("en-IN")} · Paid ₹{v.amountPaid.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {convertedLeads.map((l) => {
+              const agent = agents.find((a) => a.id === l.assigneeId);
+              return (
+                <div key={`lead-${l.id}`} className="rounded-lg border border-[var(--attio-border-subtle)] bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-semibold">{l.fullName}</p>
+                      <p className="text-[12px] text-[var(--attio-text-secondary)]">
+                        {l.uhid ?? "—"} · {l.phone} · {agent?.name ?? "—"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StatusBadge label={l.leadStatus?.replace(/_/g, " ") ?? "fresh"} variant="info" />
+                      {l.patientId && (
+                        <Link href={`/app/frontdesk/patients/${l.patientId}`}>
+                          <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1">
+                            <FileText className="size-3" />
+                            View
+                          </AttioButton>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </Panel>

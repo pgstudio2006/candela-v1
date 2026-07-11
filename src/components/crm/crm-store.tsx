@@ -73,6 +73,8 @@ type CrmStoreValue = Omit<CrmSnapshot, "isManager" | "viewAsAgentId"> & {
   viewAsAgentId: string | null;
   refresh: (opts?: { silent?: boolean }) => Promise<void>;
   isManager: () => boolean;
+  isTeamLead: () => boolean;
+  isHierarchyLead: () => boolean;
   getOperator: () => CrmAgent | undefined;
   setViewAsAgent: (agentId: string | null) => void;
   getWorkspaceKpis: () => ReturnType<typeof computeWorkspaceKpis>;
@@ -208,8 +210,10 @@ export function CrmStoreProvider({ children }: { children: ReactNode }) {
 
     const opId = () => requireOperatorId(data.activeOperatorId || operatorId);
     const isManager = () => _snapshotManager ?? data.activeOperatorRole === "manager";
+    const isTeamLead = () => data.activeOperatorRole === "team_lead";
+    const isHierarchyLead = () => isManager() || isTeamLead();
     const getOperator = () => data.agents.find((a) => a.id === data.activeOperatorId);
-    const filterAgentId = isManager() ? viewAsAgentId : data.activeOperatorId;
+    const filterAgentId = isHierarchyLead() ? viewAsAgentId : data.activeOperatorId;
 
     const getFilteredLeads = () => {
       if (!filterAgentId) return data.leads;
@@ -237,11 +241,13 @@ export function CrmStoreProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       isManager,
+      isTeamLead,
+      isHierarchyLead,
       getOperator,
       setViewAsAgent: setViewAsAgentId,
       getWorkspaceKpis: () => computeWorkspaceKpis(getFilteredLeads(), data.integrations, getFilteredFollowUps()),
       getMyKpis: () => {
-        if (isManager() && !viewAsAgentId) return null;
+        if (isHierarchyLead() && !viewAsAgentId) return null;
         const id = filterAgentId ?? CRM_MANAGER_ID;
         const agent = data.agents.find((a) => a.id === id);
         if (!agent) return null;

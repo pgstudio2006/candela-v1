@@ -15,6 +15,7 @@ import {
   detectLeadByMobileAction,
   assignCounsellorToPatientAction,
   convertLeadToPatientAction,
+  getWalkInCounsellorAction,
 } from "@/server/crm/online-counsellor-actions";
 import { schemaFingerprint } from "@/lib/schema-field-utils";
 import { AlertTriangle, LogIn, UserCheck } from "lucide-react";
@@ -49,6 +50,7 @@ export default function RegistrationPage() {
   const [leadDetection, setLeadDetection] = useState<LeadDetection | null>(null);
   const [appliedLeadId, setAppliedLeadId] = useState<string | null>(null);
   const [assignCounsellor, setAssignCounsellor] = useState(false);
+  const [counsellorId, setCounsellorId] = useState("");
   const [counsellorName, setCounsellorName] = useState("");
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
   const [referralDoctors, setReferralDoctors] = useState<ReferralDoctor[]>([]);
@@ -93,8 +95,20 @@ export default function RegistrationPage() {
       setLeadDetection(leadResult.data);
       setAppliedLeadId(null);
       if (leadResult.data.found && leadResult.data.assigneeName) {
+        setCounsellorId(leadResult.data.lead?.assigneeId ?? "");
         setCounsellorName(leadResult.data.assigneeName);
         setAssignCounsellor(true);
+      } else if (!leadResult.data.found) {
+        const walkIn = await getWalkInCounsellorAction();
+        if (walkIn.ok && walkIn.data) {
+          setCounsellorId(walkIn.data.id);
+          setCounsellorName(walkIn.data.name);
+          setAssignCounsellor(true);
+        } else {
+          setCounsellorId("");
+          setCounsellorName("");
+          setAssignCounsellor(false);
+        }
       }
     }
   }, []);
@@ -145,6 +159,13 @@ export default function RegistrationPage() {
         (d) => d.label.toLowerCase().includes(specialty) || d.id.toLowerCase().includes(specialty),
       );
       if (dept) values.department = dept.id;
+    }
+    if (lead.formData) {
+      Object.entries(lead.formData).forEach(([key, value]) => {
+        if (value !== "" && value !== null && value !== undefined) {
+          values[key] = value;
+        }
+      });
     }
     return values;
   };
@@ -208,10 +229,9 @@ export default function RegistrationPage() {
     }
 
     if (assignCounsellor && counsellorName.trim()) {
-      const leadId = leadDetection?.leadId ?? "";
       const assignResult = await assignCounsellorToPatientAction(
         result.patientId,
-        leadId || `counsellor_manual_${Date.now()}`,
+        counsellorId || `counsellor_manual_${Date.now()}`,
         counsellorName.trim(),
       );
       if (!assignResult.ok) {
@@ -305,7 +325,7 @@ export default function RegistrationPage() {
                       disabled={!leadDetection.lead || leadDetection.leadId === appliedLeadId}
                       onClick={() => leadDetection.leadId && setAppliedLeadId(leadDetection.leadId)}
                     >
-                      {leadDetection.leadId === appliedLeadId ? "Lead applied" : "Lead to Patient"}
+                      {leadDetection.leadId === appliedLeadId ? "Lead applied" : "Use Lead data"}
                     </AttioButton>
                     <Link href={`/app/crm/leads/${leadDetection.leadId}`}>
                       <AttioButton variant="secondary" className="h-8 text-[11px]">
@@ -330,13 +350,17 @@ export default function RegistrationPage() {
             </label>
             {assignCounsellor && (
               <select
-                value={counsellorName}
-                onChange={(e) => setCounsellorName(e.target.value)}
+                value={counsellorId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setCounsellorId(id);
+                  setCounsellorName(counsellors.find((c) => c.id === id)?.name ?? "");
+                }}
                 className="mt-2 h-9 w-full rounded-lg border border-[var(--attio-border)] px-3 text-[12px]"
               >
                 <option value="">Select counsellor…</option>
                 {counsellors.map((c) => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             )}

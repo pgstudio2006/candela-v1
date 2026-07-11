@@ -17,12 +17,16 @@ export default function CrmDashboardPage() {
     agents,
     stages,
     isManager,
+    isTeamLead,
+    isHierarchyLead,
     getOperator,
     setViewAsAgent,
     viewAsAgentId,
   } = useCrmStore();
   const operator = getOperator();
   const manager = isManager();
+  const teamLead = isTeamLead();
+  const hierarchy = isHierarchyLead();
   const myKpis = getMyKpis();
   const kpis = getWorkspaceKpis();
   const leads = getFilteredLeads();
@@ -42,12 +46,14 @@ export default function CrmDashboardPage() {
 
   return (
     <PageChrome
-      breadcrumbs={[{ label: "CRM", href: "/app/crm" }, { label: manager ? "Manager workspace" : "My workspace" }]}
-      title={manager ? "CRM command workspace" : `${operator?.name}'s workspace`}
+      breadcrumbs={[{ label: "CRM", href: "/app/crm" }, { label: manager ? "Manager workspace" : teamLead ? "Team lead workspace" : "My workspace" }]}
+      title={manager ? "CRM command workspace" : teamLead ? "Team lead workspace" : `${operator?.name}'s workspace`}
       meta={
         manager
           ? "Full team visibility · integrations · routing · KPIs"
-          : "Your leads · your pipeline · your follow-ups only"
+          : teamLead
+            ? "Team visibility · track below performance · KPIs"
+            : "Your leads · your pipeline · your follow-ups only"
       }
       actions={
         <>
@@ -55,7 +61,7 @@ export default function CrmDashboardPage() {
             <Plus className="size-3.5" />
             Add lead
           </Link>
-          {manager && (
+          {hierarchy && (
             <select
               value={viewAsAgentId ?? ""}
               onChange={(e) => setViewAsAgent(e.target.value || null)}

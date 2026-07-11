@@ -52,7 +52,7 @@ export type CrmAgent = {
   id: string;
   name: string;
   email: string;
-  role: "manager" | "counsellor" | "caller";
+  role: "manager" | "team_lead" | "counsellor" | "caller";
   active: boolean;
   specialtyTags: string[];
   maxOpenLeads: number;

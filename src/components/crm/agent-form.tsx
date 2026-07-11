@@ -110,6 +110,7 @@ export function CrmAgentFormModal({ open, onClose, initial, agents = [], onSave 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="counsellor">Counsellor</SelectItem>
+                  <SelectItem value="team_lead">Team Lead</SelectItem>
                   <SelectItem value="caller">Caller / SDR</SelectItem>
                 </SelectContent>
               </Select>

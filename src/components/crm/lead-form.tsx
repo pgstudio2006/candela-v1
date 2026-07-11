@@ -2,6 +2,8 @@
 
 import { useCrmStore } from "@/components/crm/crm-store";
 import { PublishedSchemaForm } from "@/components/candela/published-schema-form";
+import { useFrontdeskFormSchema } from "@/components/frontdesk/use-frontdesk-form-schema";
+import { useFrontdeskStore } from "@/components/frontdesk/frontdesk-store";
 import { AttioButton } from "@/components/frontdesk/ui";
 import {
   EMPTY_LEAD_FORM,
@@ -190,6 +192,8 @@ function Field({
 
 export function CrmLeadFormModal({ open, onClose, initial, onSaved }: CrmLeadFormModalProps) {
   const { stages, agents, isManager, operatorId, addLead, updateLead } = useCrmStore();
+  const { roster } = useFrontdeskStore();
+  const schema = useFrontdeskFormSchema("registration", roster, undefined, undefined);
   const [form, setForm] = useState<CrmLeadFormValues>(EMPTY_LEAD_FORM);
   const [captureValues, setCaptureValues] = useState<Record<string, string | number | boolean>>({});
   const [error, setError] = useState("");
@@ -335,11 +339,12 @@ export function CrmLeadFormModal({ open, onClose, initial, onSaved }: CrmLeadFor
           </section>
 
           <PublishedSchemaForm
-            schemaId="registration"
+            schema={schema}
             hideSubmit
             formKey={initial?.id ?? "new-lead"}
             initialValues={captureValues}
             onValuesChange={setCaptureValues}
+            roster={roster}
             className="mb-2"
           />
         </form>

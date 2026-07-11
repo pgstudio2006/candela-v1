@@ -12,6 +12,7 @@ import {
   getAllCommissions,
   getCounsellorCommissions,
   getOnlineCounsellorLeads,
+  resolveWalkInCounsellor,
   updateCommissionStatus,
   updateLeadCallOutcome,
   updateLeadStatus,
@@ -125,5 +126,12 @@ export async function updateCommissionStatusAction(
   return runAction(async () => {
     const ctx = await requireModule("crm");
     return updateCommissionStatus(ctx, commissionId, status);
+  });
+}
+
+export async function getWalkInCounsellorAction(): Promise<ActionResult<{ id: string; name: string } | null>> {
+  return runAction(async () => {
+    const ctx = await requireModule("crm");
+    return resolveWalkInCounsellor(ctx);
   });
 }

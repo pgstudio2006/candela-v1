@@ -49,6 +49,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import type { ServerContext } from "@/server/context";
 import { assertAssignableAgent, assertLeadAccess, assertManager, requireAgent, requireLead } from "@/server/crm/guards";
+import { syncCrmAgentToPrisma, syncCrmLeadToPrisma } from "@/server/crm/sync";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
 import { ensureRevenueSeeded } from "@/server/revenue/bootstrap";
@@ -371,6 +372,8 @@ export async function createLead(
   await withOperator(ctx, operatorId, async (state, operator) => {
     const result = mutateAddLead(state, operator, partial);
     leadId = result.leadId;
+    const lead = result.state.leads.find((l) => l.id === result.leadId);
+    if (lead) await syncCrmLeadToPrisma(ctx, lead);
     await writePlatformAudit({
       ctx,
       module: "crm",
@@ -378,7 +381,7 @@ export async function createLead(
       entityType: "lead",
       entityId: result.leadId,
       summary: `Lead created: ${partial.fullName}`,
-      payload: { assigneeId: result.state.leads.find((l) => l.id === result.leadId)?.assigneeId },
+      payload: { assigneeId: lead?.assigneeId },
     });
     return result.state;
   });
@@ -403,6 +406,8 @@ export async function updateLead(ctx: ServerContext, operatorId: string, leadId:
     const lead = requireLead(state, leadId);
     assertLeadAccess(operator, lead, isManagerOperator(operator));
     const next = mutateUpdateLead(state, leadId, patch);
+    const updatedLead = next.leads.find((l) => l.id === leadId);
+    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead);
     await writePlatformAudit({
       ctx,
       module: "crm",
@@ -422,6 +427,8 @@ export async function assignLeadManual(ctx: ServerContext, operatorId: string, l
     assertAssignableAgent(agent);
     requireLead(state, leadId);
     const next = mutateAssignLeadManual(state, operator, leadId, agentId);
+    const updatedLead = next.leads.find((l) => l.id === leadId);
+    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead);
     await writePlatformAudit({
       ctx,
       module: "crm",
@@ -441,6 +448,8 @@ export async function moveLeadStage(ctx: ServerContext, operatorId: string, lead
     const stage = state.stages.find((s) => s.id === stageId);
     if (!stage) throw new ServerActionError("NOT_FOUND", "Stage not found.");
     const next = mutateMoveLeadStage(state, operator, leadId, stageId);
+    const updatedLead = next.leads.find((l) => l.id === leadId);
+    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead);
     await writePlatformAudit({
       ctx,
       module: "crm",
@@ -467,6 +476,8 @@ export async function ingestFromIntegration(
     leadId = result.leadId;
     duplicate = result.duplicate;
     if (result.leadId && !result.duplicate) {
+      const lead = result.state.leads.find((l) => l.id === result.leadId);
+      if (lead) await syncCrmLeadToPrisma(ctx, lead);
       await writePlatformAudit({
         ctx,
         module: "crm",
@@ -496,6 +507,8 @@ export async function ingestInboundLeadWebhook(
   if (!result.leadId) {
     return { ok: false as const, error: "Integration not connected" };
   }
+  const lead = result.state.leads.find((l) => l.id === result.leadId);
+  if (lead) await syncCrmLeadToPrisma(ctx, lead);
   await persistState(ctx, result.state);
   await writePlatformAudit({
     ctx,
@@ -573,6 +586,7 @@ export async function addAgent(
     pwd = result.password;
     const created = result.state.agents.find((a) => a.id === agentId)!;
     await upsertAgentCredential(created, pwd);
+    await syncCrmAgentToPrisma(ctx, created);
     await ensureCrmUser(ctx, created.email, created.name, pwd);
     await writePlatformAudit({
       ctx,
@@ -592,7 +606,10 @@ export async function updateAgent(ctx: ServerContext, operatorId: string, id: st
     assertManager(operator);
     const next = mutateUpdateAgent(state, id, patch);
     const updated = next.agents.find((a) => a.id === id);
-    if (updated) await upsertAgentCredential(updated);
+    if (updated) {
+      await upsertAgentCredential(updated);
+      await syncCrmAgentToPrisma(ctx, updated);
+    }
     await writePlatformAudit({ ctx, module: "crm", action: "agent_updated", entityType: "agent", entityId: id, summary: `CRM agent updated` });
     return next;
   });
