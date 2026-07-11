@@ -90,6 +90,26 @@ export async function deliverSms(
   return { ok: true, provider: "twilio" };
 }
 
+async function fetchWabaPhoneNumbers(
+  baseUrl: string,
+  token: string,
+  wabaId: string,
+): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `${baseUrl}/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) return [];
+    const data = await res.json().catch(() => ({}));
+    return (data?.data ?? [])
+      .map((p: { id?: string }) => p.id)
+      .filter((id: string | undefined): id is string => Boolean(id));
+  } catch {
+    return [];
+  }
+}
+
 /** WhatsApp via Meta Cloud API (WACA) */
 export async function deliverWhatsApp(
   recipient: string,
@@ -165,18 +185,57 @@ export async function deliverWhatsApp(
     };
   }
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  async function trySend(id: string): Promise<Response> {
+    return fetch(`${baseUrl}/${id}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  }
 
+  let res = await trySend(phoneNumberId);
+
+  // If the configured ID is a WhatsApp Business Account ID rather than a Phone Number ID,
+  // Meta returns "Unsupported post request". Try to discover the real phone number ID.
   if (!res.ok) {
     const err = await res.text();
-    console.error("[whatsapp:meta-waca] Send failed:", url, res.status, err);
+    const looksLikeWabaId =
+      err.includes("Unsupported post request") ||
+      err.includes("does not exist") ||
+      err.includes("cannot be loaded");
+
+    if (looksLikeWabaId) {
+      const candidates = await fetchWabaPhoneNumbers(baseUrl, token, phoneNumberId);
+      if (candidates.length > 0) {
+        const retryId = candidates[0];
+        console.warn(
+          `[whatsapp] ${phoneNumberId} is not a phone-number id. Retrying with discovered phone number id:`,
+          retryId,
+        );
+        res = await trySend(retryId);
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const messageId = data?.messages?.[0]?.id ?? data?.id ?? "unknown";
+          return {
+            ok: true,
+            provider: "whatsapp-cloud-api",
+            detail: `Message ID: ${messageId}`,
+          };
+        }
+        const retryErr = await res.text();
+        console.error("[whatsapp:meta-waca] Retry failed:", retryId, res.status, retryErr);
+        return {
+          ok: false,
+          provider: "whatsapp-cloud-api",
+          detail: `Configured ID ${phoneNumberId} is not a phone-number ID. Discovered ${candidates.length} phone number(s), but send failed: ${retryErr.slice(0, 300)}`,
+        };
+      }
+    }
+
+    console.error("[whatsapp:meta-waca] Send failed:", phoneNumberId, res.status, err);
     return { ok: false, provider: "whatsapp-cloud-api", detail: err.slice(0, 300) };
   }
 
