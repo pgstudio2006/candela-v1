@@ -82,6 +82,7 @@ export async function analyzeScribeTranscript(input: {
 
 const IPD_ROUND_SYSTEM = `You are a clinical documentation assistant for an Indian hospital.
 Convert an IPD ward-round conversation or dictated note into structured round fields.
+Use the patient's previous round notes as context so the new note is consistent and reflects progress since the last review.
 Return ONLY valid JSON matching this schema:
 {
   "summary": "1-2 sentence round summary",
@@ -104,10 +105,16 @@ export async function analyzeIpdRoundTranscript(input: {
   transcript: string;
   language: string;
   patientContext?: string;
+  previousRounds?: string[];
 }): Promise<IpdRoundScribeDraft> {
+  const historyText = (input.previousRounds ?? [])
+    .filter(Boolean)
+    .map((note, i) => `Round ${i + 1}:\n${note}`)
+    .join("\n\n---\n\n");
   const user = [
     `Language: ${input.language}`,
     input.patientContext ? `Patient context: ${input.patientContext}` : "",
+    historyText ? `Previous round notes for context:\n\n${historyText}` : "",
     "Transcript:",
     input.transcript.trim(),
   ]

@@ -1,0 +1,584 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { IpdRoundAiScribe } from "@/components/doctor/ipd-round-ai-scribe";
+import { PublishedSchemaForm } from "@/components/candela/published-schema-form";
+import { IpdDischargeSummaryPanel } from "@/components/ipd-discharge-summary";
+import { useToast } from "@/components/ui/toast-provider";
+import { saveIpdTaskAction, updateIpdTaskStatusAction } from "@/app/actions/ipd-actions";
+import type { IpdPatient } from "@/design-system/doctor-data";
+import type { Patient } from "@/design-system/frontdesk-data";
+import type { IpdRoundRecord } from "@/server/doctor";
+import type { FormSchema } from "@/design-system/frontdesk-schemas";
+import {
+  Activity,
+  Calendar,
+  Clock,
+  FileText,
+  FlaskConical,
+  LogOut,
+  Pill,
+  Stethoscope,
+  ClipboardList,
+  User,
+} from "lucide-react";
+
+export type IpdRoundWorkspaceProps = {
+  admission: IpdPatient;
+  patient?: Patient;
+  roundHistory: IpdRoundRecord[];
+  schema: FormSchema;
+  onSaveRound: (data: Record<string, string | number | boolean>) => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+};
+
+type VitalsSnapshot = { pulse?: string; bp?: string; spo2?: string; temp?: string };
+
+function parseVitalsFromText(text: string): VitalsSnapshot {
+  const normalized = text.replace(/\s+/g, " ");
+  const bp = normalized.match(/(?:BP|blood pressure)\s*[:=-]?\s*(\d{2,3}\/\d{2,3})/i)?.[1];
+  const pulse = normalized.match(/(?:pulse|P)\s*[:=-]?\s*(\d{2,3})(?:\s*bpm)?/i)?.[1];
+  const spo2 = normalized.match(/(?:spo2|SpO2|sao2)\s*[:=-]?\s*(\d{2,3})(?:\s*%)?/i)?.[1];
+  const temp = normalized.match(/(?:temp|temperature|T)\s*[:=-]?\s*([\d.]+)(?:\s*[FfCc])?/i)?.[1];
+  return { pulse, bp, spo2, temp: temp ? `${temp}°F` : undefined };
+}
+
+function latestVitals(rounds: IpdRoundRecord[]): VitalsSnapshot {
+  for (const round of rounds) {
+    const v = parseVitalsFromText(round.content);
+    if (v.pulse || v.bp || v.spo2 || v.temp) return v;
+  }
+  return {};
+}
+
+function formatDateTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
+}
+
+function daysSinceAdmission(admittedAt: string) {
+  try {
+    const start = new Date(admittedAt).getTime();
+    const now = Date.now();
+    return Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
+  } catch {
+    return 1;
+  }
+}
+
+function latestPlan(rounds: IpdRoundRecord[]): string {
+  for (const round of rounds) {
+    const fromData = typeof round.data?.plan === "string" ? (round.data.plan as string) : "";
+    if (fromData) return fromData;
+    const match = round.content.match(/P:\s*(.+?)(?:\n|$)/i);
+    if (match?.[1]) return match[1].trim();
+  }
+  return "Not documented";
+}
+
+function latestProgress(rounds: IpdRoundRecord[]): string {
+  for (const round of rounds) {
+    const fromData = typeof round.data?.progress === "string" ? (round.data.progress as string) : "";
+    if (fromData) return fromData;
+  }
+  return "";
+}
+
+function extractMedicines(rounds: IpdRoundRecord[]): string[] {
+  const out = new Set<string>();
+  for (const round of rounds) {
+    const text = typeof round.data?.medicines === "string" ? (round.data.medicines as string) : "";
+    if (text) {
+      text.split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) out.add(trimmed);
+      });
+    }
+    const contentMatch = round.content.match(/Medicines:\s*([\s\S]*?)(?:\n\n|$)/i);
+    if (contentMatch?.[1]) {
+      contentMatch[1].split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) out.add(trimmed);
+      });
+    }
+  }
+  return [...out];
+}
+
+function extractLabs(rounds: IpdRoundRecord[]): string[] {
+  const out = new Set<string>();
+  for (const round of rounds) {
+    const text = typeof round.data?.labReports === "string" ? (round.data.labReports as string) : "";
+    if (text) {
+      text.split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) out.add(trimmed);
+      });
+    }
+    const contentMatch = round.content.match(/Lab reports:\s*([\s\S]*?)(?:\n\n|$)/i);
+    if (contentMatch?.[1]) {
+      contentMatch[1].split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) out.add(trimmed);
+      });
+    }
+  }
+  return [...out];
+}
+
+function extractImaging(rounds: IpdRoundRecord[]): string[] {
+  const out = new Set<string>();
+  for (const round of rounds) {
+    const text = typeof round.data?.radiologyReports === "string" ? (round.data.radiologyReports as string) : "";
+    if (text) {
+      text.split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) out.add(trimmed);
+      });
+    }
+    const contentMatch = round.content.match(/Radiology reports:\s*([\s\S]*?)(?:\n\n|$)/i);
+    if (contentMatch?.[1]) {
+      contentMatch[1].split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) out.add(trimmed);
+      });
+    }
+  }
+  return [...out];
+}
+
+function extractProcedures(rounds: IpdRoundRecord[]): string[] {
+  const out = new Set<string>();
+  for (const round of rounds) {
+    const text = typeof round.data?.nextProcedure === "string" ? (round.data.nextProcedure as string) : "";
+    if (text) out.add(text);
+    const contentMatch = round.content.match(/Next procedure:\s*(.+?)(?:\n|$)/i);
+    if (contentMatch?.[1]) out.add(contentMatch[1].trim());
+  }
+  return [...out];
+}
+
+function extractTasks(rounds: IpdRoundRecord[]): Array<{
+  id: string;
+  text: string;
+  assignee: string;
+  status: "pending" | "completed";
+  at: string;
+}> {
+  return rounds
+    .filter((r) => r.kind === "task")
+    .map((r) => ({
+      id: r.id,
+      text: r.content,
+      assignee: typeof r.data?.assignee === "string" ? (r.data.assignee as string) : "",
+      status: (r.data?.status === "completed" ? "completed" : "pending") as "pending" | "completed",
+      at: r.at,
+    }))
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+}
+
+function VitalCard({
+  label,
+  value,
+  unit,
+  icon,
+}: {
+  label: string;
+  value?: string | number;
+  unit?: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-[var(--attio-border-subtle)] bg-white p-4">
+      <div className="flex size-10 items-center justify-center rounded-lg bg-[var(--attio-surface)] text-[var(--attio-accent)]">{icon}</div>
+      <div>
+        <p className="text-[11px] uppercase text-[var(--attio-text-tertiary)]">{label}</p>
+        <p className="text-[18px] font-semibold leading-tight text-[var(--attio-text)]">
+          {value ?? "—"}
+          {unit && value ? <span className="ml-1 text-[12px] font-normal text-[var(--attio-text-tertiary)]">{unit}</span> : null}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function IpdRoundWorkspace({ admission, patient, roundHistory, schema, onSaveRound, onRefresh }: IpdRoundWorkspaceProps) {
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("summary");
+  const [roundValues, setRoundValues] = useState<Record<string, string | number | boolean>>({});
+  const [roundFormKey, setRoundFormKey] = useState(0);
+
+  const [taskText, setTaskText] = useState("");
+  const [taskAssignee, setTaskAssignee] = useState("");
+  const [taskSaving, setTaskSaving] = useState(false);
+
+  const vitals = useMemo(() => latestVitals(roundHistory), [roundHistory]);
+  const doctorRounds = useMemo(
+    () => roundHistory.filter((r) => r.kind === "doctor_round").sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
+    [roundHistory],
+  );
+  const nurseRounds = useMemo(
+    () => roundHistory.filter((r) => r.actorRole === "nurse" || r.kind === "nurse_round").sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
+    [roundHistory],
+  );
+  const medicines = useMemo(() => extractMedicines(roundHistory), [roundHistory]);
+  const labs = useMemo(() => extractLabs(roundHistory), [roundHistory]);
+  const imaging = useMemo(() => extractImaging(roundHistory), [roundHistory]);
+  const procedures = useMemo(() => extractProcedures(roundHistory), [roundHistory]);
+  const tasks = useMemo(() => extractTasks(roundHistory), [roundHistory]);
+  const statusVariant = admission.status === "discharge_planned" ? "warning" : "info";
+
+  const handleSaveRound = async (data: Record<string, string | number | boolean>) => {
+    await onSaveRound(data);
+    setRoundValues({});
+    setRoundFormKey((k) => k + 1);
+  };
+
+  const addTask = async () => {
+    if (!taskText.trim()) return toast("Enter a task description", "error");
+    setTaskSaving(true);
+    const res = await saveIpdTaskAction(admission.id, { text: taskText.trim(), assignee: taskAssignee.trim() || undefined });
+    if (res.ok) {
+      toast("Task assigned", "success");
+      setTaskText("");
+      setTaskAssignee("");
+      await onRefresh();
+    } else {
+      toast((res as { error?: string }).error ?? "Failed to save task", "error");
+    }
+    setTaskSaving(false);
+  };
+
+  const toggleTask = async (taskId: string, current: "pending" | "completed") => {
+    const next = current === "pending" ? "completed" : "pending";
+    const res = await updateIpdTaskStatusAction(taskId, next);
+    if (res.ok) {
+      toast(next === "completed" ? "Task completed" : "Task reopened", "success");
+      await onRefresh();
+    } else {
+      toast((res as { error?: string }).error ?? "Failed to update task", "error");
+    }
+  };
+
+  const patientName = patient?.name ?? admission.patientId;
+  const uhid = patient?.uhid;
+  const ageGender = patient ? `${patient.age}y · ${patient.gender}` : "";
+  const wardBed = `${admission.ward} · Bed ${admission.bed}`;
+  const statusLabel = admission.status.replace(/_/g, " ");
+
+  const TABS = [
+    { id: "summary", label: "Summary", icon: <User className="size-3.5" /> },
+    { id: "progress", label: "Progress Notes", icon: <FileText className="size-3.5" /> },
+    { id: "orders", label: "Orders", icon: <Stethoscope className="size-3.5" /> },
+    { id: "medication", label: "Medication Chart", icon: <Pill className="size-3.5" /> },
+    { id: "labs", label: "Labs & Reports", icon: <FlaskConical className="size-3.5" /> },
+    { id: "tasks", label: "Tasks", icon: <ClipboardList className="size-3.5" /> },
+    { id: "discharge", label: "Discharge", icon: <LogOut className="size-3.5" /> },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="rounded-xl border border-[var(--attio-border-subtle)] bg-white p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[18px] font-semibold text-[var(--attio-text)]">{patientName}</h1>
+              <StatusBadge label={statusLabel} variant={statusVariant} />
+            </div>
+            <p className="mt-1 text-[13px] text-[var(--attio-text-secondary)]">
+              {wardBed} · Day {daysSinceAdmission(admission.admittedAt)} · {ageGender}
+              {uhid ? ` · UHID: ${uhid}` : ""}
+            </p>
+            {admission.lastRoundAt && (
+              <p className="mt-1 flex items-center gap-1 text-[11px] text-[var(--attio-text-tertiary)]">
+                <Clock className="size-3" />
+                Last doctor round: {formatDateTime(admission.lastRoundAt)}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="flex min-w-[160px] flex-col rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] px-3 py-2">
+              <span className="text-[10px] uppercase text-[var(--attio-text-tertiary)]">Admission diagnosis</span>
+              <span className="text-[13px] font-medium text-[var(--attio-text)]">{admission.diagnosis}</span>
+            </div>
+            <div className="flex min-w-[120px] flex-col rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] px-3 py-2">
+              <span className="text-[10px] uppercase text-[var(--attio-text-tertiary)]">Admitted</span>
+              <span className="text-[13px] font-medium text-[var(--attio-text)]">{formatDateTime(admission.admittedAt)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <VitalCard label="Pulse" value={vitals.pulse} unit="bpm" icon={<Activity className="size-5" />} />
+          <VitalCard label="BP" value={vitals.bp} unit="mmHg" icon={<Stethoscope className="size-5" />} />
+          <VitalCard label="SpO₂" value={vitals.spo2} unit="%" icon={<Activity className="size-5" />} />
+          <VitalCard label="Temp" value={vitals.temp} icon={<Activity className="size-5" />} />
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList variant="line" className="w-full justify-start">
+          {TABS.map((tab) => (
+            <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5 text-[13px]">
+              {tab.icon}
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <TabsContent value="summary" className="mt-4">
+          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+            <Panel title="Patient summary">
+              <div className="divide-y divide-[var(--attio-border-subtle)]">
+                <SummaryRow label="Diagnosis" value={admission.diagnosis} />
+                <SummaryRow label="Admission date" value={formatDateTime(admission.admittedAt)} />
+                <SummaryRow label="Current treatment plan" value={latestPlan(roundHistory)} />
+                <SummaryRow label="Allergies" value="None documented" />
+                <SummaryRow label="Comorbidities" value="None documented" />
+                <SummaryRow
+                  label="Latest vitals snapshot"
+                  value={
+                    vitals.pulse || vitals.bp || vitals.spo2 || vitals.temp
+                      ? [vitals.bp, vitals.pulse, vitals.spo2, vitals.temp].filter(Boolean).join(" · ")
+                      : "Not recorded"
+                  }
+                />
+              </div>
+            </Panel>
+
+            <Panel title="Vitals and nursing data">
+              <div className="space-y-3">
+                {nurseRounds.length === 0 && doctorRounds.length === 0 && (
+                  <p className="text-[13px] text-[var(--attio-text-tertiary)]">No vitals or nursing entries yet.</p>
+                )}
+                {(nurseRounds.length ? nurseRounds : doctorRounds).slice(0, 5).map((round) => {
+                  const v = parseVitalsFromText(round.content);
+                  return (
+                    <div key={round.id} className="rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] p-3">
+                      <div className="mb-1 flex items-center justify-between text-[11px]">
+                        <span className="font-medium text-[var(--attio-text)]">
+                          {round.actorName} · {round.actorRole}
+                        </span>
+                        <span className="text-[var(--attio-text-tertiary)]">{formatDateTime(round.at)}</span>
+                      </div>
+                      <p className="text-[12px] text-[var(--attio-text-secondary)]">
+                        {(v.pulse || v.bp || v.spo2 || v.temp) ? (
+                          <>
+                            BP {v.bp ?? "—"} · Pulse {v.pulse ?? "—"} · SpO₂ {v.spo2 ?? "—"}% · Temp {v.temp ?? "—"}
+                          </>
+                        ) : (
+                          "No structured vitals"
+                        )}
+                      </p>
+                      <pre className="mt-2 whitespace-pre-wrap font-sans text-[11px] text-[var(--attio-text-secondary)]">{round.content}</pre>
+                    </div>
+                  );
+                })}
+              </div>
+            </Panel>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="progress" className="mt-4 space-y-4">
+          <Panel title="AI Scribe — daily progress note">
+            <IpdRoundAiScribe
+              patientContext={`${patientName} · ${wardBed} · ${admission.diagnosis}`}
+              previousRounds={doctorRounds.map((r) => ({ content: r.content, at: r.at, actorName: r.actorName }))}
+              onDraftAccepted={(draft) => {
+                setRoundValues({ ...draft });
+                setRoundFormKey((k) => k + 1);
+              }}
+            />
+          </Panel>
+
+          <Panel title="Add daily progress note (SOAP)">
+            <PublishedSchemaForm
+              key={`ipd-${admission.id}-${roundFormKey}`}
+              schema={schema}
+              initialValues={roundValues}
+              submitLabel="Save SOAP note"
+              onValuesChange={setRoundValues}
+              onSubmit={handleSaveRound}
+            />
+          </Panel>
+
+          <Panel title="Progress notes history">
+            {doctorRounds.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No progress notes recorded yet.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--attio-border-subtle)]">
+                {doctorRounds.map((round) => (
+                  <li key={round.id} className="py-4">
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className="font-medium text-[var(--attio-text)]">{round.actorName}</span>
+                      <span className="rounded-full border border-[var(--attio-border-subtle)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--attio-text-tertiary)]">
+                        {round.actorRole}
+                      </span>
+                      <span className="text-[var(--attio-text-tertiary)]">{formatDateTime(round.at)}</span>
+                    </div>
+                    <pre className="whitespace-pre-wrap font-sans text-[12px] text-[var(--attio-text-secondary)]">{round.content}</pre>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="orders" className="mt-4 space-y-4">
+          <Panel title="Order management">
+            <p className="mb-3 text-[12px] text-[var(--attio-text-secondary)]">
+              Add medicines, labs, imaging and procedures in the Progress Notes tab using the SOAP fields, medicines, lab reports, radiology reports and next-procedure fields. They will appear automatically in the Medication Chart, Labs & Reports and below.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <OrderSection title="Current medication orders" items={medicines} icon={<Pill className="size-4" />} />
+              <OrderSection title="Lab orders" items={labs} icon={<FlaskConical className="size-4" />} />
+              <OrderSection title="Imaging orders" items={imaging} icon={<Stethoscope className="size-4" />} />
+              <OrderSection title="Procedure & diet instructions" items={procedures} icon={<ClipboardList className="size-4" />} />
+            </div>
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="medication" className="mt-4">
+          <Panel title="Active medications">
+            {medicines.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No medication chart entries yet.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--attio-border-subtle)]">
+                {medicines.map((med, i) => (
+                  <li key={i} className="flex items-start gap-3 py-3 text-[13px]">
+                    <Pill className="mt-0.5 size-4 text-[var(--attio-accent)]" />
+                    <span className="text-[var(--attio-text)]">{med}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="labs" className="mt-4 space-y-4">
+          <Panel title="Lab results">
+            {labs.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No lab orders yet.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--attio-border-subtle)]">
+                {labs.map((lab, i) => (
+                  <li key={i} className="flex items-start gap-3 py-3 text-[13px]">
+                    <FlaskConical className="mt-0.5 size-4 text-[var(--attio-accent)]" />
+                    <span className="text-[var(--attio-text)]">{lab}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+          <Panel title="Imaging reports">
+            {imaging.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No imaging reports yet.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--attio-border-subtle)]">
+                {imaging.map((img, i) => (
+                  <li key={i} className="flex items-start gap-3 py-3 text-[13px]">
+                    <Stethoscope className="mt-0.5 size-4 text-[var(--attio-accent)]" />
+                    <span className="text-[var(--attio-text)]">{img}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="tasks" className="mt-4 space-y-4">
+          <Panel title="Task and follow-up">
+            <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px]">
+              <div className="space-y-1">
+                <label className="text-[12px] text-[var(--attio-text-tertiary)]">Task for nursing</label>
+                <Input value={taskText} onChange={(e) => setTaskText(e.target.value)} placeholder="e.g. Repeat ECG at 2 PM" className="h-9 text-[13px]" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[12px] text-[var(--attio-text-tertiary)]">Assignee</label>
+                <Input value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)} placeholder="Nurse name" className="h-9 text-[13px]" />
+              </div>
+              <div className="flex items-end">
+                <AttioButton onClick={() => void addTask()} disabled={taskSaving} className="w-full">
+                  Assign task
+                </AttioButton>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="Current tasks">
+            {tasks.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No tasks assigned yet.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--attio-border-subtle)]">
+                {tasks.map((task) => (
+                  <li key={task.id} className="flex items-start justify-between gap-3 py-3">
+                    <div>
+                      <p className="text-[13px] text-[var(--attio-text)]">{task.text}</p>
+                      <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                        {task.assignee ? `${task.assignee} · ` : ""}
+                        {formatDateTime(task.at)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StatusBadge label={task.status} variant={task.status === "completed" ? "success" : "warning"} />
+                      <AttioButton
+                        variant="secondary"
+                        className="h-7 text-[11px]"
+                        onClick={() => void toggleTask(task.id, task.status)}
+                      >
+                        {task.status === "pending" ? "Mark completed" : "Reopen"}
+                      </AttioButton>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="discharge" className="mt-4">
+          <IpdDischargeSummaryPanel admissionId={admission.id} onSaved={() => onRefresh()} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 py-3 sm:flex-row sm:gap-4">
+      <span className="min-w-[180px] text-[11px] uppercase text-[var(--attio-text-tertiary)]">{label}</span>
+      <span className="text-[13px] font-medium text-[var(--attio-text)]">{value ?? "—"}</span>
+    </div>
+  );
+}
+
+function OrderSection({ title, items, icon }: { title: string; items: string[]; icon: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] p-3">
+      <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-[var(--attio-text)]">
+        {icon}
+        {title}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-[12px] text-[var(--attio-text-tertiary)]">None recorded</p>
+      ) : (
+        <ul className="space-y-1">
+          {items.map((item, i) => (
+            <li key={i} className="text-[12px] text-[var(--attio-text-secondary)]">
+              · {item}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

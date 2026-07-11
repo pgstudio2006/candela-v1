@@ -22,6 +22,8 @@ import {
   getIpdWards,
   markIpdReadyForDischarge,
   removeIpdCartItem,
+  saveIpdTask,
+  updateIpdTaskStatus,
   saveDischargeSummary,
   saveDeathSummary,
   saveIpdRoundConfig,
@@ -138,6 +140,20 @@ export async function generateDischargeSummaryAction(id: string): Promise<Action
   return runAction(async () => {
     const ctx = await requireModule("doctor");
     return generateDischargeSummary(ctx, id);
+  });
+}
+
+export async function saveIpdTaskAction(ipdId: string, input: { text: string; assignee?: string }): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("doctor", "nurse", "admin");
+    return saveIpdTask(ctx, ipdId, input);
+  });
+}
+
+export async function updateIpdTaskStatusAction(taskId: string, status: "pending" | "completed"): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("doctor", "nurse", "admin");
+    return updateIpdTaskStatus(ctx, taskId, status);
   });
 }
 

@@ -9,13 +9,16 @@ import { cn } from "@/lib/utils";
 import { Loader2, Mic, Sparkles, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 
+type RoundHistoryItem = { content: string; at: string; actorName?: string };
+
 type IpdRoundAiScribeProps = {
   language?: string;
   patientContext?: string;
+  previousRounds?: RoundHistoryItem[];
   onDraftAccepted: (draft: IpdRoundScribeDraft) => void;
 };
 
-export function IpdRoundAiScribe({ language = "en", patientContext, onDraftAccepted }: IpdRoundAiScribeProps) {
+export function IpdRoundAiScribe({ language = "en", patientContext, previousRounds, onDraftAccepted }: IpdRoundAiScribeProps) {
   const [lang, setLang] = useState(language);
   const [transcript, setTranscript] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -45,6 +48,10 @@ export function IpdRoundAiScribe({ language = "en", patientContext, onDraftAccep
           language: lang,
           patientContext,
           mode: "ipd-round",
+          previousRounds: (previousRounds ?? [])
+            .slice()
+            .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+            .map((r) => `[${new Date(r.at).toLocaleString("en-IN")}${r.actorName ? ` · ${r.actorName}` : ""}]\n${r.content}`),
         }),
       });
       const data = (await res.json()) as { draft?: IpdRoundScribeDraft; error?: string };

@@ -1,15 +1,12 @@
 "use client";
 
 import { getIpdRoundHistoryAction } from "@/app/actions/doctor-actions";
-import { PublishedSchemaForm } from "@/components/candela/published-schema-form";
 import { useDoctorStore } from "@/components/doctor/doctor-store";
 import { useDoctorFormSchema } from "@/components/doctor/use-doctor-form-schema";
-import { IpdRoundAiScribe } from "@/components/doctor/ipd-round-ai-scribe";
+import { IpdRoundWorkspace } from "@/components/doctor/ipd-round-workspace";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { Panel, StatusBadge } from "@/components/frontdesk/ui";
-import { IpdDischargeSummaryPanel } from "@/components/ipd-discharge-summary";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
-import type { IpdRoundScribeDraft } from "@/lib/ai/scribe-types";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/components/candela/session-provider";
 import Link from "next/link";
@@ -27,8 +24,6 @@ export default function DoctorIpdPage() {
   const schema = useDoctorFormSchema("doctor-ipd-round");
   const [activeIpd, setActiveIpd] = useState<string | null>(null);
   const [roundHistory, setRoundHistory] = useState<RoundRecord[]>([]);
-  const [roundValues, setRoundValues] = useState<Record<string, string | number | boolean>>({});
-  const [roundFormKey, setRoundFormKey] = useState(0);
 
   const myPatients = ipdPatients.filter(
     (ip) => ip.attendingDoctorId === activeDoctorId && !["discharged", "deceased"].includes(ip.status),
@@ -44,8 +39,6 @@ export default function DoctorIpdPage() {
   useEffect(() => {
     if (activeIpd) void loadHistory(activeIpd);
     else setRoundHistory([]);
-    setRoundValues({});
-    setRoundFormKey((k) => k + 1);
   }, [activeIpd, loadHistory]);
 
   return (
@@ -100,67 +93,20 @@ export default function DoctorIpdPage() {
         </Panel>
 
         {selected ? (
-          <div className="space-y-4">
-            <Panel title={`Round · ${getPatient(selected.patientId)?.name}`}>
-              <p className="mb-4 text-[13px] text-[var(--attio-text-secondary)]">
-                {selected.diagnosis} · Admitted {selected.admittedAt}
-              </p>
-              {selected.lastRoundNote && (
-                <div className="mb-4 rounded-lg bg-[var(--attio-surface)] p-3 text-[12px] text-[var(--attio-text-secondary)]">
-                  <p className="mb-1 font-medium text-[var(--attio-text-tertiary)]">Last round ({selected.lastRoundAt})</p>
-                  <pre className="whitespace-pre-wrap font-sans">{selected.lastRoundNote}</pre>
-                </div>
-              )}
-              <IpdRoundAiScribe
-                patientContext={`${getPatient(selected.patientId)?.name ?? selected.patientId} · ${selected.diagnosis}`}
-                onDraftAccepted={(draft: IpdRoundScribeDraft) => {
-                  setRoundValues({ ...draft });
-                  setRoundFormKey((k) => k + 1);
-                }}
-              />
-              <PublishedSchemaForm
-                key={`ipd-${selected.id}-${roundFormKey}`}
-                schema={schema}
-                initialValues={roundValues}
-                submitLabel="Save round note"
-                onValuesChange={setRoundValues}
-                onSubmit={(data) => {
-                  saveIpdRound(selected.id, data);
-                  setRoundValues({});
-                  setRoundFormKey((k) => k + 1);
-                  void loadHistory(selected.id);
-                }}
-              />
-            </Panel>
-
-            <IpdDischargeSummaryPanel admissionId={selected.id} onSaved={() => refresh({ silent: true })} />
-
-            {roundHistory.length > 0 && (
-              <Panel title="Round log">
-                <ul className="divide-y divide-[var(--attio-border-subtle)]">
-                  {roundHistory.map((round) => (
-                    <li key={round.id} className="py-3">
-                      <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
-                        <span className="font-medium text-[var(--attio-text)]">{round.actorName}</span>
-                        <span className="rounded-full border border-[var(--attio-border-subtle)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--attio-text-tertiary)]">
-                          {round.actorRole}
-                        </span>
-                        <span className="rounded-full bg-[var(--attio-surface)] px-1.5 py-0.5 text-[10px] text-[var(--attio-text-secondary)]">
-                          {round.kind.replace(/_/g, " ")}
-                        </span>
-                        <span className="text-[var(--attio-text-tertiary)]">
-                          {new Date(round.at).toLocaleString("en-IN")}
-                        </span>
-                      </div>
-                      <pre className="whitespace-pre-wrap font-sans text-[12px] text-[var(--attio-text-secondary)]">
-                        {round.content}
-                      </pre>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            )}
-          </div>
+          <IpdRoundWorkspace
+            admission={selected}
+            patient={getPatient(selected.patientId)}
+            roundHistory={roundHistory}
+            schema={schema}
+            onSaveRound={(data) => {
+              saveIpdRound(selected.id, data);
+              void loadHistory(selected.id);
+            }}
+            onRefresh={() => {
+              void loadHistory(selected.id);
+              void refresh({ silent: true });
+            }}
+          />
         ) : (
           <Panel title="Select a patient">
             <p className="py-12 text-center text-[13px] text-[var(--attio-text-tertiary)]">

@@ -10,6 +10,7 @@ export async function POST(req: Request) {
     transcript?: string;
     language?: string;
     patientContext?: string;
+    previousRounds?: string[];
     mode?: "opd" | "ipd-round";
   };
 
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
         transcript,
         language: body.language ?? "en",
         patientContext: body.patientContext,
+        previousRounds: body.previousRounds,
       });
       return NextResponse.json({ draft });
     }

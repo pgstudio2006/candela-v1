@@ -22,7 +22,7 @@ import { createId } from "@/lib/id";
 import { patientDisplayName } from "@/lib/frontdesk-workflow";
 import { resolveDoctorName } from "@/lib/clinical-roster";
 import { backfillBranchScope } from "@/server/branch-scope";
-import { loadClinicalRoster } from "@/server/clinical/roster";
+import { loadClinicalRoster, resolveDoctorProfile } from "@/server/clinical/roster";
 import { createVisitInvoice } from "@/server/invoicing";
 import { computeGstInvoice, parseBranchGstSettings } from "@/lib/gst-invoicing";
 import {
@@ -1323,4 +1323,47 @@ export async function getIpdRoundLog(
         ? (row.payload as Record<string, string | number | boolean>)
         : null,
   }));
+}
+
+export async function saveIpdTask(
+  ctx: ServerContext,
+  ipdId: string,
+  input: { text: string; assignee?: string },
+): Promise<{ id: string }> {
+  const profile = await resolveDoctorProfile(ctx);
+  const scope = branchScope(ctx);
+  const ipd = await prisma.ipdAdmission.findFirst({ where: { id: ipdId, tenantId: scope.tenantId, branchId: scope.branchId } });
+  if (!ipd) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  const log = await writeIpdRoundLog(ctx, {
+    ipdAdmissionId: ipdId,
+    visitId: ipd.visitId ?? undefined,
+    kind: "task",
+    actorId: profile.doctorId,
+    actorName: profile.name,
+    actorRole: "doctor",
+    content: input.text,
+    data: { assignee: input.assignee ?? "", status: "pending" },
+  });
+  return { id: log.id };
+}
+
+export async function updateIpdTaskStatus(
+  ctx: ServerContext,
+  taskId: string,
+  status: "pending" | "completed",
+): Promise<{ id: string }> {
+  const scope = branchScope(ctx);
+  const existing = await prisma.ipdRoundLog.findFirst({
+    where: { id: taskId, tenantId: scope.tenantId, branchId: scope.branchId, kind: "task" },
+  });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "Task not found.");
+  const payload =
+    existing.payload && typeof existing.payload === "object" && !Array.isArray(existing.payload)
+      ? (existing.payload as Record<string, string | number | boolean>)
+      : {};
+  await prisma.ipdRoundLog.update({
+    where: { id: taskId },
+    data: { payload: { ...payload, status } as unknown as object },
+  });
+  return { id: taskId };
 }
