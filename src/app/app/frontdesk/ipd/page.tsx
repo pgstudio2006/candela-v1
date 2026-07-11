@@ -8,13 +8,13 @@ import {
   updateIpdAdmissionAction,
 } from "@/app/actions/ipd-actions";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
-import { AttioButton, MetricStrip, Panel } from "@/components/frontdesk/ui";
+import { AttioButton, MetricStrip, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { PatientSearchField } from "@/components/frontdesk/patient-search-field";
 import { IpdServiceCartPanel } from "@/components/frontdesk/ipd-service-cart-panel";
 import { useToast } from "@/components/ui/toast-provider";
 import type { IpdAdmissionDetail, IpdAdmissionStatus, IpdBillingMode, IpdPatientType, IpdSnapshot } from "@/design-system/ipd-data";
 import { cn } from "@/lib/utils";
-import { ArrowRightLeft, BedDouble, Calendar, Loader2, Pencil, Plus, Stethoscope, User } from "lucide-react";
+import { ArrowRightLeft, BedDouble, Calendar, Loader2, Pencil, Plus, Printer, Stethoscope, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -149,6 +149,56 @@ export default function FrontdeskIpdPage() {
     }
   };
 
+  const handleFinalDischarge = async () => {
+    if (!selectedAdmission) return;
+    const result = await updateIpdAdmissionAction(selectedAdmission.id, { status: "discharged" });
+    if (result.ok) {
+      toast("Patient discharged and bed freed", "success");
+      const res = await getIpdAdmissionAction(selectedAdmission.id);
+      if (res.ok) setSelectedAdmission(res.data);
+      setRefreshKey((k) => k + 1);
+    } else {
+      toast((result as any).error ?? "Discharge failed", "error");
+    }
+  };
+
+  const printDischargeSummary = () => {
+    if (!selectedAdmission?.dischargeSummary) return;
+    const summary = selectedAdmission.dischargeSummary as Record<string, string>;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return toast("Could not open print window", "error");
+    printWindow.document.write(`
+      <html>
+        <head><title>Discharge Summary - ${selectedAdmission.patientName}</title>
+          <style>body{font-family:system-ui,sans-serif;padding:24px;color:#111;}h1{font-size:18px;margin:0 0 8px;}.meta{color:#555;font-size:12px;margin-bottom:16px;}.section{margin-bottom:12px;}.label{font-weight:600;font-size:12px;color:#444;}.value{font-size:12px;white-space:pre-wrap;}</style>
+        </head>
+        <body>
+          <h1>Discharge Summary</h1>
+          <div class="meta">${selectedAdmission.patientName} · ${selectedAdmission.uhid ?? ""} · ${selectedAdmission.ward} Bed ${selectedAdmission.bed}</div>
+          <div class="section"><div class="label">Admission date</div><div class="value">${summary.admissionDate ?? ""}</div></div>
+          <div class="section"><div class="label">Discharge date</div><div class="value">${summary.dischargeDate ?? ""}</div></div>
+          <div class="section"><div class="label">Diagnosis</div><div class="value">${summary.diagnosis ?? ""}</div></div>
+          <div class="section"><div class="label">Procedures</div><div class="value">${summary.procedures ?? ""}</div></div>
+          <div class="section"><div class="label">Medications</div><div class="value">${summary.medications ?? ""}</div></div>
+          <div class="section"><div class="label">Follow up</div><div class="value">${summary.followUp ?? ""}</div></div>
+          <div class="section"><div class="label">Notes</div><div class="value">${summary.notes ?? ""}</div></div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
+  const paymentClear =
+    selectedAdmission &&
+    (selectedAdmission.balanceDue ?? 0) <= 0 &&
+    (selectedAdmission.amountPaid ?? 0) >= (selectedAdmission.billAmount ?? 0) &&
+    selectedAdmission.cart.length === 0;
+
   const selectedWard = snapshot?.wards.find((w) => w.wardId === admitWardId);
   const transferWard = snapshot?.wards.find((w) => w.wardId === transferWardId);
 
@@ -280,6 +330,41 @@ export default function FrontdeskIpdPage() {
                             Profile
                           </AttioButton>
                         </div>
+
+                        {selectedAdmission.status === "discharged" && (
+                          <StatusBadge label="Discharged" variant="success" />
+                        )}
+
+                        {Boolean(selectedAdmission.dischargeSummary) && selectedAdmission.status !== "discharged" && (
+                          <AttioButton variant="secondary" className="gap-1.5" onClick={printDischargeSummary}>
+                            <Printer className="size-3.5" />
+                            Print discharge summary
+                          </AttioButton>
+                        )}
+
+                        {selectedAdmission.status === "doctor_ready" && (
+                          <div className="space-y-2">
+                            <AttioButton
+                              variant="primary"
+                              className="w-full"
+                              onClick={handleFinalDischarge}
+                              disabled={!paymentClear}
+                            >
+                              Final discharge & free bed
+                            </AttioButton>
+                            {!paymentClear && (
+                              <p className="text-[11px] text-amber-600">
+                                Final discharge is blocked until payment is cleared and the service cart is empty.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {selectedAdmission.status !== "doctor_ready" && selectedAdmission.status !== "discharged" && (
+                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                            Waiting for doctor to fill the discharge summary and mark ready for discharge.
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -505,7 +590,6 @@ export default function FrontdeskIpdPage() {
                     >
                       <option value="admitted">Admitted</option>
                       <option value="discharge_planned">Discharge planned</option>
-                      <option value="discharged">Discharged</option>
                     </select>
                   </label>
                   <label className="block text-[12px]">

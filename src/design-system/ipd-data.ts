@@ -26,7 +26,7 @@ export type IpdBillingMode = "prepaid" | "postpaid";
 
 export type IpdPatientType = "general" | "corporate" | "insurance" | "vip";
 
-export type IpdAdmissionStatus = "admitted" | "discharge_planned" | "discharged";
+export type IpdAdmissionStatus = "admitted" | "discharge_planned" | "doctor_ready" | "discharged" | "deceased";
 
 export type IpdBedSummary = {
   wardId: string;
@@ -124,4 +124,9 @@ export type IpdAdmissionDetail = {
   lastRoundNote?: string | null;
   status: IpdAdmissionStatus;
   cart: IpdCartItem[];
+  balanceDue?: number | null;
+  amountPaid?: number | null;
+  billAmount?: number | null;
+  dischargeSummary?: unknown;
+  deathSummary?: unknown;
 };

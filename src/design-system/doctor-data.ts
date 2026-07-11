@@ -1,3 +1,5 @@
+import type { IpdAdmissionStatus } from "@/design-system/ipd-data";
+
 /** Doctor module — seed data & types */
 
 export type TreatmentMode = "opd" | "ipd" | "daycare";
@@ -88,7 +90,7 @@ export type IpdPatient = {
   attendingDoctorId: string;
   lastRoundAt?: string;
   lastRoundNote?: string;
-  status: "admitted" | "discharge_planned" | "discharged";
+  status: IpdAdmissionStatus;
 };
 
 export type DoctorTemplate = {

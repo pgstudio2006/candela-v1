@@ -243,6 +243,10 @@ export async function getIpdAdmission(ctx: ServerContext, id: string) {
   });
   if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
 
+  const visit = admission.visitId
+    ? await prisma.opdVisit.findUnique({ where: { id: admission.visitId }, select: { balanceDue: true, amountPaid: true, billAmount: true } })
+    : null;
+
   const detail: IpdAdmissionDetail = {
     id: admission.id,
     visitId: admission.visitId ?? "",
@@ -266,6 +270,11 @@ export async function getIpdAdmission(ctx: ServerContext, id: string) {
     lastRoundNote: admission.lastRoundNote ?? null,
     status: admission.status as IpdAdmissionStatus,
     cart: (admission.cart as unknown as IpdCartItem[] | null) ?? [],
+    balanceDue: visit?.balanceDue ?? null,
+    amountPaid: visit?.amountPaid ?? null,
+    billAmount: visit?.billAmount ?? null,
+    dischargeSummary: admission.dischargeSummary,
+    deathSummary: admission.deathSummary,
   };
   return detail;
 }
@@ -521,11 +530,18 @@ export async function updateIpdAdmission(
   if (!existing) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
 
   if (patch.status === "discharged") {
+    if (existing.status !== "doctor_ready") {
+      throw new ServerActionError("VALIDATION", "Doctor must mark the patient ready for discharge before final discharge can be done.");
+    }
     await assertIpdDischargeAllowed(ctx, existing);
   }
 
   const data: Record<string, unknown> = {};
   if (patch.status) data.status = patch.status;
+  if (patch.status === "discharged") {
+    data.dischargedAt = new Date();
+    data.dischargedBy = ctx.userId ?? null;
+  }
   if (patch.expectedDischarge !== undefined) data.expectedDischarge = patch.expectedDischarge ? new Date(patch.expectedDischarge) : null;
   if (patch.diagnosis !== undefined) data.diagnosis = patch.diagnosis;
   if (patch.lastRoundNote !== undefined) {
@@ -1013,16 +1029,15 @@ export async function saveDischargeSummary(
   const scope = branchScope(ctx);
   const existing = await prisma.ipdAdmission.findFirst({ where: { id, tenantId: scope.tenantId, branchId: scope.branchId } });
   if (!existing) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
-  await assertIpdDischargeAllowed(ctx, existing);
+  if (existing.status === "discharged") {
+    throw new ServerActionError("VALIDATION", "Patient is already discharged.");
+  }
   const summaryId = createId("dsum");
   await prisma.ipdAdmission.update({
     where: { id },
     data: {
       dischargeSummary: summary as unknown as object,
       dischargeSummaryId: summaryId,
-      status: "discharged",
-      dischargedAt: new Date(),
-      dischargedBy: ctx.userId ?? null,
     },
   });
   await writePlatformAudit({
@@ -1034,6 +1049,31 @@ export async function saveDischargeSummary(
     summary: `Discharge summary saved for IPD admission ${id}`,
   });
   return { id: summaryId };
+}
+
+export async function markIpdReadyForDischarge(ctx: ServerContext, id: string): Promise<{ id: string }> {
+  const scope = branchScope(ctx);
+  const existing = await prisma.ipdAdmission.findFirst({ where: { id, tenantId: scope.tenantId, branchId: scope.branchId } });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  if (!existing.dischargeSummaryId || !existing.dischargeSummary) {
+    throw new ServerActionError("VALIDATION", "Discharge summary must be filled before marking ready for discharge.");
+  }
+  if (existing.status === "discharged") {
+    throw new ServerActionError("VALIDATION", "Patient is already discharged.");
+  }
+  await prisma.ipdAdmission.update({
+    where: { id },
+    data: { status: "doctor_ready" },
+  });
+  await writePlatformAudit({
+    ctx,
+    module: "ipd",
+    action: "ipd_ready_for_discharge",
+    entityType: "ipd_admission",
+    entityId: id,
+    summary: `Doctor marked IPD admission ${id} ready for discharge`,
+  });
+  return { id };
 }
 
 export async function generateDeathSummary(ctx: ServerContext, id: string): Promise<DeathSummaryPayload> {

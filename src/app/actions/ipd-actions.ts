@@ -20,6 +20,7 @@ import {
   getIpdRoundConfigs,
   getIpdSnapshot,
   getIpdWards,
+  markIpdReadyForDischarge,
   removeIpdCartItem,
   saveDischargeSummary,
   saveDeathSummary,
@@ -144,6 +145,13 @@ export async function saveDischargeSummaryAction(id: string, summary: DischargeS
   return runAction(async () => {
     const ctx = await requireModule("doctor");
     return saveDischargeSummary(ctx, id, summary);
+  });
+}
+
+export async function markIpdReadyForDischargeAction(id: string): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await requireModule("doctor");
+    return markIpdReadyForDischarge(ctx, id);
   });
 }
 

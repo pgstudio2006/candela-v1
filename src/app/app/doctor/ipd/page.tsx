@@ -23,14 +23,16 @@ export default function DoctorIpdPage() {
   useDoctorPoll();
   const { session } = useSession();
   const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
-  const { ipdPatients, getPatient, activeDoctorId, saveIpdRound } = useDoctorStore();
+  const { ipdPatients, getPatient, activeDoctorId, saveIpdRound, refresh } = useDoctorStore();
   const schema = useDoctorFormSchema("doctor-ipd-round");
   const [activeIpd, setActiveIpd] = useState<string | null>(null);
   const [roundHistory, setRoundHistory] = useState<RoundRecord[]>([]);
   const [roundValues, setRoundValues] = useState<Record<string, string | number | boolean>>({});
   const [roundFormKey, setRoundFormKey] = useState(0);
 
-  const myPatients = ipdPatients.filter((ip) => ip.attendingDoctorId === activeDoctorId);
+  const myPatients = ipdPatients.filter(
+    (ip) => ip.attendingDoctorId === activeDoctorId && !["discharged", "deceased"].includes(ip.status),
+  );
 
   const selected = myPatients.find((ip) => ip.id === activeIpd);
 
@@ -131,7 +133,7 @@ export default function DoctorIpdPage() {
               />
             </Panel>
 
-            <IpdDischargeSummaryPanel admissionId={selected.id} />
+            <IpdDischargeSummaryPanel admissionId={selected.id} onSaved={() => refresh({ silent: true })} />
 
             {roundHistory.length > 0 && (
               <Panel title="Round log">

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Panel, AttioButton } from "@/components/frontdesk/ui";
+import { useEffect, useState } from "react";
+import { Panel, AttioButton, StatusBadge } from "@/components/frontdesk/ui";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,15 +10,29 @@ import {
   saveDischargeSummaryAction,
   generateDeathSummaryAction,
   saveDeathSummaryAction,
+  markIpdReadyForDischargeAction,
+  getIpdAdmissionAction,
 } from "@/app/actions/ipd-actions";
 import { useToast } from "@/components/ui/toast-provider";
+import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 
 export function IpdDischargeSummaryPanel({ admissionId, onSaved }: { admissionId: string; onSaved?: () => void }) {
   const { toast } = useToast();
+  const [admission, setAdmission] = useState<IpdAdmissionDetail | null>(null);
   const [mode, setMode] = useState<"discharge" | "death" | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [markingReady, setMarkingReady] = useState(false);
   const [summary, setSummary] = useState<Record<string, string>>({});
+
+  const refreshAdmission = async () => {
+    const res = await getIpdAdmissionAction(admissionId);
+    if (res.ok) setAdmission(res.data);
+  };
+
+  useEffect(() => {
+    void refreshAdmission();
+  }, [admissionId]);
 
   const generate = async (m: "discharge" | "death") => {
     setMode(m);
@@ -56,8 +70,26 @@ export function IpdDischargeSummaryPanel({ admissionId, onSaved }: { admissionId
       else toast(res.error ?? "Failed to save", "error");
     }
     setSaving(false);
+    await refreshAdmission();
     onSaved?.();
   };
+
+  const markReady = async () => {
+    setMarkingReady(true);
+    const res = await markIpdReadyForDischargeAction(admissionId);
+    if (res.ok) {
+      toast("Patient marked ready for discharge", "success");
+      await refreshAdmission();
+      onSaved?.();
+    } else {
+      toast(res.error ?? "Failed to mark ready for discharge", "error");
+    }
+    setMarkingReady(false);
+  };
+
+  const dischargeSummarySaved = Boolean(admission?.dischargeSummary);
+  const isDoctorReady = admission?.status === "doctor_ready";
+  const isDischarged = admission?.status === "discharged";
 
   return (
     <Panel title="Discharge / Death summary">
@@ -68,6 +100,21 @@ export function IpdDischargeSummaryPanel({ admissionId, onSaved }: { admissionId
         <AttioButton variant="secondary" onClick={() => void generate("death")} disabled={loading}>
           {loading && mode === "death" ? "Loading..." : "Death summary"}
         </AttioButton>
+      </div>
+      <div className="mt-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {isDoctorReady && <StatusBadge label="Ready for discharge" variant="success" />}
+          {isDischarged && <StatusBadge label="Discharged" variant="success" />}
+        </div>
+        {mode === "discharge" && !isDischarged && (
+          <AttioButton
+            variant="primary"
+            onClick={() => void markReady()}
+            disabled={markingReady || !dischargeSummarySaved}
+          >
+            {markingReady ? "Marking ready…" : isDoctorReady ? "Ready for discharge" : "Mark ready for discharge"}
+          </AttioButton>
+        )}
       </div>
       {mode && (
         <div className="mt-4 space-y-3">
