@@ -77,11 +77,11 @@ type NurseStoreValue = {
   ) => Promise<void>;
   verifyConsent: (visitId: string, consentId: string) => Promise<void>;
   declineConsent: (visitId: string, consentId: string, reason: string) => Promise<void>;
-  startSession: (visitId: string, bay: string) => Promise<void>;
+  startSession: (visitId: string, bay: string, notes?: string) => Promise<void>;
   completeSession: (
     visitId: string,
     sessionId: string,
-    notes?: string,
+    values?: Record<string, unknown>,
   ) => Promise<{ ok: boolean; error?: string; nextSessionNumber?: number }>;
   completeEpisode: (visitId: string) => Promise<{ ok: boolean; error?: string }>;
   updateEpisodeNotes: (visitId: string, notes: string) => Promise<void>;
@@ -318,13 +318,13 @@ export function NurseStoreProvider({ children }: { children: ReactNode }) {
         await nurseMutate({ op: "declineConsent", visitId, consentId, reason });
         await refresh({ silent: true });
       },
-      startSession: async (visitId, bay) => {
-        await nurseMutate({ op: "startSession", visitId, bay });
+      startSession: async (visitId, bay, notes) => {
+        await nurseMutate({ op: "startSession", visitId, bay, notes });
         await refresh({ silent: true });
       },
-      completeSession: async (visitId, sessionId, notes) => {
+      completeSession: async (visitId, sessionId, values) => {
         try {
-          const res = await nurseMutate({ op: "completeSession", visitId, sessionId, notes });
+          const res = await nurseMutate({ op: "completeSession", visitId, sessionId, values });
           if (!res.ok) return { ok: false, error: res.error };
           await refresh({ silent: true });
           return { ok: true, nextSessionNumber: res.data?.nextSessionNumber };

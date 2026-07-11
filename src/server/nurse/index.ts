@@ -22,9 +22,8 @@ import {
 } from "@/lib/nurse-validation";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getClinicalSnapshot } from "@/server/clinical";
+import { getClinicalSnapshot, saveSubmission } from "@/server/clinical";
 import { writeIpdRoundLog } from "@/server/ipd";
-import { createNursePharmacyOrder as createNursePharmacyOrderInPharmacy } from "@/server/pharmacy";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
 import { resolveNurseOperator } from "@/server/module-operator";
@@ -554,7 +553,7 @@ export async function declineConsent(ctx: ServerContext, visitId: string, consen
   );
 }
 
-export async function startSession(ctx: ServerContext, visitId: string, bay: string) {
+export async function startSession(ctx: ServerContext, visitId: string, bay: string, notes?: string) {
   const { operatorId, operatorName } = await resolveNurseOperator(ctx);
   const episodeRow = await assertNurseOwnsEpisode(ctx, visitId, operatorId);
   const episode = asEpisode(episodeRow);
@@ -562,7 +561,7 @@ export async function startSession(ctx: ServerContext, visitId: string, bay: str
 
   const sessions = episode.sessions.map((s) =>
     s.id === session.id
-      ? { ...s, status: "in_progress" as const, bay, startedAt: new Date().toISOString() }
+      ? { ...s, status: "in_progress" as const, bay, startedAt: new Date().toISOString(), notes: notes ?? s.notes }
       : s,
   );
 
@@ -598,11 +597,17 @@ export async function completeSession(
   ctx: ServerContext,
   visitId: string,
   sessionId: string,
-  notes?: string,
+  values?: Record<string, unknown>,
 ): Promise<{ episodeComplete: boolean; nextSessionNumber?: number }> {
   const { operatorId, operatorName } = await resolveNurseOperator(ctx);
   const episodeRow = await assertNurseOwnsEpisode(ctx, visitId, operatorId);
   const episode = asEpisode(episodeRow);
+  const notes =
+    typeof values?.sessionNotes === "string"
+      ? values.sessionNotes
+      : typeof values?.notes === "string"
+        ? values.notes
+        : undefined;
 
   const session = episode.sessions.find((s) => s.id === sessionId);
   if (!session) {
@@ -655,6 +660,15 @@ export async function completeSession(
       payload: { visitId, notes, nextSession: nextSession.sessionNumber },
     });
 
+    if (values && Object.keys(values).length > 0) {
+      await saveSubmission(
+        ctx,
+        "nurse-session-notes",
+        values as Record<string, string | number | boolean>,
+        { patientId: episode.patientId, visitId },
+      );
+    }
+
     if (episode.treatmentPath === "ipd" && notes?.trim()) {
       await logIpdNurseNote(ctx, visitId, operatorId, operatorName, `Session ${session.sessionNumber}/${total} note: ${notes}`, {
         sessionId,
@@ -680,6 +694,15 @@ export async function completeSession(
     summary: `Final session ${session.sessionNumber}/${total} completed by ${operatorName}`,
     payload: { visitId, notes },
   });
+
+  if (values && Object.keys(values).length > 0) {
+    await saveSubmission(
+      ctx,
+      "nurse-session-notes",
+      values as Record<string, string | number | boolean>,
+      { patientId: episode.patientId, visitId },
+    );
+  }
 
   if (episode.treatmentPath === "ipd" && notes?.trim()) {
     await logIpdNurseNote(ctx, visitId, operatorId, operatorName, `Final session ${session.sessionNumber}/${total} note: ${notes}`, {
@@ -738,42 +761,6 @@ export async function updateEpisodeNotes(ctx: ServerContext, visitId: string, no
     where: { visitId },
     data: { internalNotes: notes.slice(0, 4000) },
   });
-}
-
-export async function createNursePharmacyOrder(
-  ctx: ServerContext,
-  visitId: string,
-  input: {
-    patientName: string;
-    uhid: string;
-    lines: Array<{ drug: string; dose: string; frequency: string; duration: string; instructions?: string }>;
-    priority?: "routine" | "urgent" | "stat";
-  },
-) {
-  const { operatorId, operatorName } = await resolveNurseOperator(ctx);
-  const episodeRow = await assertNurseOwnsEpisode(ctx, visitId, operatorId);
-  const episode = asEpisode(episodeRow);
-  if (!input.lines.length) {
-    throw new ServerActionError("VALIDATION", "Add at least one medicine line.");
-  }
-  const rxId = await createNursePharmacyOrderInPharmacy(ctx, {
-    visitId,
-    patientName: input.patientName,
-    uhid: input.uhid,
-    nurseName: operatorName,
-    lines: input.lines,
-    priority: input.priority,
-  });
-  await writePlatformAudit({
-    ctx,
-    module: "nurse",
-    action: "pharmacy_order_created",
-    entityType: "visit",
-    entityId: visitId,
-    summary: `IPD pharmacy order created by ${operatorName} for ${input.patientName}`,
-    payload: { rxId, lineCount: input.lines.length },
-  });
-  return { rxId, episodeId: episode.id };
 }
 
 export async function createNurseTask(

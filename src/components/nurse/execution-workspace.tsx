@@ -370,7 +370,7 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
                   onClick={async () => {
                     setActionError(null);
                     try {
-                      await startSession(visitId, bayLabel);
+                      await startSession(visitId, bayLabel, String(sessionNoteValues.sessionNotes ?? ""));
                       setSessionMessage(null);
                     } catch (err) {
                       setActionError(err instanceof Error ? err.message : "Could not start session");
@@ -386,8 +386,7 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
                   className="gap-1.5"
                   onClick={async () => {
                     setActionError(null);
-                    const notes = String(sessionNoteValues.sessionNotes ?? "");
-                    const result = await completeSession(visitId, activeSession.id, notes);
+                    const result = await completeSession(visitId, activeSession.id, sessionNoteValues);
                     if (!result.ok) {
                       setActionError(result.error ?? "Could not complete session");
                       return;

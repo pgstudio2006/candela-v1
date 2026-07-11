@@ -8,7 +8,6 @@ import {
   claimEpisode,
   completeEpisode,
   completeSession,
-  createNursePharmacyOrder,
   createNurseTask,
   declineConsent,
   presentConsent,
@@ -39,15 +38,12 @@ type ActionBody = {
   bay?: string;
   sessionId?: string;
   notes?: string;
+  values?: Record<string, unknown>;
   title?: string;
   assignedBy?: string;
   taskId?: string;
   status?: "pending" | "in_progress" | "completed";
   summary?: Omit<DischargeSummary, "preparedBy" | "preparedAt">;
-  patientName?: string;
-  uhid?: string;
-  lines?: Array<{ drug: string; dose: string; frequency: string; duration: string; instructions?: string }>;
-  priority?: "routine" | "urgent" | "stat";
 };
 
 export async function POST(request: Request) {
@@ -91,10 +87,15 @@ export async function POST(request: Request) {
         result = await declineConsent(ctx, body.visitId!, body.consentId!, body.reason!);
         break;
       case "startSession":
-        result = await startSession(ctx, body.visitId!, body.bay!);
+        result = await startSession(ctx, body.visitId!, body.bay!, body.notes);
         break;
       case "completeSession":
-        result = await completeSession(ctx, body.visitId!, body.sessionId!, body.notes);
+        result = await completeSession(
+          ctx,
+          body.visitId!,
+          body.sessionId!,
+          body.values ?? (body.notes ? { sessionNotes: body.notes } : undefined),
+        );
         break;
       case "completeEpisode":
         result = await completeEpisode(ctx, body.visitId!);
@@ -110,14 +111,6 @@ export async function POST(request: Request) {
         break;
       case "saveDischargeSummary":
         result = await saveDischargeSummary(ctx, body.visitId!, body.summary!);
-        break;
-      case "createNursePharmacyOrder":
-        result = await createNursePharmacyOrder(ctx, body.visitId!, {
-          patientName: body.patientName!,
-          uhid: body.uhid!,
-          lines: body.lines!,
-          priority: body.priority,
-        });
         break;
       default:
         return NextResponse.json({ ok: false, error: `Unknown operation: ${op}` }, { status: 400 });

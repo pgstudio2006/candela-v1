@@ -79,14 +79,14 @@ export async function declineConsentAction(visitId: string, consentId: string, r
   return declineConsent(ctx, visitId, consentId, reason);
 }
 
-export async function startSessionAction(visitId: string, bay: string) {
+export async function startSessionAction(visitId: string, bay: string, notes?: string) {
   const ctx = await requireModule("nurse");
-  return startSession(ctx, visitId, bay);
+  return startSession(ctx, visitId, bay, notes);
 }
 
-export async function completeSessionAction(visitId: string, sessionId: string, notes?: string) {
+export async function completeSessionAction(visitId: string, sessionId: string, values?: Record<string, unknown>) {
   const ctx = await requireModule("nurse");
-  return completeSession(ctx, visitId, sessionId, notes);
+  return completeSession(ctx, visitId, sessionId, values);
 }
 
 export async function completeEpisodeAction(visitId: string) {
