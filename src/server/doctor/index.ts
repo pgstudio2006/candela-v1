@@ -182,6 +182,7 @@ export async function getDoctorSnapshot(
   const scopedPatientIds = new Set([
     ...scopedVisits.map((v) => v.patientId),
     ...consultRows.map((row) => row.patientId),
+    ...ipdRows.map((row) => row.patientId),
   ]);
   const scopedPatients = clinical.patients.filter((p) => scopedPatientIds.has(p.id));
   const branchPatientIds = new Set(scopedPatients.map((p) => p.id));
@@ -218,9 +219,7 @@ export async function getDoctorSnapshot(
         priority: row.priority as "normal" | "high",
         payload: asRecord(row.payload) as unknown as ConsultationRecord,
       })),
-    ipdPatients: ipdRows
-      .filter((row) => branchPatientIds.has(row.patientId))
-      .map((row) => ({
+    ipdPatients: ipdRows.map((row) => ({
         id: row.id,
         visitId: row.visitId ?? undefined,
         patientId: row.patientId,
