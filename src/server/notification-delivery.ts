@@ -96,8 +96,20 @@ export async function deliverWhatsApp(
   body: string,
 ): Promise<DeliveryResult> {
   const token = process.env.WHATSAPP_API_TOKEN;
-  const baseUrl = process.env.WHATSAPP_API_BASE_URL ?? "https://graph.facebook.com/v20.0";
+  let baseUrl = process.env.WHATSAPP_API_BASE_URL ?? "https://graph.facebook.com/v21.0";
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  // TeleCRM provides a webhook URL (e.g. https://next-api.telecrm.in/waca) for
+  // *receiving* messages/events. The access token they provide is a Meta token,
+  // so outbound sends must go to Meta's Graph API, not the TeleCRM webhook path.
+  if (baseUrl.includes("telecrm.in") || baseUrl.includes("/waca")) {
+    console.warn(
+      "[whatsapp] WHATSAPP_API_BASE_URL looks like a TeleCRM webhook URL.",
+      "TeleCRM webhook URLs are for receiving events; outbound sends must use Meta Graph API.",
+      "Falling back to https://graph.facebook.com/v21.0",
+    );
+    baseUrl = "https://graph.facebook.com/v21.0";
+  }
 
   if (!token) {
     if (demoMode()) {
@@ -122,26 +134,49 @@ export async function deliverWhatsApp(
   // Meta WACA endpoint: {baseUrl}/{phoneNumberId}/messages
   const url = `${baseUrl}/${phoneNumberId}/messages`;
 
+  // If an approved template name is provided, send a template message.
+  // This is required for the first outbound message to a user outside the 24h window.
+  const templateName = process.env.WHATSAPP_TEMPLATE_NAME;
+  let payload: Record<string, unknown>;
+  if (templateName) {
+    payload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? "en" },
+        components: [
+          {
+            type: "body",
+            parameters: [{ type: "text", text: body }],
+          },
+        ],
+      },
+    };
+  } else {
+    payload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "text",
+      text: { body: body },
+    };
+  }
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to,
-      type: "text",
-      text: {
-        body: body,
-      },
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
     const err = await res.text();
-    console.error("[whatsapp:meta-waca] Send failed:", res.status, err);
+    console.error("[whatsapp:meta-waca] Send failed:", url, res.status, err);
     return { ok: false, provider: "whatsapp-cloud-api", detail: err.slice(0, 300) };
   }
 
