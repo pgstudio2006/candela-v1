@@ -335,7 +335,7 @@ export function CrmLeadFormModal({ open, onClose, initial, onSaved }: CrmLeadFor
           </section>
 
           <PublishedSchemaForm
-            schemaId="crm-lead-capture"
+            schemaId="registration"
             hideSubmit
             formKey={initial?.id ?? "new-lead"}
             initialValues={captureValues}

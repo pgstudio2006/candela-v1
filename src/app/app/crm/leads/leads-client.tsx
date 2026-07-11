@@ -3,12 +3,14 @@
 import { CrmLeadFormModal } from "@/components/crm/lead-form";
 import { LeadDetailPanel, LeadPipelineBoard } from "@/components/crm/lead-detail";
 import { CrmLeadFilterBar } from "@/components/crm/lead-filter-bar";
+import { CrmLeadListView } from "@/components/crm/lead-list-view";
+import { CrmLeadGraphView } from "@/components/crm/lead-graph-view";
 import { useCrmStore } from "@/components/crm/crm-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton } from "@/components/frontdesk/ui";
 import type { CrmLead } from "@/design-system/crm-data";
 import { applyCrmLeadFilters, DEFAULT_CRM_LEAD_FILTER, type CrmLeadFilter } from "@/lib/crm-lead-filters";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, BarChart3, Plus, Table2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -22,6 +24,7 @@ export default function CrmLeadsPageClient() {
   const [selected, setSelected] = useState<CrmLead | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CrmLead | undefined>();
+  const [view, setView] = useState<"board" | "list" | "graph">("board");
 
   useEffect(() => {
     if (searchParams.get("new") === "1") setFormOpen(true);
@@ -53,15 +56,44 @@ export default function CrmLeadsPageClient() {
         </>
       }
     >
-      <CrmLeadFilterBar filters={filters} onChange={setFilters} agents={agents} />
+      <CrmLeadFilterBar filters={filters} onChange={setFilters} agents={agents} stages={stages} />
+      <div className="mt-4 flex items-center gap-2">
+        <div className="inline-flex rounded-lg border border-[var(--attio-border)] bg-white p-1">
+          {[
+            { id: "board", label: "Board", icon: Table2 },
+            { id: "list", label: "List", icon: Table2 },
+            { id: "graph", label: "Graph", icon: BarChart3 },
+          ].map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setView(id as typeof view)}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+                view === id
+                  ? "bg-[var(--attio-text)] text-white"
+                  : "text-[var(--attio-text-secondary)] hover:bg-[var(--attio-surface)]"
+              }`}
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="mt-4">
-        <LeadPipelineBoard
-          leads={filteredLeads}
-          stages={stages}
-          agents={agents}
-          onSelect={setSelected}
-          onMoveStage={moveLeadStage}
-        />
+        {view === "board" && (
+          <LeadPipelineBoard
+            leads={filteredLeads}
+            stages={stages}
+            agents={agents}
+            onSelect={setSelected}
+            onMoveStage={moveLeadStage}
+          />
+        )}
+        {view === "list" && (
+          <CrmLeadListView leads={filteredLeads} stages={stages} agents={agents} onSelect={setSelected} />
+        )}
+        {view === "graph" && <CrmLeadGraphView leads={filteredLeads} stages={stages} agents={agents} />}
       </div>
       {selected && (
         <LeadDetailPanel

@@ -7,7 +7,8 @@ import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import type { CrmAgent, CrmAssignmentRule } from "@/design-system/crm-data";
 import { isAgentAvailable } from "@/lib/crm-platform";
-import { Copy, Pencil, Plus, Trash2, UserX } from "lucide-react";
+import { Copy, Eye, Pencil, Plus, Trash2, UserX } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 export default function CrmTeamPage() {
@@ -111,7 +112,11 @@ export default function CrmTeamPage() {
               const pwd = getAgentPassword(a.id);
               const away = !isAgentAvailable(a);
               return {
-                name: a.name,
+                name: (
+                  <Link href={`/app/crm/staff/${a.id}`} className="text-[13px] font-medium hover:underline">
+                    {a.name}
+                  </Link>
+                ),
                 login: (
                   <div className="space-y-0.5">
                     <p className="font-mono text-[12px]">{a.email}</p>
@@ -149,6 +154,9 @@ export default function CrmTeamPage() {
                     <AttioButton variant="secondary" className="!h-7 !text-[10px]" onClick={() => transferOpenLeads(a.id)}>
                       Transfer
                     </AttioButton>
+                    <Link href={`/app/crm/staff/${a.id}`} className="rounded p-1 hover:bg-[var(--attio-hover)]">
+                      <Eye className="size-3.5 text-[var(--attio-text-secondary)]" />
+                    </Link>
                     <button
                       type="button"
                       className="rounded p-1 hover:bg-[var(--attio-hover)]"

@@ -30,24 +30,27 @@ export default function CrmAppointmentsPage() {
   const [doctorFilter, setDoctorFilter] = useState("");
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
-    void (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/crm/appointments", { credentials: "include" });
-        const json = await res.json();
-        if (json.ok) {
-          setData(json.data);
-          setError(null);
-        } else {
-          setError(json.error ?? "Failed to load appointments.");
-        }
-      } catch {
-        setError("Failed to connect.");
-      } finally {
-        setLoading(false);
+  const load = async () => {
+    try {
+      const res = await fetch("/api/crm/appointments", { credentials: "include" });
+      const json = await res.json();
+      if (json.ok) {
+        setData(json.data);
+        setError(null);
+      } else {
+        setError(json.error ?? "Failed to load appointments.");
       }
-    })();
+    } catch {
+      setError("Failed to connect.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const filteredAppointments = useMemo(() => {

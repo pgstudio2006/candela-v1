@@ -266,9 +266,6 @@ export const DEFAULT_CRM_STAGES: CrmPipelineStage[] = [
 
 export const SEED_CRM_AGENTS: CrmAgent[] = [
   { id: "crm_mgr", name: "CRM Manager", email: "crm@navayu.in", role: "manager", active: true, specialtyTags: [], maxOpenLeads: 999 },
-  { id: "ag_priya", name: "Priya Sharma", email: "priya@navayu.in", role: "counsellor", active: true, specialtyTags: ["spine", "knee"], maxOpenLeads: 25, leadWeightPercent: 40, backupAgentId: "ag_anita" },
-  { id: "ag_anita", name: "Anita Desai", email: "anita@navayu.in", role: "counsellor", active: true, specialtyTags: ["shoulder", "wellness"], maxOpenLeads: 25, leadWeightPercent: 35, backupAgentId: "ag_priya" },
-  { id: "ag_rahul", name: "Rahul Verma", email: "rahul@navayu.in", role: "caller", active: true, specialtyTags: [], maxOpenLeads: 40, leadWeightPercent: 25, backupAgentId: "ag_priya" },
 ];
 
 export const SEED_CRM_INTEGRATIONS: CrmIntegration[] = [
@@ -322,19 +319,7 @@ export const SEED_CRM_INTEGRATIONS: CrmIntegration[] = [
   },
 ];
 
-export const SEED_ASSIGNMENT_RULES: CrmAssignmentRule[] = [
-  {
-    id: "rule_pct",
-    label: "Percentage pool — all inbound leads",
-    active: true,
-    strategy: "percentage",
-    assignToAgentIds: ["ag_priya", "ag_anita", "ag_rahul"],
-    agentWeights: { ag_priya: 40, ag_anita: 35, ag_rahul: 25 },
-  },
-  { id: "rule_google", label: "Google Forms → Rahul (caller first touch)", active: true, strategy: "by_source", source: "google_forms", assignToAgentIds: ["ag_rahul"] },
-  { id: "rule_spine", label: "Spine specialty → Priya", active: true, strategy: "by_specialty", specialty: "spine", assignToAgentIds: ["ag_priya"] },
-  { id: "rule_rr", label: "Round robin fallback", active: false, strategy: "round_robin", assignToAgentIds: ["ag_priya", "ag_anita", "ag_rahul"] },
-];
+export const SEED_ASSIGNMENT_RULES: CrmAssignmentRule[] = [];
 
 export const SEED_CRM_LEADS: CrmLead[] = [
   {

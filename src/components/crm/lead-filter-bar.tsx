@@ -1,6 +1,6 @@
 "use client";
 
-import type { CrmAgent, CrmLeadSource } from "@/design-system/crm-data";
+import type { CrmAgent, CrmLeadSource, CrmPipelineStage } from "@/design-system/crm-data";
 import { CRM_APPOINTMENT_CENTRES, SOURCE_LABELS } from "@/design-system/crm-data";
 import type { CrmLeadFilter } from "@/lib/crm-lead-filters";
 import { Search } from "lucide-react";
@@ -9,10 +9,12 @@ export function CrmLeadFilterBar({
   filters,
   onChange,
   agents,
+  stages,
 }: {
   filters: CrmLeadFilter;
   onChange: (filters: CrmLeadFilter) => void;
   agents: CrmAgent[];
+  stages: CrmPipelineStage[];
 }) {
   const update = (patch: Partial<CrmLeadFilter>) => onChange({ ...filters, ...patch });
 
@@ -70,6 +72,35 @@ export function CrmLeadFilterBar({
           ))}
       </select>
 
+      <select
+        value={filters.status}
+        onChange={(e) => update({ status: e.target.value })}
+        className="h-9 min-w-[140px] rounded-lg border border-[var(--attio-border)] bg-white px-3 text-[13px]"
+      >
+        <option value="all">All status</option>
+        {stages.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={filters.dateFrom}
+          onChange={(e) => update({ dateFrom: e.target.value })}
+          className="h-9 rounded-lg border border-[var(--attio-border)] bg-white px-3 text-[13px]"
+        />
+        <span className="text-[12px] text-[var(--attio-text-tertiary)]">to</span>
+        <input
+          type="date"
+          value={filters.dateTo}
+          onChange={(e) => update({ dateTo: e.target.value })}
+          className="h-9 rounded-lg border border-[var(--attio-border)] bg-white px-3 text-[13px]"
+        />
+      </div>
+
       <button
         type="button"
         onClick={() =>
@@ -78,6 +109,9 @@ export function CrmLeadFilterBar({
             source: "all",
             branch: "all",
             counselor: "all",
+            status: "all",
+            dateFrom: "",
+            dateTo: "",
           })
         }
         className="h-9 rounded-lg border border-[var(--attio-border)] px-3 text-[12px] text-[var(--attio-text-secondary)] hover:bg-white"

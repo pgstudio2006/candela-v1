@@ -126,7 +126,7 @@ export function LeadDetailPanel({
   activities: CrmActivity[];
   followUps: CrmFollowUp[];
 }) {
-  const { addFollowUp, agents: storeAgents, getOperator } = useCrmStore();
+  const { addFollowUp, agents: storeAgents, stages: storeStages, getOperator, moveLeadStage } = useCrmStore();
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [tab, setTab] = useState("overview");
   const [historyTick, setHistoryTick] = useState(0);
@@ -194,8 +194,23 @@ export function LeadDetailPanel({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Select value={lead.stageId} onValueChange={(stageId) => stageId && moveLeadStage(lead.id, stageId)}>
+            <SelectTrigger size="sm" className="w-36 text-[12px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {storeStages.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={onEdit}>
             Edit
+          </AttioButton>
+          <AttioButton variant="primary" className="!h-7 !text-[11px]" onClick={onEdit}>
+            Fill lead form
           </AttioButton>
           <button type="button" onClick={onClose} className="text-[12px] text-[var(--attio-text-tertiary)] hover:underline">
             Close
