@@ -139,13 +139,8 @@ export function OpdBillingForm({
     })),
     discount: discountAmount,
   });
-  const visitBillTotal = useMemo(() => {
-    const billed = Number(visit?.billAmount ?? 0);
-    if (billed > 0) return billed;
-    return Number(visit?.amountPaid ?? 0) + Number(visit?.balanceDue ?? 0);
-  }, [visit?.billAmount, visit?.amountPaid, visit?.balanceDue]);
-
-  const net = isBalancePayment ? visitBillTotal + gstBreakdown.grandTotal : gstBreakdown.grandTotal;
+  const previousBalance = Number(visit?.balanceDue ?? 0);
+  const net = isBalancePayment ? previousBalance + gstBreakdown.grandTotal : gstBreakdown.grandTotal;
 
   const updateSplit = (index: number, patch: Partial<PaymentSplit>) => {
     setPaymentSplits((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -161,7 +156,7 @@ export function OpdBillingForm({
 
   const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const previousPaid = isBalancePayment ? Number(visit?.amountPaid ?? 0) : previousPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const balanceAfterPay = Math.max(0, net - previousPaid - splitTotal);
+  const balanceAfterPay = Math.max(0, net - splitTotal);
 
   useEffect(() => {
     if (!visit?.ipdAdmissionId || lines.length > 0) return;
@@ -202,9 +197,9 @@ export function OpdBillingForm({
       setIsBalancePayment(hasBalance);
 
       if (hasBalance) {
-        const balance = balanceDue;
+        const totalDue = balanceDue + gstBreakdown.grandTotal;
         setPaymentScope("partial");
-        setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: balance }]);
+        setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: totalDue }]);
         setPreviousPayments([{ mode: "previous", amount: amountPaid }]);
         setExistingInvoice(inv && (inv.status === "partial" || inv.balanceAmount > 0) ? inv : null);
       } else if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
@@ -619,6 +614,12 @@ export function OpdBillingForm({
                         <span className="tabular-nums">₹{gstBreakdown.taxTotal.toLocaleString("en-IN")}</span>
                       </div>
                     )}
+                    {previousBalance > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-[var(--attio-text-secondary)]">Previous balance</span>
+                        <span className="tabular-nums">₹{previousBalance.toLocaleString("en-IN")}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between border-t pt-2 text-[15px] font-semibold">
                       <span>Net payable</span>
                       <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
@@ -656,9 +657,10 @@ export function OpdBillingForm({
                   <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-900">
                     <p className="font-medium">Partial payment already recorded</p>
                     <p className="mt-1">
-                      Paid so far: ₹{previousPaid.toLocaleString("en-IN")} · Total: ₹
-                      {net.toLocaleString("en-IN")} · Balance: ₹
-                      {(net - previousPaid).toLocaleString("en-IN")}
+                      Paid so far: ₹{previousPaid.toLocaleString("en-IN")} · Previous balance: ₹
+                      {previousBalance.toLocaleString("en-IN")} · Current bill: ₹
+                      {gstBreakdown.grandTotal.toLocaleString("en-IN")} · Total due: ₹
+                      {net.toLocaleString("en-IN")}
                     </p>
                     <p className="mt-1 text-[11px]">
                       Collect the remaining balance below. Billing lines are locked to prevent changes.
@@ -727,8 +729,8 @@ export function OpdBillingForm({
                       Add payment mode
                     </AttioButton>
                     <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                      Collecting ₹{splitTotal.toLocaleString("en-IN")} of balance ₹
-                      {(net - previousPaid).toLocaleString("en-IN")}
+                      Collecting ₹{splitTotal.toLocaleString("en-IN")} of total due ₹
+                      {net.toLocaleString("en-IN")}
                       {balanceAfterPay > 0 && ` · Balance after this payment ₹${balanceAfterPay.toLocaleString("en-IN")}`}
                     </p>
                   </div>
@@ -740,7 +742,7 @@ export function OpdBillingForm({
                       <Label className="text-[11px]">Payment mode</Label>
                       <Select
                         value={paymentSplits[0]?.mode ?? "cash"}
-                        onValueChange={(v) => v && updateSplit(0, { mode: v, amount: Math.max(0, net - previousPaid) })}
+                        onValueChange={(v) => v && updateSplit(0, { mode: v, amount: net })}
                       >
                         <SelectTrigger className="mt-1 h-9 text-[13px]">
                           <SelectValue />
@@ -756,7 +758,7 @@ export function OpdBillingForm({
                     </div>
                     <div>
                       <Label className="text-[11px]">Amount collected</Label>
-                      <Input value={Math.max(0, net - previousPaid)} readOnly className="mt-1 h-9 bg-[var(--attio-surface)] text-[13px]" />
+                      <Input value={net} readOnly className="mt-1 h-9 bg-[var(--attio-surface)] text-[13px]" />
                     </div>
                   </div>
                 )}
