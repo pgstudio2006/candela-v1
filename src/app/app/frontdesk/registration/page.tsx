@@ -10,7 +10,7 @@ import { useSession } from "@/components/candela/session-provider";
 import type { ReferralDoctor } from "@/design-system/admin-data";
 import type { CrmLead } from "@/design-system/crm-data";
 import { isPataudiBranch } from "@/lib/auth-types";
-import { canOverrideDuplicateAction, checkDuplicatePatientAction, getActiveReferralDoctorsAction } from "@/app/actions/clinical-actions";
+import { checkDuplicatePatientAction, getActiveReferralDoctorsAction } from "@/app/actions/clinical-actions";
 import {
   detectLeadByMobileAction,
   assignCounsellorToPatientAction,
@@ -46,7 +46,6 @@ export default function RegistrationPage() {
   const [savedUhid, setSavedUhid] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [phoneWarning, setPhoneWarning] = useState<DuplicateInfo | null>(null);
-  const [canOverrideDuplicate, setCanOverrideDuplicate] = useState(false);
   const [leadDetection, setLeadDetection] = useState<LeadDetection | null>(null);
   const [appliedLeadId, setAppliedLeadId] = useState<string | null>(null);
   const [assignCounsellor, setAssignCounsellor] = useState(false);
@@ -66,7 +65,6 @@ export default function RegistrationPage() {
     : {};
 
   useEffect(() => {
-    void canOverrideDuplicateAction().then(setCanOverrideDuplicate);
     void (async () => {
       try {
         const res = await fetch("/api/crm/counsellors", { credentials: "include" });
@@ -179,11 +177,6 @@ export default function RegistrationPage() {
     data: Record<string, string | number | boolean>,
     opts?: { forceDuplicate?: boolean },
   ) => {
-    if (phoneWarning && !opts?.forceDuplicate) {
-      toast("This phone is already registered. Use check-in for the existing patient.", "error");
-      return;
-    }
-
     const payload = normalizeReferralDoctor(data);
     setSubmitting(true);
     const result = await registerPatientAsync(payload, { startVisit: true, forceDuplicate: opts?.forceDuplicate });
@@ -246,13 +239,7 @@ export default function RegistrationPage() {
             schema={schema}
             formKey={formKey}
             initialValues={registrationInitialValues}
-            submitLabel={
-              submitting
-                ? "Saving…"
-                : phoneWarning
-                  ? "Blocked — use check-in"
-                  : "Save & continue to check-in"
-            }
+            submitLabel={submitting ? "Saving…" : "Save & continue to check-in"}
             onValuesChange={setDraft}
             roster={roster}
             onSubmit={(data) => void submitRegistration(data)}
@@ -270,7 +257,7 @@ export default function RegistrationPage() {
                     {phoneWarning.name} · {phoneWarning.uhid} · {phoneWarning.phone}
                   </p>
                   <p className="mt-2 text-[11px] text-amber-700">
-                    Registration is blocked for this number. Check in the existing patient instead.
+                    This phone is already used by another patient. You can still register this patient or check in the existing one.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Link href={checkInHref}>
@@ -285,16 +272,6 @@ export default function RegistrationPage() {
                       </AttioButton>
                     </Link>
                   </div>
-                  {canOverrideDuplicate && (
-                    <AttioButton
-                      variant="secondary"
-                      className="mt-2 h-8 w-full text-[11px]"
-                      disabled={submitting}
-                      onClick={() => void submitRegistration(draft, { forceDuplicate: true })}
-                    >
-                      Register anyway (supervisor override)
-                    </AttioButton>
-                  )}
                 </div>
               </div>
             ) : (

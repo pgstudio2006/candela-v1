@@ -320,24 +320,8 @@ async function assertNoDuplicatePatient(
 ) {
   if (force) return;
   const scope = branchScope(ctx);
-  const phoneNorm = _phone.replace(/\D/g, "").slice(-10);
-  if (phoneNorm.length >= 10) {
-    const phoneDup = await prisma.patient.findFirst({
-      where: {
-        tenantId: scope.tenantId,
-        branchId: scope.branchId,
-        phone: { endsWith: phoneNorm },
-        ...(excludeId ? { NOT: { id: excludeId } } : {}),
-      },
-    });
-    if (phoneDup) {
-      throw new ServerActionError(
-        "DUPLICATE_PHONE",
-        `Phone already registered: ${patientDisplayName(phoneDup)} (${phoneDup.uhid}). Use check-in instead.`,
-        { existingId: phoneDup.id, existingUhid: phoneDup.uhid },
-      );
-    }
-  }
+  // Phone number is intentionally allowed to be shared across multiple patients;
+  // checkDuplicatePatient is used client-side to show a warning.
   const existing = await prisma.patient.findFirst({
     where: {
       tenantId: scope.tenantId,
