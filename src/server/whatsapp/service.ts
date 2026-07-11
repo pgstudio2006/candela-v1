@@ -9,7 +9,10 @@ export type WhatsAppTrigger =
   | "visit_thankyou_review"
   | "billing_invoice"
   | "prescription_sent"
-  | "call_not_picked";
+  | "call_not_picked"
+  | "lead_lost"
+  | "pharmacy_bill"
+  | "purchase_order";
 
 export type TemplateVars = Record<string, string | number | undefined>;
 
@@ -51,6 +54,21 @@ const DEFAULT_TEMPLATES: Record<
     label: "Missed Call Follow-up",
     body:
       "Hello {{leadName}}, we missed your call. Let us know a convenient time to reconnect or reply to this message. We're here to help you with your healthcare needs.",
+  },
+  lead_lost: {
+    label: "Lead Lost",
+    body:
+      "Hello {{leadName}}, we noticed you couldn't proceed with us this time. If anything changes or you need assistance in the future, we're happy to help. Thank you for considering us.",
+  },
+  pharmacy_bill: {
+    label: "Pharmacy Bill",
+    body:
+      "Dear {{patientName}}, your pharmacy bill {{billId}} is ready. Total: ₹{{amount}}. Payment status: {{paymentStatus}}. Thank you for choosing Candela.",
+  },
+  purchase_order: {
+    label: "Purchase Order",
+    body:
+      "Dear {{supplierName}}, please find our purchase order {{poId}}. Items: {{items}}. Total: ₹{{total}}. Expected delivery: {{expectedDate}}. Thank you.",
   },
 };
 

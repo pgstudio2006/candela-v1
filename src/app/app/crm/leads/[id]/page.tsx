@@ -11,7 +11,7 @@ import { Panel, StatusBadge, AttioButton } from "@/components/frontdesk/ui";
 import { SOURCE_LABELS, type CrmCallOutcome, type CrmLeadStatus } from "@/design-system/crm-data";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Calendar, CheckCircle2, Phone, PhoneOff, UserPlus, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const STATUS_LABELS: Record<string, string> = {
   fresh: "Fresh",
@@ -44,6 +44,8 @@ export default function OnlineCounsellorLeadDetailPage({ params }: { params: Pro
   const [paramsResolved, setParamsResolved] = useState<{ id: string } | null>(null);
   const [converting, setConverting] = useState(false);
   const [bookAppointment, setBookAppointment] = useState(true);
+  const [doctors, setDoctors] = useState<{ id: string; name: string; department: string }[]>([]);
+  const [doctorId, setDoctorId] = useState("");
   const [doctorName, setDoctorName] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("");
@@ -54,6 +56,20 @@ export default function OnlineCounsellorLeadDetailPage({ params }: { params: Pro
   useEffect(() => {
     void params.then((p) => setParamsResolved(p));
   }, [params]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/crm/appointments", { credentials: "include" });
+        const json = await res.json();
+        if (json.ok) setDoctors((json.data?.doctors ?? []) as typeof doctors);
+      } catch {
+        setDoctors([]);
+      }
+    })();
+  }, []);
+
+  const selectedDoctor = useMemo(() => doctors.find((d) => d.id === doctorId), [doctors, doctorId]);
 
   const leadId = paramsResolved?.id ?? "";
   const allLeads = getFilteredLeads();
@@ -96,7 +112,8 @@ export default function OnlineCounsellorLeadDetailPage({ params }: { params: Pro
     setConverting(true);
     const result = await convertLeadToPatientAction(lead.id, {
       bookAppointment,
-      doctorName: bookAppointment ? doctorName : undefined,
+      doctorId: bookAppointment ? doctorId : undefined,
+      doctorName: bookAppointment ? (selectedDoctor?.name ?? doctorName) : undefined,
       appointmentDate: bookAppointment ? appointmentDate : undefined,
       appointmentTime: bookAppointment ? appointmentTime : undefined,
     });
@@ -275,12 +292,22 @@ export default function OnlineCounsellorLeadDetailPage({ params }: { params: Pro
                     <div className="mb-3 grid gap-3 sm:grid-cols-3">
                       <label className="block text-[12px]">
                         <span className="mb-1 block text-[var(--attio-text-tertiary)]">Doctor</span>
-                        <input
-                          value={doctorName}
-                          onChange={(e) => setDoctorName(e.target.value)}
-                          placeholder="Dr. Mehta"
-                          className="h-9 w-full rounded-lg border border-[var(--attio-border)] px-3"
-                        />
+                        <select
+                          value={doctorId}
+                          onChange={(e) => {
+                            setDoctorId(e.target.value);
+                            const d = doctors.find((x) => x.id === e.target.value);
+                            if (d) setDoctorName(d.name);
+                          }}
+                          className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3 text-[13px]"
+                        >
+                          <option value="">Select doctor</option>
+                          {doctors.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name} {d.department ? `(${d.department})` : ""}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="block text-[12px]">
                         <span className="mb-1 block text-[var(--attio-text-tertiary)]">Date</span>

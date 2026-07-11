@@ -50,6 +50,7 @@ export async function convertLeadToPatientAction(
     doctorName?: string;
     appointmentDate?: string;
     appointmentTime?: string;
+    source?: string;
   },
 ): Promise<ActionResult<LeadToPatientResult>> {
   return runAction(async () => {
@@ -135,3 +136,4 @@ export async function getWalkInCounsellorAction(): Promise<ActionResult<{ id: st
     return resolveWalkInCounsellor(ctx);
   });
 }
+

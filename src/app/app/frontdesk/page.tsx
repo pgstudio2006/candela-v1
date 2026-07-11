@@ -6,7 +6,7 @@ import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, MetricStrip, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useFrontdeskPoll } from "@/hooks/use-frontdesk-poll";
 import { formatStageStatus } from "@/lib/frontdesk-workflow";
-import { Zap } from "lucide-react";
+import { UserPlus, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -45,20 +45,28 @@ export default function FrontdeskDashboardPage() {
       activeTab={tab}
       onTabChange={setTab}
       actions={
-        <AttioButton
-          variant="primary"
-          className="gap-1.5"
-          onClick={() => {
-            if (nextCheckIn) {
-              router.push(`/app/frontdesk/check-in?visit=${nextCheckIn.visit.id}&patient=${nextCheckIn.patient.id}`);
-            } else {
-              router.push("/app/frontdesk/check-in");
-            }
-          }}
-        >
-          <Zap className="size-3.5" />
-          Open next check-in
-        </AttioButton>
+        <div className="flex items-center gap-2">
+          <Link href="/app/frontdesk/leads">
+            <AttioButton variant="secondary" className="gap-1.5">
+              <UserPlus className="size-3.5" />
+              Offline lead
+            </AttioButton>
+          </Link>
+          <AttioButton
+            variant="primary"
+            className="gap-1.5"
+            onClick={() => {
+              if (nextCheckIn) {
+                router.push(`/app/frontdesk/check-in?visit=${nextCheckIn.visit.id}&patient=${nextCheckIn.patient.id}`);
+              } else {
+                router.push("/app/frontdesk/check-in");
+              }
+            }}
+          >
+            <Zap className="size-3.5" />
+            Open next check-in
+          </AttioButton>
+        </div>
       }
     >
       <MetricStrip metrics={kpis} />

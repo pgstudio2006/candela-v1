@@ -1,6 +1,8 @@
 import type { CrmCallOutcome, CrmCommission, CrmLead, CrmLeadStatus } from "@/design-system/crm-data";
 import { prisma } from "@/lib/prisma";
+import { createId } from "@/lib/id";
 import type { ServerContext } from "@/server/context";
+import { bookAppointment } from "@/server/clinical";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
 import { branchScope } from "@/server/tenancy";
@@ -107,6 +109,14 @@ export async function updateLeadStatus(
     },
   });
 
+  if (status === "lost" && lead.phone) {
+    sendWhatsAppAsync(ctx, "lead_lost", lead.phone, {
+      leadName: lead.fullName ?? "there",
+    }).catch((e) => {
+      console.error("[whatsapp] lead-lost message failed:", e);
+    });
+  }
+
   await prisma.activity.create({
     data: {
       id: `act_${leadId}_${Date.now()}`,
@@ -161,6 +171,7 @@ export async function convertLeadToPatient(
     doctorName?: string;
     appointmentDate?: string;
     appointmentTime?: string;
+    source?: string;
   },
 ): Promise<LeadToPatientResult> {
   const lead = await prisma.lead.findFirst({
@@ -223,26 +234,27 @@ export async function convertLeadToPatient(
   await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "patient");
 
   if (options.bookAppointment && options.doctorName) {
-    await prisma.appointment.create({
+    const bookResult = await bookAppointment(ctx, {
       data: {
-        id: `apt_${Date.now()}`,
-        tenantId: ctx.tenantId,
-        branchId: ctx.branchId,
-        patientId,
-        doctorId: options.doctorId ?? null,
-        doctorName: options.doctorName,
-        date: options.appointmentDate ?? null,
-        time: options.appointmentTime ?? null,
-        status: "scheduled",
-        source: "online_counsellor",
+        patient: uhid,
+        doctor: options.doctorId ?? options.doctorName,
+        department: "dept_spine",
+        date: options.appointmentDate ?? new Date().toISOString().slice(0, 10),
+        time: options.appointmentTime ?? "",
+        duration: "15",
+        notes: `Booked by ${options.source ?? "online counsellor"}`,
       },
+      appointmentId: createId("ap"),
+      visitId: createId("v"),
     });
 
-    await prisma.lead.update({
-      where: { id: leadId },
-      data: { leadStatus: "appointment_booked" },
-    });
-    await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "appointment_booked");
+    if (!bookResult.error && bookResult.visitId) {
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: { leadStatus: "appointment_booked" },
+      });
+      await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "appointment_booked");
+    }
   }
 
   await prisma.activity.create({
@@ -257,6 +269,21 @@ export async function convertLeadToPatient(
       at: new Date(),
     },
   });
+
+  if (options.source === "front_desk" && lead.assigneeId) {
+    await prisma.activity.create({
+      data: {
+        id: `act_${leadId}_${Date.now()}_notify`,
+        tenantId: ctx.tenantId,
+        branchId: ctx.branchId,
+        leadId,
+        actor: "Front Desk",
+        type: "notification",
+        summary: `Patient registered from your lead — UHID: ${uhid}`,
+        at: new Date(),
+      },
+    });
+  }
 
   await writePlatformAudit({
     ctx,

@@ -67,6 +67,22 @@ type PatientData = {
     purchasedAt: string;
     status: string;
   }[];
+  pharmacyBills: {
+    id: string;
+    total: number;
+    paid: boolean;
+    paymentMode: string;
+    lines: { drugId: string; qty: number; rate: number; amount: number }[];
+    createdAt: string;
+  }[];
+  pharmacyPrescriptions: {
+    id: string;
+    doctorName: string;
+    source: string;
+    status: string;
+    lines: { drugId: string; drugName?: string; dose: string; frequency: string; duration: string; qtyPrescribed: number; qtyDispensed: number }[];
+    createdAt: string;
+  }[];
 };
 
 export default function CrmPatientDetailPage() {
@@ -120,7 +136,7 @@ export default function CrmPatientDetailPage() {
     );
   }
 
-  const { patient, visits, appointments, prescriptions, consultations, packages } = data;
+  const { patient, visits, appointments, prescriptions, consultations, packages, pharmacyBills, pharmacyPrescriptions } = data;
 
   return (
     <PageChrome
@@ -165,6 +181,7 @@ export default function CrmPatientDetailPage() {
           <TabsTrigger value="visits">Visits ({visits.length})</TabsTrigger>
           <TabsTrigger value="consultations">Consultations ({consultations.length})</TabsTrigger>
           <TabsTrigger value="prescriptions">Prescriptions ({prescriptions.length})</TabsTrigger>
+          <TabsTrigger value="pharmacy">Pharmacy ({pharmacyBills.length + pharmacyPrescriptions.length})</TabsTrigger>
           <TabsTrigger value="appointments">Appointments ({appointments.length})</TabsTrigger>
           <TabsTrigger value="packages">Packages ({packages.length})</TabsTrigger>
         </TabsList>
@@ -213,8 +230,7 @@ export default function CrmPatientDetailPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {v.billAmount != null && <span className="text-[12px] tabular-nums">₹{v.billAmount.toLocaleString("en-IN")}</span>}
-                      <StatusBadge label={v.billing} variant={v.billing === "paid" ? "success" : "warning"} />
+                      <StatusBadge label={v.stage} variant="neutral" />
                     </div>
                   </li>
                 ))}
@@ -273,6 +289,65 @@ export default function CrmPatientDetailPage() {
               </div>
             )}
           </Panel>
+        </TabsContent>
+
+        <TabsContent value="pharmacy" className="mt-4">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel title="Pharmacy bills">
+              {pharmacyBills.length === 0 ? (
+                <p className="py-4 text-[13px] text-[var(--attio-text-tertiary)]">No pharmacy bills found.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {pharmacyBills.map((b) => (
+                    <li key={b.id} className="rounded-lg border border-[var(--attio-border-subtle)] p-3 text-[13px]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{b.id}</span>
+                        <span className="tabular-nums">₹{b.total.toLocaleString("en-IN")}</span>
+                      </div>
+                      <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                        {new Date(b.createdAt).toLocaleDateString("en-IN")} · {b.paid ? `Paid (${b.paymentMode})` : "Pending"}
+                      </p>
+                      <ul className="mt-2 space-y-1 text-[12px]">
+                        {b.lines.map((l, i) => (
+                          <li key={i} className="flex justify-between">
+                            <span>{l.drugId}</span>
+                            <span className="text-[var(--attio-text-tertiary)]">Qty {l.qty}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+            <Panel title="Pharmacy prescriptions / refills">
+              {pharmacyPrescriptions.length === 0 ? (
+                <p className="py-4 text-[13px] text-[var(--attio-text-tertiary)]">No pharmacy prescriptions found.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {pharmacyPrescriptions.map((r) => (
+                    <li key={r.id} className="rounded-lg border border-[var(--attio-border-subtle)] p-3 text-[13px]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{r.id}</span>
+                        <StatusBadge label={r.status} variant="neutral" />
+                      </div>
+                      <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                        {r.doctorName} · {r.source} · {new Date(r.createdAt).toLocaleDateString("en-IN")}
+                      </p>
+                      <ul className="mt-2 space-y-1">
+                        {r.lines.map((l, i) => (
+                          <li key={i} className="flex justify-between text-[12px]">
+                            <span>{l.drugName ?? l.drugId}</span>
+                            <span className="text-[var(--attio-text-tertiary)]">{l.dose} · {l.frequency} · {l.duration}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          </div>
         </TabsContent>
 
         <TabsContent value="appointments" className="mt-4">

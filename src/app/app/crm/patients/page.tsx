@@ -115,7 +115,7 @@ export default function CrmPatientsPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Link href={`/app/frontdesk/patients/${p.id}`}>
+                    <Link href={`/app/crm/patients/${p.id}`}>
                       <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1">
                         <FileText className="size-3" />
                         View
@@ -131,9 +131,6 @@ export default function CrmPatientsPage() {
                         <div key={v.id} className="flex items-center justify-between text-[12px]">
                           <span>
                             Token {v.token ?? "—"} · {v.doctorName ?? "No doctor"} · {v.stage}
-                          </span>
-                          <span className="tabular-nums">
-                            Bill ₹{v.billAmount.toLocaleString("en-IN")} · Paid ₹{v.amountPaid.toLocaleString("en-IN")}
                           </span>
                         </div>
                       ))}

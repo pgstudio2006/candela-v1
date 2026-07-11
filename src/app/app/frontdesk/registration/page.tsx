@@ -222,7 +222,7 @@ export default function RegistrationPage() {
     setSavedUhid(result.uhid);
 
     if (leadDetection?.leadId && !leadDetection.uhid) {
-      const convertResult = await convertLeadToPatientAction(leadDetection.leadId, { bookAppointment: false });
+      const convertResult = await convertLeadToPatientAction(leadDetection.leadId, { bookAppointment: false, source: "front_desk" });
       if (!convertResult.ok) {
         toast(`Patient registered but lead conversion failed: ${convertResult.error}`, "error");
       }

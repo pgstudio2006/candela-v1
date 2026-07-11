@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getServerContext } from "@/server/context";
+import { defaultPharmacyState } from "@/server/revenue/state-seeds";
 import { serializeForClient } from "@/server/serialize";
+import { readPharmacyWorkspace } from "@/server/workspace-state";
 
 export async function GET(
   request: Request,
@@ -107,6 +109,16 @@ export async function GET(
       }
     }
 
+    const pharmacyState = await readPharmacyWorkspace(ctx, () => defaultPharmacyState({})).catch(() => null);
+    const pharmacyBills =
+      pharmacyState?.bills.filter(
+        (b) => b.uhid === patient.uhid || b.patientName.toLowerCase() === patient.fullName.toLowerCase(),
+      ) ?? [];
+    const pharmacyPrescriptions =
+      pharmacyState?.prescriptions.filter(
+        (r) => r.uhid === patient.uhid || r.patientName.toLowerCase() === patient.fullName.toLowerCase(),
+      ) ?? [];
+
     const packages = Array.from(packageMap.entries()).map(([id, entry]) => {
       const pkg = entry.package;
       const baseSessions = pkg.sessions ? Number(pkg.sessions) : null;
@@ -173,6 +185,35 @@ export async function GET(
           treatmentPlan: typeof c.treatment === "string" ? c.treatment : JSON.stringify(c.treatment ?? ""),
           advice: c.doctorAdvice ?? c.notes ?? "",
           createdAt: c.createdAt.toISOString(),
+        })),
+        pharmacyBills: pharmacyBills.map((b) => ({
+          id: b.id,
+          total: b.total,
+          paid: b.paid,
+          paymentMode: b.paymentMode,
+          lines: b.lines.map((l) => ({
+            drugId: l.drugId,
+            qty: l.qty,
+            rate: l.rate,
+            amount: l.qty * l.rate,
+          })),
+          createdAt: b.createdAt,
+        })),
+        pharmacyPrescriptions: pharmacyPrescriptions.map((r) => ({
+          id: r.id,
+          doctorName: r.doctorName,
+          source: r.source,
+          status: r.status,
+          lines: r.lines.map((l) => ({
+            drugId: l.drugId,
+            drugName: l.drugName,
+            dose: l.dose,
+            frequency: l.frequency,
+            duration: l.duration,
+            qtyPrescribed: l.qtyPrescribed,
+            qtyDispensed: l.qtyDispensed,
+          })),
+          createdAt: r.createdAt,
         })),
         packages,
       }),

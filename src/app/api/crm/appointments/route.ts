@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { createId } from "@/lib/id";
 import { getServerContext } from "@/server/context";
 import { serializeForClient } from "@/server/serialize";
+import { bookAppointment } from "@/server/clinical";
 
 export async function GET() {
   const session = await auth();
@@ -58,6 +60,55 @@ export async function GET() {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load appointments.";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ ok: false, error: "Please sign in first." }, { status: 401 });
+  }
+
+  try {
+    const ctx = await getServerContext();
+    const body = (await request.json()) as {
+      patientUhid: string;
+      doctorId: string;
+      departmentId: string;
+      date: string;
+      time: string;
+      duration?: string;
+      notes?: string;
+    };
+
+    const result = await bookAppointment(ctx, {
+      data: {
+        patient: body.patientUhid,
+        doctor: body.doctorId,
+        department: body.departmentId,
+        date: body.date,
+        time: body.time,
+        duration: body.duration ?? "15",
+        notes: body.notes ?? "",
+      },
+      appointmentId: createId("ap"),
+      visitId: createId("v"),
+    });
+
+    if (result.error || !result.visitId) {
+      return NextResponse.json(
+        { ok: false, error: result.error ?? "Could not book appointment" },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      data: { appointmentId: result.appointmentId, visitId: result.visitId },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to book appointment.";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

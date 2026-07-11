@@ -19,6 +19,7 @@ import { notifyCounsellorQuoteWhatsapp } from "@/server/notifications";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { branchScope } from "@/server/tenancy";
 import { syncVisitFromOpdVisit } from "@/server/visit-sync";
+import { updateLeadStatusWhenVisitCompleted } from "@/server/crm/visit-bridge";
 import { readCounsellorWorkspace, writeCounsellorWorkspace } from "@/server/workspace-state";
 
 type CounsellorPrefs = {
@@ -672,6 +673,7 @@ export async function completeCounselSession(
 
   const updatedOpd = await prisma.opdVisit.findUnique({ where: { id: visitId } });
   if (updatedOpd) await syncVisitFromOpdVisit(ctx, updatedOpd);
+  await updateLeadStatusWhenVisitCompleted(ctx, visitId);
 
   if (sendBilling && validated.quote && validated.whatsappSent && patient.phone) {
     await notifyCounsellorQuoteWhatsapp(ctx, {

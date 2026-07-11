@@ -2,8 +2,16 @@
 
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
-import { Calendar, ExternalLink, Search, Stethoscope } from "lucide-react";
-import Link from "next/link";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Calendar, Plus, Search, Stethoscope } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type AppointmentData = {
@@ -29,6 +37,31 @@ export default function CrmAppointmentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [doctorFilter, setDoctorFilter] = useState("");
   const [query, setQuery] = useState("");
+
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [patients, setPatients] = useState<{ id: string; fullName: string | null; uhid: string; phone: string | null }[]>([]);
+  const [selectedPatientUhid, setSelectedPatientUhid] = useState("");
+  const [selectedDoctorId, setSelectedDoctorId] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [duration, setDuration] = useState("15");
+  const [notes, setNotes] = useState("");
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (bookingOpen) {
+      void (async () => {
+        try {
+          const res = await fetch("/api/crm/patients", { credentials: "include" });
+          const json = await res.json();
+          if (json.ok) setPatients((json.data ?? []).map((p: any) => ({ id: p.id, fullName: p.fullName, uhid: p.uhid, phone: p.phone })));
+        } catch {
+          setPatients([]);
+        }
+      })();
+    }
+  }, [bookingOpen]);
 
   const load = async () => {
     try {
@@ -81,20 +114,66 @@ export default function CrmAppointmentsPage() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredAppointments]);
 
+  const handleBook = async () => {
+    if (!selectedPatientUhid || !selectedDoctorId || !date || !time) {
+      setBookingError("Please select a patient, doctor, date and time.");
+      return;
+    }
+    const doctor = data?.doctors.find((d) => d.id === selectedDoctorId);
+    if (!doctor) {
+      setBookingError("Selected doctor not found.");
+      return;
+    }
+    setBookingLoading(true);
+    setBookingError(null);
+    try {
+      const res = await fetch("/api/crm/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          patientUhid: selectedPatientUhid,
+          doctorId: selectedDoctorId,
+          departmentId: doctor.department ? doctor.department.split(",")[0].trim() : "dept_spine",
+          date,
+          time,
+          duration,
+          notes,
+        }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setBookingOpen(false);
+        setSelectedPatientUhid("");
+        setSelectedDoctorId("");
+        setDate("");
+        setTime("");
+        setDuration("15");
+        setNotes("");
+        await load();
+      } else {
+        setBookingError(json.error ?? "Booking failed.");
+      }
+    } catch {
+      setBookingError("Network error. Please try again.");
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
   return (
     <PageChrome
       breadcrumbs={[{ label: "CRM", href: "/app/crm" }, { label: "Appointments" }]}
       title="Appointments"
       meta="View all branch appointments · book for converted patients"
       actions={
-        <Link
-          href="/app/frontdesk/appointments"
-          target="_blank"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--attio-text)] px-3 text-[12px] font-medium text-white hover:opacity-90"
+        <AttioButton
+          variant="primary"
+          onClick={() => setBookingOpen(true)}
         >
-          <ExternalLink className="size-3.5" />
+          <Plus className="size-3.5" />
           Book appointment
-        </Link>
+        </AttioButton>
       }
     >
       <Panel title="Filters">
@@ -188,6 +267,95 @@ export default function CrmAppointmentsPage() {
           </div>
         </Panel>
       )}
+
+      <Dialog open={bookingOpen} onOpenChange={setBookingOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Book appointment</DialogTitle>
+            <DialogDescription>Schedule an appointment for a converted patient.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-[13px]">
+            <div>
+              <Label className="text-[12px]">Patient</Label>
+              <select
+                value={selectedPatientUhid}
+                onChange={(e) => setSelectedPatientUhid(e.target.value)}
+                className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
+              >
+                <option value="">Select patient</option>
+                {patients.map((p) => (
+                  <option key={p.uhid} value={p.uhid}>
+                    {p.fullName || p.uhid} · {p.uhid} · {p.phone ?? "—"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-[12px]">Doctor</Label>
+              <select
+                value={selectedDoctorId}
+                onChange={(e) => setSelectedDoctorId(e.target.value)}
+                className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
+              >
+                <option value="">Select doctor</option>
+                {data?.doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} {d.department ? `(${d.department})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-[12px]">Date</Label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
+                />
+              </div>
+              <div>
+                <Label className="text-[12px]">Time</Label>
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-[12px]">Duration (minutes)</Label>
+              <input
+                type="number"
+                min={5}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
+              />
+            </div>
+            <div>
+              <Label className="text-[12px]">Notes</Label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px]"
+              />
+            </div>
+            {bookingError && <p className="text-[12px] text-red-600">{bookingError}</p>}
+          </div>
+          <DialogFooter>
+            <AttioButton variant="secondary" onClick={() => setBookingOpen(false)}>
+              Cancel
+            </AttioButton>
+            <AttioButton variant="primary" disabled={bookingLoading} onClick={() => void handleBook()}>
+              {bookingLoading ? "Booking…" : "Book appointment"}
+            </AttioButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageChrome>
   );
 }

@@ -37,6 +37,7 @@ import {
 } from "@/server/nurse/guards";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { syncVisitFromOpdVisit } from "@/server/visit-sync";
+import { updateLeadStatusWhenVisitCompleted } from "@/server/crm/visit-bridge";
 
 const NURSING_STAGES = ["nursing_queue", "nursing_active", "ipd_admitted"] as const;
 
@@ -746,6 +747,7 @@ export async function completeEpisode(ctx: ServerContext, visitId: string) {
   });
 
   await syncVisitAfterUpdate(ctx, visitId);
+  await updateLeadStatusWhenVisitCompleted(ctx, visitId);
 
   await writePlatformAudit({
     ctx,

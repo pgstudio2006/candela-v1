@@ -6,7 +6,8 @@ import { AttioButton, DataTable, StatusBadge, Panel } from "@/components/frontde
 import { PharmacyDialog, PharmacyInput, PharmacySelect, FormRow } from "@/components/pharmacy/ui";
 import type { PharmacyBill } from "@/design-system/pharmacy-data";
 import type { PaymentMode } from "@/design-system/pharmacy-data";
-import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export default function PharmacyBillingPage() {
   const { bills, getDrug, markBillPaid, applyBillDiscount } = usePharmacyStore();
@@ -15,6 +16,43 @@ export default function PharmacyBillingPage() {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountReason, setDiscountReason] = useState("");
   const [applyingDiscount, setApplyingDiscount] = useState(false);
+  const [whatsappSending, setWhatsappSending] = useState(false);
+  const [cartUhid, setCartUhid] = useState<string | null>(null);
+
+  const cartBills = useMemo(() => {
+    if (!cartUhid) return [];
+    return bills.filter((b) => b.uhid === cartUhid);
+  }, [bills, cartUhid]);
+
+  const handleWhatsAppBill = async (bill: PharmacyBill) => {
+    if (!bill.uhid) return;
+    setWhatsappSending(true);
+    try {
+      const res = await fetch("/api/pharmacy/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          type: "bill",
+          billId: bill.id,
+          uhid: bill.uhid,
+          patientName: bill.patientName,
+          total: bill.total,
+          paymentStatus: bill.paid ? `Paid (${bill.paymentMode})` : "Pending",
+        }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        alert("Bill sent on WhatsApp.");
+      } else {
+        alert(json.error ?? "Failed to send WhatsApp.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setWhatsappSending(false);
+    }
+  };
 
   const handleApplyDiscount = async () => {
     if (!selected || discountPercent <= 0 || !discountReason.trim()) return;
@@ -78,6 +116,51 @@ export default function PharmacyBillingPage() {
       />
       {bills.length === 0 && (
         <p className="mt-4 text-[13px] text-[var(--attio-text-tertiary)]">Bills appear after dispense from Prescriptions queue.</p>
+      )}
+
+      {bills.length > 0 && (
+        <Panel title="Finance analysis" className="mt-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
+              <p className="text-[11px] text-[var(--attio-text-tertiary)]">Total revenue</p>
+              <p className="text-[16px] font-semibold tabular-nums">₹{bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}</p>
+            </div>
+            <div className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
+              <p className="text-[11px] text-[var(--attio-text-tertiary)]">Total GST</p>
+              <p className="text-[16px] font-semibold tabular-nums">₹{bills.reduce((s, b) => s + b.gstTotal, 0).toLocaleString("en-IN")}</p>
+            </div>
+            <div className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
+              <p className="text-[11px] text-[var(--attio-text-tertiary)]">Total discount</p>
+              <p className="text-[16px] font-semibold tabular-nums">₹{bills.reduce((s, b) => s + b.discount, 0).toLocaleString("en-IN")}</p>
+            </div>
+            <div className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
+              <p className="text-[11px] text-[var(--attio-text-tertiary)]">Paid / Pending</p>
+              <p className="text-[16px] font-semibold tabular-nums">
+                ₹{bills.filter((b) => b.paid).reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}
+                {" / "}
+                ₹{bills.filter((b) => !b.paid).reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <p className="mb-2 text-[12px] font-medium">Payment mode breakdown</p>
+            <div className="space-y-2">
+              {Array.from(
+                bills
+                  .filter((b) => b.paid)
+                  .reduce((map, b) => map.set(b.paymentMode, (map.get(b.paymentMode) ?? 0) + b.total), new Map<PaymentMode, number>()),
+              ).map(([mode, amount]) => (
+                <div key={mode} className="flex items-center justify-between text-[13px]">
+                  <span className="capitalize">{mode.replace("_", " ")}</span>
+                  <span className="tabular-nums font-medium">₹{amount.toLocaleString("en-IN")}</span>
+                </div>
+              ))}
+              {bills.filter((b) => b.paid).length === 0 && (
+                <p className="text-[13px] text-[var(--attio-text-tertiary)]">No paid bills yet.</p>
+              )}
+            </div>
+          </div>
+        </Panel>
       )}
 
       {selected && (
@@ -167,11 +250,21 @@ export default function PharmacyBillingPage() {
             </p>
 
             <div className="flex flex-wrap justify-end gap-2 pt-2">
+              {selected.uhid && (
+                <AttioButton variant="secondary" onClick={() => setCartUhid(selected.uhid!)}>
+                  View patient cart
+                </AttioButton>
+              )}
               <AttioButton variant="secondary" onClick={() => window.print()}>
                 Print Bill
               </AttioButton>
-              <AttioButton variant="secondary">
-                WhatsApp PDF
+              <AttioButton
+                variant="secondary"
+                disabled={whatsappSending || !selected.uhid}
+                onClick={() => selected && void handleWhatsAppBill(selected)}
+              >
+                {whatsappSending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                WhatsApp Bill
               </AttioButton>
               {!selected.paid && (
                 <AttioButton
@@ -182,6 +275,56 @@ export default function PharmacyBillingPage() {
                   {applyingDiscount ? "Applying..." : "Apply Discount"}
                 </AttioButton>
               )}
+            </div>
+          </div>
+        </PharmacyDialog>
+      )}
+
+      {cartUhid && (
+        <PharmacyDialog
+          open={!!cartUhid}
+          title="Patient medicine cart"
+          subtitle={`UHID: ${cartUhid}`}
+          onClose={() => setCartUhid(null)}
+          width="max-w-xl"
+        >
+          <div className="space-y-4 text-[13px]">
+            {cartBills.length === 0 ? (
+              <p className="text-[var(--attio-text-tertiary)]">No bills found for this patient.</p>
+            ) : (
+              <>
+                <Panel title="Dispensed medicines">
+                  <ul className="divide-y">
+                    {cartBills.flatMap((b) => b.lines).map((line, idx) => {
+                      const drug = getDrug(line.drugId);
+                      return (
+                        <li key={idx} className="flex justify-between py-2">
+                          <div>
+                            <p className="font-medium">{drug?.brandName ?? line.drugId}</p>
+                            <p className="text-[11px] text-[var(--attio-text-tertiary)]">Qty: {line.qty}</p>
+                          </div>
+                          <span>₹{(line.qty * line.rate).toLocaleString("en-IN")}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Panel>
+                <Panel title="Bill history">
+                  <ul className="divide-y">
+                    {cartBills.map((b) => (
+                      <li key={b.id} className="flex justify-between py-2">
+                        <span>{b.id} · {new Date(b.createdAt).toLocaleDateString("en-IN")}</span>
+                        <span className="tabular-nums">₹{b.total.toLocaleString("en-IN")}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Panel>
+              </>
+            )}
+            <div className="flex justify-end">
+              <AttioButton variant="secondary" onClick={() => setCartUhid(null)}>
+                Close
+              </AttioButton>
             </div>
           </div>
         </PharmacyDialog>

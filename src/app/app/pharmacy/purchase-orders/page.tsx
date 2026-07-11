@@ -6,7 +6,7 @@ import { AttioButton, DataTable, StatusBadge, Panel } from "@/components/frontde
 import { PharmacyDialog, PharmacyInput, PharmacySelect, PharmacyTextarea, FormRow } from "@/components/pharmacy/ui";
 import { PO_STATUS_LABELS } from "@/design-system/pharmacy-data";
 import type { PoLine } from "@/design-system/pharmacy-data";
-import { Plus, Trash2, Download, MessageSquare } from "lucide-react";
+import { Plus, Trash2, Download, MessageSquare, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 export default function PharmacyPurchaseOrdersPage() {
@@ -20,6 +20,25 @@ export default function PharmacyPurchaseOrdersPage() {
   const [supplierBillFile, setSupplierBillFile] = useState<File | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "transfer" | "credit">("credit");
+  const [whatsappSending, setWhatsappSending] = useState<string | null>(null);
+
+  const handleWhatsAppPO = async (poId: string) => {
+    setWhatsappSending(poId);
+    try {
+      const res = await fetch("/api/pharmacy/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type: "po", poId }),
+      });
+      const json = await res.json();
+      alert(json.ok ? "PO sent on WhatsApp." : (json.error ?? "Failed to send WhatsApp."));
+    } catch {
+      alert("Network error.");
+    } finally {
+      setWhatsappSending(null);
+    }
+  };
 
   if (!isManager() && !isPurchase()) {
     return (
@@ -141,8 +160,14 @@ export default function PharmacyPurchaseOrdersPage() {
                 <AttioButton variant="ghost" className="!h-7 !text-[11px]" title="Download PDF">
                   <Download className="size-3" />
                 </AttioButton>
-                <AttioButton variant="ghost" className="!h-7 !text-[11px]" title="WhatsApp PDF">
-                  <MessageSquare className="size-3" />
+                <AttioButton
+                  variant="ghost"
+                  className="!h-7 !text-[11px]"
+                  title="WhatsApp PO"
+                  disabled={whatsappSending === p.id}
+                  onClick={() => void handleWhatsAppPO(p.id)}
+                >
+                  {whatsappSending === p.id ? <Loader2 className="size-3 animate-spin" /> : <MessageSquare className="size-3" />}
                 </AttioButton>
               </div>
             ),
