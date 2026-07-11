@@ -12,7 +12,8 @@ import { useToast } from "@/components/ui/toast-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import type { Patient } from "@/design-system/frontdesk-data";
+import type { Patient, Visit } from "@/design-system/frontdesk-data";
+import { getVisitForBillingAction } from "@/app/actions/clinical-actions";
 
 function BillingContent() {
   useFrontdeskPoll();
@@ -46,14 +47,37 @@ function BillingContent() {
   const isPostCounsel = Boolean(counselForVisit);
 
   const [selectedPatient, setSelectedPatient] = useState<Patient | undefined>(activePatient);
+  const [directVisit, setDirectVisit] = useState<Visit | undefined>(undefined);
+  const [directPatient, setDirectPatient] = useState<Patient | undefined>(undefined);
 
   useEffect(() => {
     if (visitParam) setSelectedVisitId(visitParam);
   }, [visitParam]);
 
   useEffect(() => {
-    if (activePatient) setSelectedPatient(activePatient);
-  }, [activePatient?.id]);
+    if (directPatient) setSelectedPatient(directPatient);
+    else if (activePatient) setSelectedPatient(activePatient);
+  }, [activePatient?.id, directPatient?.id]);
+
+  // Directly fetch a visit from URL when it is not in the polled workspace snapshot
+  // (e.g. IPD admissions that live outside the frontdesk queue).
+  useEffect(() => {
+    if (!visitParam) {
+      setDirectVisit(undefined);
+      setDirectPatient(undefined);
+      return;
+    }
+    if (getVisit(visitParam)) return; // already available in store
+    let cancelled = false;
+    void getVisitForBillingAction(visitParam).then((res) => {
+      if (cancelled || !res) return;
+      setDirectVisit(res.visit ?? undefined);
+      setDirectPatient(res.patient ?? undefined);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visitParam, getVisit]);
 
   const resolveVisitForPatient = (patient: Patient) => {
     const visits = getPatientVisits(patient.id);
@@ -64,10 +88,11 @@ function BillingContent() {
   };
 
   const selectedVisit = useMemo(() => {
+    if (directVisit) return directVisit;
     if (selectedVisitId) return getVisit(selectedVisitId);
     if (selectedPatient) return resolveVisitForPatient(selectedPatient);
     return undefined;
-  }, [selectedVisitId, selectedPatient, getVisit, getPatientVisits]);
+  }, [directVisit, selectedVisitId, selectedPatient, getVisit, getPatientVisits]);
 
   const handleBillingSuccess = (result: {
     ok: true;

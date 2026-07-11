@@ -12,6 +12,7 @@ import {
   getActiveReferralDoctors,
   getClinicalSnapshot,
   getReferralDoctorWithPatients,
+  getVisitForBilling,
   listFrontdeskAuditLogs,
   processBilling,
   processCounselBilling,
@@ -96,6 +97,11 @@ export async function processBillingAction(
 export async function getVisitBillingAction(visitId: string) {
   const ctx = await requireModule("frontdesk");
   return getVisitInvoiceForBilling(ctx, visitId);
+}
+
+export async function getVisitForBillingAction(visitId: string) {
+  const ctx = await requireModule("frontdesk");
+  return getVisitForBilling(ctx, visitId);
 }
 
 export async function processCounselBillingAction(

@@ -391,6 +391,19 @@ function buildCounters(
   };
 }
 
+export async function getVisitForBilling(
+  ctx: ServerContext,
+  visitId: string,
+): Promise<{ visit: Visit; patient: Patient } | null> {
+  const scope = branchScope(ctx);
+  const visitRow = await prisma.opdVisit.findFirst({
+    where: { id: visitId, ...scope },
+    include: { patient: true },
+  });
+  if (!visitRow) return null;
+  return { visit: mapVisit(visitRow), patient: mapPrismaPatientRow(visitRow.patient) };
+}
+
 export async function getClinicalSnapshot(ctx: ServerContext): Promise<ClinicalSnapshot> {
   return withPrismaError(async () => {
   await ensureHospitalBootstrap();
