@@ -111,6 +111,7 @@ export function OpdBillingForm({
   ]);
   const [previousPayments, setPreviousPayments] = useState<PaymentSplit[]>([]);
   const [existingInvoice, setExistingInvoice] = useState<null | Awaited<ReturnType<typeof getVisitBillingAction>>>(null);
+  const [isBalancePayment, setIsBalancePayment] = useState(false);
   const [billingMeta, setBillingMeta] = useState<Record<string, string | number | boolean>>({});
 
   const subtotal = lines.reduce((s, l) => s + l.amount * l.quantity, 0);
@@ -138,7 +139,13 @@ export function OpdBillingForm({
     })),
     discount: discountAmount,
   });
-  const net = gstBreakdown.grandTotal;
+  const visitBillTotal = useMemo(() => {
+    const billed = Number(visit?.billAmount ?? 0);
+    if (billed > 0) return billed;
+    return Number(visit?.amountPaid ?? 0) + Number(visit?.balanceDue ?? 0);
+  }, [visit?.billAmount, visit?.amountPaid, visit?.balanceDue]);
+
+  const net = isBalancePayment ? visitBillTotal + gstBreakdown.grandTotal : gstBreakdown.grandTotal;
 
   const updateSplit = (index: number, patch: Partial<PaymentSplit>) => {
     setPaymentSplits((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -153,7 +160,7 @@ export function OpdBillingForm({
   };
 
   const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const previousPaid = previousPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const previousPaid = isBalancePayment ? Number(visit?.amountPaid ?? 0) : previousPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const balanceAfterPay = Math.max(0, net - previousPaid - splitTotal);
 
   useEffect(() => {
@@ -182,15 +189,27 @@ export function OpdBillingForm({
     if (!visit?.id) {
       setExistingInvoice(null);
       setPreviousPayments([]);
+      setIsBalancePayment(false);
       return;
     }
     let cancelled = false;
     void getVisitBillingAction(visit.id).then((inv) => {
       if (cancelled) return;
-      if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
+      const balanceDue = Number(visit?.balanceDue ?? 0);
+      const amountPaid = Number(visit?.amountPaid ?? 0);
+      const billing = visit?.billing;
+      const hasBalance = balanceDue > 0 || billing === "partial" || Boolean(inv && (inv.status === "partial" || inv.balanceAmount > 0));
+      setIsBalancePayment(hasBalance);
+
+      if (hasBalance) {
+        const balance = balanceDue;
+        setPaymentScope("partial");
+        setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: balance }]);
+        setPreviousPayments([{ mode: "previous", amount: amountPaid }]);
+        setExistingInvoice(inv && (inv.status === "partial" || inv.balanceAmount > 0) ? inv : null);
+      } else if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
         setExistingInvoice(inv);
         setPreviousPayments(inv.paymentSplits);
-        // Second payment should only bill new services; keep previous lines off the form.
         if (inv.discountMode) {
           setDiscountMode(inv.discountMode);
           if (inv.discountMode === "percent") setDiscountPercent(inv.discountPercent ?? 0);
@@ -216,7 +235,8 @@ export function OpdBillingForm({
 
   const handleSubmit = () => {
     if (!patient || !visit) return;
-    if (!skipBilling && !lines.length) return;
+    if (!skipBilling && !lines.length && !isBalancePayment) return;
+    if (!skipBilling && paymentScope !== "defer" && splitTotal === 0) return;
 
     const selectedDoctor = doctors.find((d) => d.id === selectedDoctorId);
 
@@ -235,7 +255,7 @@ export function OpdBillingForm({
           ? []
           : paymentScope === "partial"
             ? paymentSplits.filter((p) => p.amount > 0)
-            : [{ mode: paymentSplits[0]?.mode ?? "cash", amount: net }],
+            : [{ mode: paymentSplits[0]?.mode ?? "cash", amount: Math.max(0, net - previousPaid) }],
       ),
       amount: subtotal,
       collectedAmount: splitTotal,
@@ -578,32 +598,34 @@ export function OpdBillingForm({
                 </div>
               </div>
 
-              <Panel title="Totals">
-                <div className="space-y-1 text-[13px]">
-                  <div className="flex justify-between">
-                    <span className="text-[var(--attio-text-secondary)]">Subtotal</span>
-                    <span className="tabular-nums">₹{subtotal.toLocaleString("en-IN")}</span>
-                  </div>
-                  {discountAmount > 0 && (
+              {(!isBalancePayment || lines.length > 0) && (
+                <Panel title="Totals">
+                  <div className="space-y-1 text-[13px]">
                     <div className="flex justify-between">
-                      <span className="text-[var(--attio-text-secondary)]">
-                        Discount{discountMode === "percent" ? ` (${discountPercent}%)` : ""}
-                      </span>
-                      <span className="tabular-nums">−₹{discountAmount.toLocaleString("en-IN")}</span>
+                      <span className="text-[var(--attio-text-secondary)]">Subtotal</span>
+                      <span className="tabular-nums">₹{subtotal.toLocaleString("en-IN")}</span>
                     </div>
-                  )}
-                  {gstBreakdown.taxTotal > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-[var(--attio-text-secondary)]">GST</span>
-                      <span className="tabular-nums">₹{gstBreakdown.taxTotal.toLocaleString("en-IN")}</span>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-[var(--attio-text-secondary)]">
+                          Discount{discountMode === "percent" ? ` (${discountPercent}%)` : ""}
+                        </span>
+                        <span className="tabular-nums">−₹{discountAmount.toLocaleString("en-IN")}</span>
+                      </div>
+                    )}
+                    {gstBreakdown.taxTotal > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-[var(--attio-text-secondary)]">GST</span>
+                        <span className="tabular-nums">₹{gstBreakdown.taxTotal.toLocaleString("en-IN")}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t pt-2 text-[15px] font-semibold">
+                      <span>Net payable</span>
+                      <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
                     </div>
-                  )}
-                  <div className="flex justify-between border-t pt-2 text-[15px] font-semibold">
-                    <span>Net payable</span>
-                    <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
                   </div>
-                </div>
-              </Panel>
+                </Panel>
+              )}
 
               <Panel title="Payment">
                 <div className="mb-4 flex flex-wrap gap-2">
@@ -718,7 +740,7 @@ export function OpdBillingForm({
                       <Label className="text-[11px]">Payment mode</Label>
                       <Select
                         value={paymentSplits[0]?.mode ?? "cash"}
-                        onValueChange={(v) => v && updateSplit(0, { mode: v, amount: net })}
+                        onValueChange={(v) => v && updateSplit(0, { mode: v, amount: Math.max(0, net - previousPaid) })}
                       >
                         <SelectTrigger className="mt-1 h-9 text-[13px]">
                           <SelectValue />
@@ -734,7 +756,7 @@ export function OpdBillingForm({
                     </div>
                     <div>
                       <Label className="text-[11px]">Amount collected</Label>
-                      <Input value={net} readOnly className="mt-1 h-9 bg-[var(--attio-surface)] text-[13px]" />
+                      <Input value={Math.max(0, net - previousPaid)} readOnly className="mt-1 h-9 bg-[var(--attio-surface)] text-[13px]" />
                     </div>
                   </div>
                 )}
@@ -759,7 +781,7 @@ export function OpdBillingForm({
           <AttioButton
             variant="primary"
             className="w-full sm:w-auto"
-            disabled={!skipBilling && lines.length === 0}
+            disabled={!skipBilling && lines.length === 0 && !isBalancePayment}
             onClick={handleSubmit}
           >
             {skipBilling

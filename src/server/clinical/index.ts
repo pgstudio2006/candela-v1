@@ -841,7 +841,11 @@ export async function processBilling(
   const previousBillAmount = visit.billAmount ?? 0;
   const previousAmountPaid = visit.amountPaid ?? 0;
   const previousBalance = visit.balanceDue ?? 0;
-  const currentCollected = billingCollectedTotal(payload, net);
+  const splitsTotal = payload.paymentSplits.reduce((s, p) => s + p.amount, 0);
+  const currentCollected =
+    payload.skipBilling || paymentScope === "defer"
+      ? 0
+      : Math.min(splitsTotal, previousBalance + net);
   const newBillAmount = previousBillAmount + net;
   const newAmountPaid = previousAmountPaid + currentCollected;
   const newBalance = Math.max(0, newBillAmount - newAmountPaid);
@@ -851,7 +855,7 @@ export async function processBilling(
 
   const route = isIpd
     ? {
-        billing: isFinal ? "paid" : (billingFromPayment(paymentScope, mode) as BillingStatus),
+        billing: isFinal ? "paid" : (paymentScope === "defer" ? "deferred" : "partial"),
         stage: "ipd_admitted" as Visit["stage"],
         routingLabel: isFinal ? "IPD bill paid" : "IPD bill updated",
         routeHref: "/app/frontdesk/ipd",
@@ -861,9 +865,7 @@ export async function processBilling(
       }
     : paymentScope === "defer" || payload.skipBilling
       ? resolveOpdFirstRoute({ paymentScope: "defer", mode: "defer", visitId, netAmount: newBillAmount, collected: 0 })
-      : isFinal
-        ? resolveOpdFirstRoute({ paymentScope: "full", mode, visitId, netAmount: newBillAmount, collected: newAmountPaid })
-        : resolveOpdFirstRoute({ paymentScope: "partial", mode, visitId, netAmount: newBillAmount, collected: currentCollected });
+      : resolveOpdFirstRoute({ paymentScope: newBalance > 0 ? "partial" : "full", mode, visitId, netAmount: newBillAmount, collected: newAmountPaid });
 
   const invoicePaymentScope = payload.skipBilling || paymentScope === "defer" ? "defer" : isFinal ? "full" : "partial";
 
@@ -880,6 +882,23 @@ export async function processBilling(
   const assignedDoctorId = data.doctorId ? String(data.doctorId) : undefined;
   const assignedDoctorName = data.doctorName ? String(data.doctorName) : undefined;
 
+  // When there is an outstanding balance from a previous partial payment, generate a
+  // running receipt (Balance payment) instead of a new itemized tax invoice.
+  const hasPreviousBalance = previousBalance > 0;
+  const invoiceSubtotal = hasPreviousBalance ? previousBalance + net : subtotal;
+  const invoiceDiscount = hasPreviousBalance ? 0 : payload.discount;
+  const invoiceGstOverride = hasPreviousBalance
+    ? { gstRatePercent: 0, taxMode: "exempt" as const }
+    : { gstRatePercent: payload.gstRatePercent, taxMode: gstTaxMode };
+  const invoiceLabel = hasPreviousBalance ? "Balance payment" : lineLabel;
+  const invoiceLines = hasPreviousBalance
+    ? []
+    : payload.packageLines.map((line) => ({
+        label: line.label,
+        quantity: line.quantity,
+        taxableAmount: line.amount * line.quantity,
+      }));
+
   await prisma.$transaction(async (tx) => {
     // Adjust patient balance by the change in outstanding balance, not the whole balance.
     const balanceDelta = newBalance - previousBalance;
@@ -891,7 +910,7 @@ export async function processBilling(
       where: { id: visitId },
       data: {
         stage: route.stage,
-        billing: isFinal ? "paid" : billingFromPayment(paymentScope, mode),
+        billing: isFinal ? "paid" : paymentScope === "defer" || payload.skipBilling ? "deferred" : "partial",
         token: assignedToken,
         billAmount: newBillAmount,
         amountPaid: newAmountPaid,
@@ -921,24 +940,17 @@ export async function processBilling(
         {
           visitId,
           patientId: visit.patientId,
-          label: lineLabel,
-          subtotal,
-          discount: payload.discount,
+          label: invoiceLabel,
+          subtotal: invoiceSubtotal,
+          discount: invoiceDiscount,
           discountMode: payload.discountMode,
           discountPercent: payload.discountPercent,
           collected: currentCollected,
           mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
           paymentScope: invoicePaymentScope,
-          lines: payload.packageLines.map((line) => ({
-            label: line.label,
-            quantity: line.quantity,
-            taxableAmount: line.amount * line.quantity,
-          })),
+          lines: invoiceLines,
           paymentSplits: payload.paymentSplits,
-          gstOverride: {
-            gstRatePercent: payload.gstRatePercent,
-            taxMode: gstTaxMode,
-          },
+          gstOverride: invoiceGstOverride,
           packageLines: payload.packageLines,
         },
         tx,
@@ -993,8 +1005,8 @@ export async function processBilling(
   };
 }
 
-export async function fetchVisitReceipt(ctx: ServerContext, visitId: string) {
-  return getVisitReceipt(ctx, visitId);
+export async function fetchVisitReceipt(ctx: ServerContext, visitId: string, invoiceId?: string) {
+  return getVisitReceipt(ctx, visitId, invoiceId);
 }
 
 export async function processCounselBilling(

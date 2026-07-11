@@ -21,7 +21,7 @@ import {
   searchPatientsPaginated,
   updatePatient,
 } from "@/server/clinical";
-import { getVisitInvoiceForBilling } from "@/server/invoicing";
+import { getPatientInvoices, getVisitInvoiceForBilling } from "@/server/invoicing";
 import { requireAuth, requireAnyModule, requireModule } from "@/server/auth";
 import { runAction, type ActionResult } from "@/server/action-result";
 import type { ClinicalSnapshot } from "@/server/clinical";
@@ -175,16 +175,24 @@ export async function getNurseScoresAction(visitId: string): Promise<
   });
 }
 
-export async function getVisitReceiptAction(visitId: string) {
+export async function getVisitReceiptAction(visitId: string, invoiceId?: string) {
   const ctx = await requireAuth();
   try {
-    const receipt = await fetchVisitReceipt(ctx, visitId);
+    const receipt = await fetchVisitReceipt(ctx, visitId, invoiceId);
     return { receipt };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not load receipt.";
     console.error("[getVisitReceiptAction] failed for visit", visitId, "branch", ctx.branchId, err);
     return { error: message || "Could not load receipt." };
   }
+}
+
+export async function getPatientInvoicesAction(patientId: string) {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    const invoices = await getPatientInvoices(ctx, patientId);
+    return { invoices };
+  });
 }
 
 export async function searchPatientsPaginatedAction(input: {

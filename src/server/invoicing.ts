@@ -173,7 +173,25 @@ export async function createVisitInvoice(
 
 const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "cheque", "wallet", "other"]);
 
-export async function getVisitReceipt(ctx: ServerContext, visitId: string): Promise<OpdReceiptPayload> {
+export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoiceId?: string): Promise<OpdReceiptPayload> {
+  const include = {
+    lines: { orderBy: { createdAt: "asc" } as const },
+    payments: { orderBy: { paidAt: "desc" } as const, take: 1 },
+  };
+  type InvoiceWithLines = Prisma.InvoiceGetPayload<{ include: typeof include }>;
+  let invoice: InvoiceWithLines | null = null;
+
+  if (invoiceId) {
+    invoice = await prisma.invoice.findFirst({
+      where: { id: invoiceId, ...branchScope(ctx) },
+      include,
+    });
+    if (!invoice || !invoice.visitId) {
+      throw new ServerActionError("NOT_FOUND", "Invoice not found in your branch.");
+    }
+    visitId = invoice.visitId;
+  }
+
   const visit = await prisma.opdVisit.findFirst({
     where: { id: visitId, ...branchScope(ctx) },
   });
@@ -208,14 +226,16 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string): Prom
   const branch = await prisma.branch.findUnique({ where: { id: ctx.branchId } });
   const branchGst = parseBranchGstSettings(branch?.meta);
 
-  const invoice = await prisma.invoice.findFirst({
-    where: { visitId, ...branchScope(ctx) },
-    orderBy: { createdAt: "desc" },
-    include: {
-      lines: { orderBy: { createdAt: "asc" } },
-      payments: { orderBy: { paidAt: "desc" }, take: 1 },
-    },
-  });
+  if (!invoice) {
+    invoice = await prisma.invoice.findFirst({
+      where: { visitId, ...branchScope(ctx) },
+      orderBy: { createdAt: "desc" },
+      include: {
+        lines: { orderBy: { createdAt: "asc" } },
+        payments: { orderBy: { paidAt: "desc" }, take: 1 },
+      },
+    });
+  }
 
   const amountPaid = Number(invoice?.amountPaid ?? visit.amountPaid ?? 0);
   const balanceDue = Number(invoice?.balanceAmount ?? visit.balanceDue ?? 0);
@@ -329,4 +349,29 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string): Prom
     },
     gstInvoice,
   );
+}
+
+export async function getPatientInvoices(ctx: ServerContext, patientId: string) {
+  const scope = branchScope(ctx);
+  const invoices = await prisma.invoice.findMany({
+    where: { patientId, ...scope },
+    orderBy: { createdAt: "desc" },
+    include: {
+      visit: { select: { id: true, treatmentPath: true } },
+      payments: { orderBy: { paidAt: "asc" } },
+    },
+  });
+  return invoices.map((inv) => ({
+    id: inv.id,
+    visitId: inv.visitId,
+    invoiceNumber: inv.invoiceNumber,
+    status: inv.status,
+    paymentScope: inv.paymentScope,
+    totalAmount: Number(inv.totalAmount),
+    amountPaid: Number(inv.amountPaid),
+    balanceAmount: Number(inv.balanceAmount),
+    createdAt: inv.createdAt.toISOString(),
+    treatmentPath: inv.visit?.treatmentPath,
+    payments: inv.payments.map((p) => ({ mode: p.mode, amount: Number(p.amount), paidAt: p.paidAt ? p.paidAt.toISOString() : null })),
+  }));
 }

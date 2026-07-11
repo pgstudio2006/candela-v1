@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
+import { getPatientInvoicesAction } from "@/app/actions/clinical-actions";
 
 export default function PatientRecordPage() {
   const params = useParams();
@@ -30,6 +31,8 @@ export default function PatientRecordPage() {
   }, [patientVisits]);
   const { setActivePatientId } = useSession();
   const [reprintVisitId, setReprintVisitId] = useState<string | null>(null);
+  const [reprintInvoiceId, setReprintInvoiceId] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<Extract<Awaited<ReturnType<typeof getPatientInvoicesAction>>, { ok: true }>["data"]["invoices"]>([]);
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
   const [selectedCounsellor, setSelectedCounsellor] = useState("");
   const [reassigning, setReassigning] = useState(false);
@@ -40,6 +43,18 @@ export default function PatientRecordPage() {
   useEffect(() => {
     if (patient) setActivePatientId(patient.id);
   }, [patient, setActivePatientId]);
+
+  useEffect(() => {
+    if (!patient) return;
+    let cancelled = false;
+    void getPatientInvoicesAction(patient.id).then((result) => {
+      if (cancelled) return;
+      if (result.ok && result.data) setInvoices(result.data.invoices);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [patient]);
 
   useEffect(() => {
     if (patient) {
@@ -336,6 +351,43 @@ export default function PatientRecordPage() {
               </div>
             ))}
           </Panel>
+
+          <Panel title="All invoices" className="mt-4">
+            {invoices.length === 0 ? (
+              <p className="text-[13px] text-[var(--attio-text-secondary)]">No invoices yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {invoices.map((inv) => (
+                  <li key={inv.id} className="flex flex-col gap-1 rounded-lg border border-[var(--attio-border-subtle)] p-3 text-[13px]">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{inv.invoiceNumber}</span>
+                        <StatusBadge label={inv.status} variant={inv.status === "paid" ? "success" : inv.status === "partial" ? "warning" : "neutral"} />
+                        {inv.treatmentPath === "ipd" && <StatusBadge label="IPD" variant="info" />}
+                      </div>
+                      <span className="text-[12px] text-[var(--attio-text-tertiary)]">{new Date(inv.createdAt).toLocaleString("en-IN")}</span>
+                    </div>
+                    <p className="text-[var(--attio-text-tertiary)]">
+                      Total ₹{inv.totalAmount.toLocaleString("en-IN")}
+                      {` · paid ₹${inv.amountPaid.toLocaleString("en-IN")}`}
+                      {inv.balanceAmount > 0 ? ` · balance ₹${inv.balanceAmount.toLocaleString("en-IN")}` : ""}
+                    </p>
+                    <AttioButton
+                      variant="secondary"
+                      className="mt-1 h-8 gap-1.5 self-start text-[11px]"
+                      onClick={() => {
+                        setReprintVisitId(inv.visitId);
+                        setReprintInvoiceId(inv.id);
+                      }}
+                    >
+                      <Printer className="size-3.5" />
+                      Reprint receipt
+                    </AttioButton>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
         </TabsContent>
 
         <TabsContent value="counsellor" className="mt-4">
@@ -392,7 +444,11 @@ export default function PatientRecordPage() {
       <BillingReceiptModal
         open={Boolean(reprintVisitId)}
         visitId={reprintVisitId}
-        onClose={() => setReprintVisitId(null)}
+        invoiceId={reprintInvoiceId}
+        onClose={() => {
+          setReprintVisitId(null);
+          setReprintInvoiceId(null);
+        }}
       />
     </PageChrome>
   );

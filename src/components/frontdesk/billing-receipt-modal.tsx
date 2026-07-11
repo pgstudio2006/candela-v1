@@ -8,12 +8,14 @@ import { useEffect, useState } from "react";
 type BillingReceiptModalProps = {
   open: boolean;
   visitId: string | null;
+  invoiceId?: string | null;
   onClose: () => void;
 };
 
 export function BillingReceiptModal({
   open,
   visitId,
+  invoiceId,
   onClose,
 }: BillingReceiptModalProps) {
   const [receipt, setReceipt] = useState<OpdReceiptPayload | null>(null);
@@ -31,7 +33,7 @@ export function BillingReceiptModal({
     setLoading(true);
     setError("");
 
-    void getVisitReceiptAction(visitId)
+    void getVisitReceiptAction(visitId, invoiceId ?? undefined)
       .then((data) => {
         if (cancelled) return;
         if ("error" in data) {
