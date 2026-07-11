@@ -417,7 +417,7 @@ model Visit {
   counsellorSessions CounsellorSession[]
   approvals          Approval[]
   billingHandoffs    BillingHandoff[]
-  invoice            Invoice?
+  invoices           Invoice[]
   documents          PatientDocument[]
   emergencyReferrals EmergencyReferral[]
 
