@@ -7,6 +7,8 @@ import { useToast } from "@/components/ui/toast-provider";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+type RouteParams = { id: string };
+
 type ReferredPatient = {
   id: string;
   uhid: string;
@@ -38,13 +40,20 @@ type ReferralProfile = {
   totalCommission: number;
 };
 
-export default function ReferralDoctorDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function ReferralDoctorDetailPage({ params }: { params: Promise<RouteParams> }) {
   const { toast } = useToast();
+  const [paramsResolved, setParamsResolved] = useState<RouteParams | null>(null);
   const [profile, setProfile] = useState<ReferralProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    void params.then((p) => setParamsResolved(p));
+  }, [params]);
+
+  const id = paramsResolved?.id ?? "";
+
+  useEffect(() => {
+    if (!id) return;
     setLoading(true);
     getReferralDoctorWithPatientsAction(id)
       .then((res) => {
