@@ -15,13 +15,14 @@ import { useEffect, useMemo, useState } from "react";
 export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: () => void }) {
   const { drugs, stock, verifyPrescription, rejectPrescription, dispensePrescription, prescriptions } = usePharmacyStore();
   const liveRx = useMemo(() => prescriptions.find((p) => p.id === rx.id) ?? rx, [prescriptions, rx]);
-  const [tab, setTab] = useState<"verify" | "dispense">(rx.status === "pending" ? "verify" : "dispense");
+  const [tab, setTab] = useState<"verify" | "dispense">(liveRx.status === "pending" ? "verify" : "dispense");
   const [rejectReason, setRejectReason] = useState("");
   const [witness, setWitness] = useState("");
   const [qtys, setQtys] = useState<Record<string, number>>({});
   const [batchIds, setBatchIds] = useState<Record<string, string>>({});
   const [addedLines, setAddedLines] = useState<Array<PrescriptionLine & { _local?: boolean }>>([]);
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState<{ text: string; type: "info" | "error" } | null>(null);
+  const [dispensing, setDispensing] = useState(false);
   const [newDrugId, setNewDrugId] = useState("");
   const dispenseSchema = usePublishedFormSchema("pharmacy-dispense");
 
@@ -37,7 +38,7 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
     setAddedLines([]);
   }, [rx]);
 
-  const needsWitness = rx.lines.some((l) => {
+  const needsWitness = liveRx.lines.some((l) => {
     const d = drugs.find((x) => x.id === (l.substituteDrugId ?? l.drugId));
     return d && (d.schedule === "H1" || d.schedule === "X");
   });
@@ -78,12 +79,20 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {msg && <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-[12px] text-blue-900">{msg}</p>}
+          {msg && (
+            <p
+              className={`mb-3 rounded-lg px-3 py-2 text-[12px] ${
+                msg.type === "error" ? "bg-red-50 text-red-900" : "bg-blue-50 text-blue-900"
+              }`}
+            >
+              {msg.text}
+            </p>
+          )}
 
           {tab === "verify" && (
             <div className="space-y-4">
               <ul className="divide-y rounded-lg border">
-                {rx.lines.map((l) => {
+                {liveRx.lines.map((l) => {
                   const drug = drugs.find((d) => d.id === l.drugId);
                   const avail = stock.filter((s) => s.drugId === l.drugId && !s.quarantined).reduce((n, s) => n + s.qtyOnHand - s.reserved, 0);
                   const batch = pickFefoBatch(l.drugId, stock, l.qtyPrescribed);
@@ -109,15 +118,16 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                   );
                 })}
               </ul>
-              {rx.status === "pending" && (
+              {liveRx.status === "pending" && (
                 <div className="flex flex-wrap gap-2">
                   <AttioButton
                     variant="primary"
                     onClick={() => {
-                      void verifyPrescription(rx.id).then(() => {
-                        setMsg("Prescription verified — proceed to dispense.");
+                      setMsg(null);
+                      verifyPrescription(rx.id).then(() => {
+                        setMsg({ text: "Prescription verified — proceed to dispense.", type: "info" });
                         setTab("dispense");
-                      }).catch((err) => setMsg(err instanceof Error ? err.message : "Verify failed"));
+                      }).catch((err) => setMsg({ text: err instanceof Error ? err.message : "Verify failed", type: "error" }));
                     }}
                   >
                     Verify Rx
@@ -128,7 +138,10 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                       variant="secondary"
                       onClick={() => {
                         if (!rejectReason.trim()) return;
-                        void rejectPrescription(rx.id, rejectReason).then(() => onClose());
+                        setMsg(null);
+                        rejectPrescription(rx.id, rejectReason)
+                          .then(() => onClose())
+                          .catch((err) => setMsg({ text: err instanceof Error ? err.message : "Reject failed", type: "error" }));
                       }}
                     >
                       Reject
@@ -141,7 +154,7 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
 
           {tab === "dispense" && (
             <div className="space-y-4">
-              {[...rx.lines, ...addedLines].map((l) => {
+              {[...liveRx.lines, ...addedLines].map((l) => {
                 const drugId = l.substituteDrugId ?? l.drugId;
                 const drug = drugs.find((d) => d.id === drugId);
                 const remaining = "_local" in l && l._local ? qtys[l.id] ?? 0 : l.qtyPrescribed - l.qtyDispensed;
@@ -257,30 +270,36 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                   await saveSubmissionAction("pharmacy-dispense", data, {
                     visitId: rx.encounterId,
                   });
-                  setMsg("Dispensing checklist saved.");
+                  setMsg({ text: "Dispensing checklist saved.", type: "info" });
                 }}
               />
               <AttioButton
                 variant="primary"
-                disabled={!["verified", "partially_dispensed"].includes(liveRx.status)}
+                disabled={dispensing || !["verified", "partially_dispensed"].includes(liveRx.status)}
                 onClick={() => {
+                  setMsg(null);
+                  setDispensing(true);
                   const newLines = addedLines
                     .filter((l) => (qtys[l.id] ?? 0) > 0)
                     .map((l) => ({ ...l, qtyPrescribed: qtys[l.id] ?? l.qtyPrescribed, qtyDispensed: 0 }));
                   const cleanedBatchIds = Object.fromEntries(
                     Object.entries(batchIds).filter(([k]) => (qtys[k] ?? 0) > 0),
                   );
-                  void dispensePrescription(rx.id, qtys, witness || undefined, cleanedBatchIds, newLines).then((result) => {
-                    if (!result.ok) setMsg(result.error ?? "Dispense failed");
-                    else if (rx.source === "ipd") {
-                      setMsg(`Dispensed — charges added to IPD cart for ${rx.patientName}. Payment at discharge.`);
-                    } else {
-                      setMsg(`Dispensed — bill ${result.billId} created. Collect payment in Billing.`);
-                    }
-                  });
+                  dispensePrescription(rx.id, qtys, witness || undefined, cleanedBatchIds, newLines)
+                    .then((result) => {
+                      if (!result.ok) {
+                        setMsg({ text: result.error ?? "Dispense failed", type: "error" });
+                      } else if (rx.source === "ipd") {
+                        setMsg({ text: `Dispensed — charges added to IPD cart for ${rx.patientName}. Payment at discharge.`, type: "info" });
+                      } else {
+                        setMsg({ text: `Dispensed — bill ${result.billId} created. Collect payment in Billing.`, type: "info" });
+                      }
+                    })
+                    .catch((err) => setMsg({ text: err instanceof Error ? err.message : "Dispense failed", type: "error" }))
+                    .finally(() => setDispensing(false));
                 }}
               >
-                {rx.source === "ipd" ? "Dispense to IPD cart" : "Dispense & create bill"}
+                {dispensing ? "Dispensing…" : rx.source === "ipd" ? "Dispense to IPD cart" : "Dispense & create bill"}
               </AttioButton>
             </div>
           )}

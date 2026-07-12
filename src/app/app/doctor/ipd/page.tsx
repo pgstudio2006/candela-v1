@@ -25,8 +25,10 @@ export default function DoctorIpdPage() {
   const [activeIpd, setActiveIpd] = useState<string | null>(null);
   const [roundHistory, setRoundHistory] = useState<RoundRecord[]>([]);
 
-  const myPatients = ipdPatients.filter(
-    (ip) => ip.attendingDoctorId === activeDoctorId && !["discharged", "deceased"].includes(ip.status),
+  const myPatients = ipdPatients.filter((ip) => ip.attendingDoctorId === activeDoctorId);
+  const activePatients = myPatients.filter((ip) => ip.status === "admitted");
+  const completedPatients = myPatients.filter((ip) =>
+    ["discharge_planned", "doctor_ready", "discharged", "deceased"].includes(ip.status),
   );
 
   const selected = myPatients.find((ip) => ip.id === activeIpd);
@@ -74,38 +76,71 @@ export default function DoctorIpdPage() {
       }
     >
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-        <Panel title="Admitted patients">
-          <ul className="divide-y divide-[var(--attio-border-subtle)]">
-            {myPatients.length === 0 && (
-              <li className="py-6 text-center text-[13px] text-[var(--attio-text-tertiary)]">No IPD patients</li>
-            )}
-            {myPatients.map((ip) => {
-              const p = getPatient(ip.patientId);
-              const due = !ip.lastRoundAt;
-              return (
-                <li key={ip.id}>
-                  <button
-                    type="button"
-                    onClick={() => setActiveIpd(ip.id)}
-                    className={cn(
-                      "w-full py-3 text-left transition-colors",
-                      activeIpd === ip.id && "bg-[var(--attio-surface)] -mx-4 px-4",
-                    )}
-                  >
-                    <p className="text-[13px] font-medium">{p?.name ?? ip.patientId}</p>
-                    <p className="text-[11px] text-[var(--attio-text-tertiary)]">
-                      {ip.ward} · Bed {ip.bed}
-                    </p>
-                    <div className="mt-1 flex gap-1">
-                      <StatusBadge label={ip.status.replace("_", " ")} variant="info" />
-                      {due && <StatusBadge label="Round due" variant="warning" />}
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
+        <div className="space-y-4">
+          <Panel title="Admitted patients">
+            <ul className="divide-y divide-[var(--attio-border-subtle)]">
+              {activePatients.length === 0 && (
+                <li className="py-6 text-center text-[13px] text-[var(--attio-text-tertiary)]">No active IPD patients</li>
+              )}
+              {activePatients.map((ip) => {
+                const p = getPatient(ip.patientId);
+                const due = !ip.lastRoundAt;
+                return (
+                  <li key={ip.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveIpd(ip.id)}
+                      className={cn(
+                        "w-full py-3 text-left transition-colors",
+                        activeIpd === ip.id && "bg-[var(--attio-surface)] -mx-4 px-4",
+                      )}
+                    >
+                      <p className="text-[13px] font-medium">{p?.name ?? ip.patientId}</p>
+                      <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                        {ip.ward} · Bed {ip.bed}
+                      </p>
+                      <div className="mt-1 flex gap-1">
+                        <StatusBadge label={ip.status.replace("_", " ")} variant="info" />
+                        {due && <StatusBadge label="Round due" variant="warning" />}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+
+          <Panel title="Discharge / completed">
+            <ul className="divide-y divide-[var(--attio-border-subtle)]">
+              {completedPatients.length === 0 && (
+                <li className="py-6 text-center text-[13px] text-[var(--attio-text-tertiary)]">No completed admissions</li>
+              )}
+              {completedPatients.map((ip) => {
+                const p = getPatient(ip.patientId);
+                return (
+                  <li key={ip.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveIpd(ip.id)}
+                      className={cn(
+                        "w-full py-3 text-left transition-colors",
+                        activeIpd === ip.id && "bg-[var(--attio-surface)] -mx-4 px-4",
+                      )}
+                    >
+                      <p className="text-[13px] font-medium">{p?.name ?? ip.patientId}</p>
+                      <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                        {ip.ward} · Bed {ip.bed}
+                      </p>
+                      <div className="mt-1 flex gap-1">
+                        <StatusBadge label={ip.status.replace("_", " ")} variant={ip.status === "discharged" ? "success" : "warning"} />
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+        </div>
 
         {selected ? (
           <IpdRoundWorkspace

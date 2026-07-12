@@ -233,11 +233,13 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
           data.prescriptions.filter((r) => !["dispensed", "cancelled", "rejected"].includes(r.status)),
         ),
       verifyPrescription: async (id, counselingNotes) => {
-        await pharmacyMutate({ op: "verifyPrescription", operatorId: opId(), rxId: id, counselingNotes });
+        const res = await pharmacyMutate({ op: "verifyPrescription", operatorId: opId(), rxId: id, counselingNotes });
+        if (!res.ok) throw new Error(res.error ?? "Failed to verify prescription");
         await refresh({ silent: true });
       },
       rejectPrescription: async (id, reason) => {
-        await pharmacyMutate({ op: "rejectPrescription", operatorId: opId(), rxId: id, reason });
+        const res = await pharmacyMutate({ op: "rejectPrescription", operatorId: opId(), rxId: id, reason });
+        if (!res.ok) throw new Error(res.error ?? "Failed to reject prescription");
         await refresh({ silent: true });
       },
       dispensePrescription: async (id, quantities, witnessName, batchIds, newLines) => {
