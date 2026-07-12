@@ -152,13 +152,13 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!authReady || !session?.pharmacyOperatorId) return;
+    if (!authReady || !operatorId) return;
     let cancelled = false;
 
     const load = async (attempt = 0) => {
       if (cancelled) return;
       try {
-        const result = await loadPharmacySnapshot(session.pharmacyOperatorId!);
+        const result = await loadPharmacySnapshot(operatorId);
         if (cancelled) return;
         if (result.ok) {
           setState(result.data);
@@ -184,7 +184,7 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [authReady, session?.pharmacyOperatorId]);
+  }, [authReady, operatorId]);
 
   const value = useMemo<Store>(() => {
     const data = state ?? {

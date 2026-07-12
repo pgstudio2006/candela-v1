@@ -1,11 +1,12 @@
 "use client";
 
 import { PageChrome } from "@/components/frontdesk/page-chrome";
+import { AttioButton } from "@/components/frontdesk/ui";
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
 import Link from "next/link";
 
 export default function AdminPharmacyPage() {
-  const { ready } = usePharmacyStore();
+  const { ready, error, refresh } = usePharmacyStore();
 
   const cards = [
     { label: "Stock inventory", href: "/app/pharmacy/inventory", desc: "View live batches, expiry, low stock and quarantine." },
@@ -22,6 +23,13 @@ export default function AdminPharmacyPage() {
     >
       {!ready ? (
         <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading pharmacy workspace…</p>
+      ) : error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <p className="text-[13px] text-red-700">Could not load pharmacy workspace: {error}</p>
+          <AttioButton variant="secondary" className="mt-3" onClick={() => void refresh()}>
+            Retry
+          </AttioButton>
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map((c) => (
