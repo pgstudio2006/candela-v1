@@ -2,6 +2,7 @@ import type {
   Drug,
   PaymentMode,
   PharmacyBill,
+  PharmacyStaff,
   PoLine,
   Prescription,
   PurchaseOrder,
@@ -61,8 +62,35 @@ async function persistState(ctx: ServerContext, state: PharmacyStateShape) {
   await writePharmacyWorkspace(ctx, payload);
 }
 
+async function ensureOperatorInState(ctx: ServerContext, state: PharmacyStateShape, operatorId: string): Promise<PharmacyStateShape> {
+  if (!operatorId) return state;
+  const existing = state.staff.find((s) => s.id === operatorId);
+  if (existing?.active) return state;
+  const credential = await prisma.pharmacyOperatorCredential.findUnique({ where: { id: operatorId } });
+  if (!credential || !credential.active) return state;
+  const role = (credential.role as PharmacyStaff["role"]) ?? "opd";
+  const staff = state.staff.filter((s) => s.id !== operatorId);
+  const updated: PharmacyStateShape = {
+    ...state,
+    staff: [
+      ...staff,
+      {
+        id: credential.id,
+        name: credential.name,
+        email: credential.email,
+        role,
+        licenseNo: credential.licenseNo ?? "",
+        active: true,
+      },
+    ],
+  };
+  await persistState(ctx, updated);
+  return updated;
+}
+
 async function withOperator(ctx: ServerContext, operatorId: string, fn: (state: PharmacyStateShape, operator: ReturnType<typeof resolveStaffOperator>) => Promise<PharmacyStateShape>) {
-  const state = await readState(ctx);
+  let state = await readState(ctx);
+  state = await ensureOperatorInState(ctx, state, operatorId);
   const operator = resolveStaffOperator(state, operatorId);
   const next = await fn(state, operator);
   await persistState(ctx, next);
@@ -131,7 +159,8 @@ function mapRelationalPrescription(row: {
 }
 
 export async function getPharmacySnapshot(ctx: ServerContext, operatorId: string): Promise<PharmacySnapshot> {
-  const state = await readState(ctx);
+  let state = await readState(ctx);
+  state = await ensureOperatorInState(ctx, state, operatorId);
   let activeOperatorId = operatorId;
   let activeOperatorName = "Pharmacist";
   let activeOperatorRole: PharmacySnapshot["activeOperatorRole"] = "opd";

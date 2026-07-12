@@ -67,11 +67,18 @@ export async function syncCrmAgentToPrisma(ctx: ServerContext, agent: CrmAgent) 
   });
 }
 
-export async function syncCrmLeadToPrisma(ctx: ServerContext, lead: CrmLead) {
+export async function syncCrmLeadToPrisma(ctx: ServerContext, lead: CrmLead, agents?: CrmAgent[]) {
   if (!lead) return;
   const { stageId, pipelineId } = await ensureCrmPipelineAndStage(ctx);
-  if (lead.assigneeId) {
-    // No agent object available here; sync will be handled separately by agent hooks.
+  let assigneeId: string | null = lead.assigneeId ?? null;
+  if (assigneeId) {
+    const agent = agents?.find((a) => a.id === assigneeId);
+    if (agent) {
+      await syncCrmAgentToPrisma(ctx, agent);
+    } else {
+      const exists = await prisma.agent.findUnique({ where: { id: assigneeId } });
+      if (!exists) assigneeId = null;
+    }
   }
   await prisma.lead.upsert({
     where: { id: lead.id },
@@ -81,7 +88,7 @@ export async function syncCrmLeadToPrisma(ctx: ServerContext, lead: CrmLead) {
       branchId: ctx.branchId,
       pipelineId,
       stageId,
-      assigneeId: lead.assigneeId ?? null,
+      assigneeId,
       patientId: lead.patientId ?? null,
       fullName: lead.fullName,
       phone: lead.phone,
@@ -118,7 +125,7 @@ export async function syncCrmLeadToPrisma(ctx: ServerContext, lead: CrmLead) {
     },
     update: {
       stageId,
-      assigneeId: lead.assigneeId ?? null,
+      assigneeId,
       patientId: lead.patientId ?? null,
       fullName: lead.fullName,
       phone: lead.phone,

@@ -9,7 +9,7 @@ import { branchScope } from "@/server/tenancy";
 import { ServerActionError } from "@/server/errors";
 import { readCrmWorkspace, writeCrmWorkspace } from "@/server/workspace-state";
 import { defaultCrmState } from "@/server/revenue/state-seeds";
-import { syncCrmAgentToPrisma, syncCrmLeadToPrisma } from "@/server/crm/sync";
+import { syncCrmLeadToPrisma } from "@/server/crm/sync";
 
 export type LeadToPatientResult = {
   patientId: string;
@@ -324,8 +324,7 @@ export async function detectLeadByMobile(
     });
     if (!workspaceLead) return { found: false };
     const agent = workspaceLead.assigneeId ? state.agents.find((a) => a.id === workspaceLead.assigneeId) : null;
-    if (agent) await syncCrmAgentToPrisma(ctx, agent);
-    await syncCrmLeadToPrisma(ctx, workspaceLead);
+    await syncCrmLeadToPrisma(ctx, workspaceLead, state.agents);
     const syncedLead = await prisma.lead.findUnique({ where: { id: workspaceLead.id } });
     return {
       found: true,

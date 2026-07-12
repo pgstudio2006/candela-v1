@@ -407,7 +407,7 @@ export async function updateLead(ctx: ServerContext, operatorId: string, leadId:
     assertLeadAccess(operator, lead, isManagerOperator(operator));
     const next = mutateUpdateLead(state, leadId, patch);
     const updatedLead = next.leads.find((l) => l.id === leadId);
-    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead);
+    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead, next.agents);
     await writePlatformAudit({
       ctx,
       module: "crm",
@@ -428,7 +428,7 @@ export async function assignLeadManual(ctx: ServerContext, operatorId: string, l
     requireLead(state, leadId);
     const next = mutateAssignLeadManual(state, operator, leadId, agentId);
     const updatedLead = next.leads.find((l) => l.id === leadId);
-    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead);
+    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead, next.agents);
     await writePlatformAudit({
       ctx,
       module: "crm",
@@ -449,7 +449,7 @@ export async function moveLeadStage(ctx: ServerContext, operatorId: string, lead
     if (!stage) throw new ServerActionError("NOT_FOUND", "Stage not found.");
     const next = mutateMoveLeadStage(state, operator, leadId, stageId);
     const updatedLead = next.leads.find((l) => l.id === leadId);
-    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead);
+    if (updatedLead) await syncCrmLeadToPrisma(ctx, updatedLead, next.agents);
     await writePlatformAudit({
       ctx,
       module: "crm",
@@ -477,7 +477,7 @@ export async function ingestFromIntegration(
     duplicate = result.duplicate;
     if (result.leadId && !result.duplicate) {
       const lead = result.state.leads.find((l) => l.id === result.leadId);
-      if (lead) await syncCrmLeadToPrisma(ctx, lead);
+      if (lead) await syncCrmLeadToPrisma(ctx, lead, result.state.agents);
       await writePlatformAudit({
         ctx,
         module: "crm",
@@ -508,7 +508,7 @@ export async function ingestInboundLeadWebhook(
     return { ok: false as const, error: "Integration not connected" };
   }
   const lead = result.state.leads.find((l) => l.id === result.leadId);
-  if (lead) await syncCrmLeadToPrisma(ctx, lead);
+  if (lead) await syncCrmLeadToPrisma(ctx, lead, result.state.agents);
   await persistState(ctx, result.state);
   await writePlatformAudit({
     ctx,
