@@ -15,6 +15,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
 import { getPatientInvoicesAction, getPatientInvoiceReceiptsAction } from "@/app/actions/clinical-actions";
+import { getIpdAdmissionsByPatientAction } from "@/app/actions/ipd-actions";
 import { generateCombinedInvoicePdf, printPdfBytes } from "@/lib/invoice-pdf";
 
 export default function PatientRecordPage() {
@@ -41,6 +42,7 @@ export default function PatientRecordPage() {
   const [reassignToast, setReassignToast] = useState<string | null>(null);
   const [patientStatus, setPatientStatus] = useState<string>("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [ipdAdmissions, setIpdAdmissions] = useState<Extract<Awaited<ReturnType<typeof getIpdAdmissionsByPatientAction>>, { ok: true }>["data"]>([]);
 
   useEffect(() => {
     if (patient) setActivePatientId(patient.id);
@@ -52,6 +54,10 @@ export default function PatientRecordPage() {
     void getPatientInvoicesAction(patient.id).then((result) => {
       if (cancelled) return;
       if (result.ok && result.data) setInvoices(result.data.invoices);
+    });
+    void getIpdAdmissionsByPatientAction(patient.id).then((result) => {
+      if (cancelled) return;
+      if (result.ok && result.data) setIpdAdmissions(result.data);
     });
     return () => {
       cancelled = true;
@@ -172,6 +178,7 @@ export default function PatientRecordPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="visits">Visits</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsTrigger value="ipd">IPD</TabsTrigger>
           <TabsTrigger value="counsellor">Counsellor</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="consents">Consents</TabsTrigger>
@@ -295,6 +302,42 @@ export default function PatientRecordPage() {
                 </li>
               ))}
             </ul>
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="ipd" className="mt-4">
+          <Panel title="IPD admissions">
+            {ipdAdmissions.length === 0 ? (
+              <p className="text-[13px] text-[var(--attio-text-secondary)]">No IPD admissions recorded.</p>
+            ) : (
+              <ul className="space-y-2">
+                {ipdAdmissions.map((a) => (
+                  <li key={a.id} className="rounded-lg border border-[var(--attio-border-subtle)] p-3 text-[13px]">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{a.ward} · Bed {a.bed}</p>
+                        <p className="text-[var(--attio-text-tertiary)]">
+                          Admitted {new Date(a.admittedAt).toLocaleString("en-IN")} · {a.doctorName}
+                        </p>
+                      </div>
+                      <StatusBadge label={a.status.replace("_", " ")} variant={a.status === "discharged" ? "success" : a.status === "discharge_planned" ? "warning" : "info"} />
+                    </div>
+                    <p className="mt-1 text-[var(--attio-text-secondary)]">Diagnosis: {a.diagnosis}</p>
+                    {(() => {
+                      const summary = a.dischargeSummary;
+                      return typeof summary === "object" && summary !== null && Object.keys(summary).length > 0;
+                    })() && (
+                      <p className="mt-1 text-[11px] text-[var(--attio-text-tertiary)]">Discharge summary on file</p>
+                    )}
+                    {a.visitId && (
+                      <Link href={`/app/frontdesk/billing?visit=${a.visitId}`} className="mt-2 inline-block text-[12px] text-[var(--attio-accent)] hover:underline">
+                        View billing →
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </Panel>
         </TabsContent>
 

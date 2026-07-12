@@ -77,7 +77,7 @@ type NurseStoreValue = {
   ) => Promise<void>;
   verifyConsent: (visitId: string, consentId: string) => Promise<void>;
   declineConsent: (visitId: string, consentId: string, reason: string) => Promise<void>;
-  startSession: (visitId: string, bay: string, notes?: string) => Promise<void>;
+  startSession: (visitId: string, bay?: string, notes?: string) => Promise<void>;
   completeSession: (
     visitId: string,
     sessionId: string,

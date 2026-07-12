@@ -6,7 +6,7 @@ import { PublishedSchemaForm } from "@/components/candela/published-schema-form"
 import { useNurseStore } from "@/components/nurse/nurse-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
-import { requiredConsentsComplete, TREATMENT_BAYS, consentProgress } from "@/design-system/nurse-data";
+import { requiredConsentsComplete, consentProgress } from "@/design-system/nurse-data";
 import { useNursePoll } from "@/hooks/use-nurse-poll";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
 import { saveNurseIpdNoteAction } from "@/app/actions/nurse-actions";
@@ -15,7 +15,7 @@ import type { IpdRoundRecord } from "@/server/doctor";
 import { saveSubmissionAction } from "@/app/actions/clinical-actions";
 import { validateFormValues } from "@/lib/schema-registry";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CheckCircle2, HeartPulse, Play, Shield } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Play, Shield } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -54,7 +54,6 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
   const episode = getEpisode(visitId);
 
   const [step, setStep] = useState<Step>("handoff");
-  const [bay, setBay] = useState(TREATMENT_BAYS[0].id);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
@@ -137,7 +136,6 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
   const canTreatment = consentsOk && Boolean(episode?.vitals);
-  const bayLabel = TREATMENT_BAYS.find((b) => b.id === bay)?.label ?? bay;
 
   return (
     <PageChrome
@@ -386,30 +384,10 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
             {!canTreatment && (
               <p className="mb-3 text-[13px] text-amber-700">Complete vitals and verify all required consents before starting.</p>
             )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
-                <p className="text-[11px] text-[var(--attio-text-tertiary)]">Procedure</p>
-                <p className="font-medium">{handoff.packageLabel}</p>
-                <p className="mt-1 text-[12px] text-[var(--attio-text-secondary)]">
-                  Session {activeSession?.sessionNumber ?? 1} of {totalSessions}
-                </p>
-              </div>
-              <label className="block text-[12px]">
-                <span className="mb-1 block text-[var(--attio-text-tertiary)]">Treatment bay</span>
-                <select
-                  value={bay}
-                  onChange={(e) => setBay(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3"
-                  disabled={episode?.status === "in_treatment"}
-                >
-                  {TREATMENT_BAYS.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <p className="mb-2 text-[13px] text-[var(--attio-text-secondary)]">
+              Session {activeSession?.sessionNumber ?? 1} of {totalSessions}
+              {handoff.packageLabel ? ` · ${handoff.packageLabel}` : ""}
+            </p>
             <PublishedSchemaForm
               schemaId="nurse-session-notes"
               hideSubmit
@@ -418,6 +396,21 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
               className="mt-3"
             />
             <div className="mt-4 flex flex-wrap gap-2">
+              <AttioButton
+                variant="secondary"
+                disabled={!patient}
+                onClick={async () => {
+                  setActionError(null);
+                  try {
+                    await saveSubmissionAction("nurse-session-notes", sessionNoteValues, { visitId, patientId: patient.id });
+                    setSessionMessage("Session notes saved.");
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : "Could not save session notes");
+                  }
+                }}
+              >
+                Save session notes
+              </AttioButton>
               {episode?.status !== "in_treatment" && activeSession?.status === "scheduled" && (
                 <AttioButton
                   variant="primary"
@@ -426,7 +419,7 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
                   onClick={async () => {
                     setActionError(null);
                     try {
-                      await startSession(visitId, bayLabel, String(sessionNoteValues.sessionNotes ?? ""));
+                      await startSession(visitId, undefined, String(sessionNoteValues.sessionNotes ?? ""));
                       setSessionMessage(null);
                     } catch (err) {
                       setActionError(err instanceof Error ? err.message : "Could not start session");

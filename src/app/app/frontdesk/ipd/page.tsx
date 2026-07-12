@@ -13,7 +13,7 @@ import { AttioButton, MetricStrip, Panel, StatusBadge } from "@/components/front
 import { PatientSearchField } from "@/components/frontdesk/patient-search-field";
 import { IpdServiceCartPanel } from "@/components/frontdesk/ipd-service-cart-panel";
 import { useToast } from "@/components/ui/toast-provider";
-import type { IpdAdmissionDetail, IpdAdmissionStatus, IpdBillingMode, IpdPatientType, IpdSnapshot } from "@/design-system/ipd-data";
+import type { IpdAdmissionDetail, IpdAdmissionStatus, IpdBillingMode, IpdSnapshot } from "@/design-system/ipd-data";
 import { cn } from "@/lib/utils";
 import { ArrowRightLeft, BedDouble, Calendar, Loader2, Pencil, Plus, Printer, Stethoscope, User } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -106,7 +106,6 @@ export default function FrontdeskIpdPage() {
     const diagnosis = formData.get("diagnosis") as string;
     const wardId = formData.get("wardId") as string;
     const bedId = formData.get("bedId") as string;
-    const patientType = formData.get("patientType") as string;
     const expectedDischarge = formData.get("expectedDischarge") as string;
 
     const result = await admitPatientAction({
@@ -116,7 +115,6 @@ export default function FrontdeskIpdPage() {
       diagnosis,
       wardId,
       bed: bedId,
-      patientType: patientType as IpdPatientType,
       expectedDischarge: expectedDischarge || undefined,
     });
 
@@ -541,15 +539,6 @@ export default function FrontdeskIpdPage() {
                       </select>
                     </label>
                   </div>
-                  <label className="block text-[12px]">
-                    <span className="mb-1 block text-[var(--attio-text-tertiary)]">Patient type</span>
-                    <select name="patientType" className="h-9 w-full rounded-lg border border-[var(--attio-border)] bg-white px-3">
-                      <option value="general">General</option>
-                      <option value="corporate">Corporate</option>
-                      <option value="insurance">Insurance</option>
-                      <option value="vip">VIP</option>
-                    </select>
-                  </label>
                   <label className="block text-[12px]">
                     <span className="mb-1 block text-[var(--attio-text-tertiary)]">Expected discharge</span>
                     <input

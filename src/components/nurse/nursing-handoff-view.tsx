@@ -13,6 +13,9 @@ type NursingHandoffViewProps = {
 
 export function NursingHandoffView({ handoff, patient, visit }: NursingHandoffViewProps) {
   const consult = handoff.consultation;
+  const netAmount = visit?.billAmount ?? handoff.netAmount ?? 0;
+  const amountPaid = visit?.amountPaid ?? handoff.amountPaid ?? 0;
+  const balanceDue = visit?.balanceDue ?? handoff.balanceDue ?? 0;
 
   return (
     <div className="space-y-4 text-[13px]">
@@ -38,16 +41,16 @@ export function NursingHandoffView({ handoff, patient, visit }: NursingHandoffVi
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
           <div>
             <p className="text-[11px] text-[var(--attio-text-tertiary)]">Net package</p>
-            <p className="font-semibold tabular-nums">₹{handoff.netAmount.toLocaleString("en-IN")}</p>
+            <p className="font-semibold tabular-nums">₹{netAmount.toLocaleString("en-IN")}</p>
           </div>
           <div>
             <p className="text-[11px] text-[var(--attio-text-tertiary)]">Collected</p>
-            <p className="font-semibold tabular-nums text-emerald-700">₹{handoff.amountPaid.toLocaleString("en-IN")}</p>
+            <p className="font-semibold tabular-nums text-emerald-700">₹{amountPaid.toLocaleString("en-IN")}</p>
           </div>
           <div>
             <p className="text-[11px] text-[var(--attio-text-tertiary)]">Balance</p>
             <p className="font-semibold tabular-nums text-amber-700">
-              {handoff.balanceDue ? `₹${handoff.balanceDue.toLocaleString("en-IN")}` : "—"}
+              {balanceDue ? `₹${balanceDue.toLocaleString("en-IN")}` : "—"}
             </p>
           </div>
         </div>

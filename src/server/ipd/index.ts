@@ -422,7 +422,7 @@ export async function admitPatient(ctx: ServerContext, input: IpdAdmissionInput)
         bedId: bed.id,
         doctorName,
         diagnosis: input.diagnosis,
-        patientType: input.patientType,
+        patientType: input.patientType ?? "general",
         billingMode: input.billingMode ?? "postpaid",
         expectedDischarge: input.expectedDischarge ? new Date(input.expectedDischarge) : null,
         admittedAt: new Date(),
@@ -550,6 +550,19 @@ export async function updateIpdAdmission(
   }
 
   await prisma.ipdAdmission.update({ where: { id }, data });
+
+  if (patch.status === "discharged" && existing.visitId) {
+    await prisma.nursingEpisode.updateMany({
+      where: { visitId: existing.visitId },
+      data: { status: "completed" },
+    });
+    await prisma.opdVisit.updateMany({
+      where: { id: existing.visitId, tenantId: scope.tenantId, branchId: scope.branchId },
+      data: { stage: "completed" },
+    });
+    const opd = await prisma.opdVisit.findUnique({ where: { id: existing.visitId } });
+    if (opd) await syncVisitFromOpdVisit(ctx, opd);
+  }
 
   await writePlatformAudit({
     ctx,

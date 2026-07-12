@@ -556,15 +556,16 @@ export async function declineConsent(ctx: ServerContext, visitId: string, consen
   );
 }
 
-export async function startSession(ctx: ServerContext, visitId: string, bay: string, notes?: string) {
+export async function startSession(ctx: ServerContext, visitId: string, bay?: string, notes?: string) {
   const { operatorId, operatorName } = await resolveNurseOperator(ctx);
   const episodeRow = await assertNurseOwnsEpisode(ctx, visitId, operatorId);
   const episode = asEpisode(episodeRow);
-  const { session } = validateStartSession(episode, episode.consents, bay);
+  const sessionBay = bay ?? "";
+  const { session } = validateStartSession(episode, episode.consents, sessionBay);
 
   const sessions = episode.sessions.map((s) =>
     s.id === session.id
-      ? { ...s, status: "in_progress" as const, bay, startedAt: new Date().toISOString(), notes: notes ?? s.notes }
+      ? { ...s, status: "in_progress" as const, bay: sessionBay, startedAt: new Date().toISOString(), notes: notes ?? s.notes }
       : s,
   );
 
@@ -924,6 +925,13 @@ export async function saveDischargeSummary(
     where: { visitId },
     data: { dischargeSummary: record },
   });
+  const admission = await prisma.ipdAdmission.findUnique({ where: { visitId } });
+  if (admission) {
+    await prisma.ipdAdmission.update({
+      where: { id: admission.id },
+      data: { dischargeSummary: record },
+    });
+  }
   await writePlatformAudit({
     ctx,
     module: "nurse",

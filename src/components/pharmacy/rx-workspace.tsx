@@ -10,10 +10,11 @@ import { RX_STATUS_LABELS } from "@/design-system/pharmacy-data";
 import { daysToExpiry, isControlledSchedule, pickFefoBatch } from "@/lib/pharmacy-platform";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: () => void }) {
-  const { drugs, stock, verifyPrescription, rejectPrescription, dispensePrescription } = usePharmacyStore();
+  const { drugs, stock, verifyPrescription, rejectPrescription, dispensePrescription, prescriptions } = usePharmacyStore();
+  const liveRx = useMemo(() => prescriptions.find((p) => p.id === rx.id) ?? rx, [prescriptions, rx]);
   const [tab, setTab] = useState<"verify" | "dispense">(rx.status === "pending" ? "verify" : "dispense");
   const [rejectReason, setRejectReason] = useState("");
   const [witness, setWitness] = useState("");
@@ -208,21 +209,27 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                 );
               })}
               <div className="flex items-end gap-2 rounded border p-3">
-                <Input
-                  className="h-9 flex-1 text-[13px]"
-                  placeholder="Type medicine name to add"
+                <select
+                  className="h-9 flex-1 rounded-md border border-[var(--attio-border)] bg-white px-3 text-[13px] outline-none focus:border-[var(--attio-text)]"
                   value={newDrugId}
                   onChange={(e) => setNewDrugId(e.target.value)}
-                />
+                >
+                  <option value="">Select a formulary drug to add…</option>
+                  {drugs.filter((d) => d.active).map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.brandName} ({d.genericName}) — {d.unit}
+                    </option>
+                  ))}
+                </select>
                 <AttioButton variant="secondary" onClick={() => {
-                  const name = newDrugId.trim();
-                  if (!name) return;
-                  const slug = name.toLowerCase().replace(/\s+/g, "_");
+                  if (!newDrugId) return;
+                  const drug = drugs.find((d) => d.id === newDrugId);
+                  if (!drug) return;
                   const id = `rxl_${rx.id}_${Date.now()}`;
                   const newLine: PrescriptionLine & { _local?: boolean } = {
                     id,
-                    drugId: slug,
-                    drugName: name,
+                    drugId: drug.id,
+                    drugName: drug.brandName,
                     dose: "1 tab",
                     frequency: "OD",
                     duration: "1 day",
@@ -255,7 +262,7 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
               />
               <AttioButton
                 variant="primary"
-                disabled={!["verified", "partially_dispensed"].includes(rx.status)}
+                disabled={!["verified", "partially_dispensed"].includes(liveRx.status)}
                 onClick={() => {
                   const newLines = addedLines
                     .filter((l) => (qtys[l.id] ?? 0) > 0)

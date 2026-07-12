@@ -216,6 +216,68 @@ Last sprint focus: **Nurse ↔ IPD integration + IPD billing integrity + doctor 
 - Doctor IPD round history UI was updated to show unified logs; further polish may be needed.
 - The emergency module (`src/server/emergency/`, `/app/frontdesk/emergency`) is scaffolded and may need additional wiring.
 
+## 6.1 Current sprint — 2026-07-12 (in progress)
+
+A new batch of 11 user-reported issues is being worked on. This section tracks the state of that work so the next agent can pick up exactly where the previous one left off.
+
+### 11 open tasks
+
+1. **Pharmacy — Add drug not saving** ✅
+   - Fixed by relaxing the guard: any active pharmacy staff can now add/update drugs (`assertPharmacyStaff`).
+   - Changed files: `src/server/pharmacy/guards.ts`, `src/server/pharmacy/index.ts`.
+
+2. **Pharmacy — Medicine dispense / "Dispense & create bill"** ✅
+   - The modal now tracks the live prescription status from the store so the dispense button is enabled after verification. The free-text "Add medicine" input was replaced with a formulary dropdown so added lines map to real drugs/batches.
+   - Changed files: `src/components/pharmacy/rx-workspace.tsx`.
+
+3. **Frontdesk patient profile — IPD records** ✅
+   - Added an IPD tab showing the patient’s admission history using the existing `getIpdAdmissionsByPatientAction`.
+   - Changed files: `src/app/app/frontdesk/patients/[id]/page.tsx`.
+
+4. **Frontdesk IPD — discharge summary patient-specific** ✅
+   - `saveDischargeSummary` now writes the summary to the corresponding `IpdAdmission` row by `visitId`, so the frontdesk discharge summary is tied to the correct admission.
+   - Changed files: `src/server/nurse/index.ts`.
+
+5. **Frontdesk IPD admit — remove patient type field** ✅
+   - Removed the dropdown from the modal and made `patientType` optional on `IpdAdmissionInput`, defaulting to `"general"` on the server.
+   - Changed files: `src/app/app/frontdesk/ipd/page.tsx`, `src/design-system/ipd-data.ts`, `src/server/ipd/index.ts`.
+
+6. **Frontdesk billing — IPD partial payment calculation** ✅
+   - Removed the erroneous subtraction of `previousPaid` from the full-payment amount so full payments actually clear the total due. Balance payments now default to the current subtotal, allowing partial payments to pay only new charges.
+   - Changed files: `src/components/frontdesk/opd-billing-form.tsx`.
+
+7. **Nurse execution queue — discharged patients** ✅
+   - When `updateIpdAdmission` marks a patient as `discharged`, the linked `NursingEpisode` is set to `completed` and the `OpdVisit` stage is set to `completed`, removing the patient from the nurse queue.
+   - Changed files: `src/server/ipd/index.ts`.
+
+8. **Nurse sidebar — remove Treatment Bays** ✅
+   - Removed the "Treatment bays" section and its `DEPARTMENTS` import.
+   - Changed files: `src/components/nurse/sidebar.tsx`.
+
+9. **Nurse handoff — billing closure sync** ✅
+   - `NursingHandoffView` now uses live `Visit` totals (`billAmount`, `amountPaid`, `balanceDue`) when available, so the full care handoff reflects real payment state.
+   - Changed files: `src/components/nurse/nursing-handoff-view.tsx`.
+
+10. **Nurse session execution — remove bay/procedure & save button** ✅
+    - Removed the "Treatment bay" select and the "Procedure" display from the treatment panel. Made the bay parameter optional on the server and added a "Save session notes" button.
+    - Changed files: `src/components/nurse/execution-workspace.tsx`, `src/components/nurse/nurse-store.tsx`, `src/lib/nurse-validation.ts`, `src/server/nurse/index.ts`.
+
+11. **Validation & commit** ✅
+    - `npx tsc --noEmit --project tsconfig.json` passed with 0 errors.
+    - `npm run build` reaches the production CSV import step, which fails because the local PostgreSQL server at `localhost:5432` is not running. This is an environment issue, not a code/TypeScript issue. All code changes have been committed.
+
+### Key files already changed in the previous session (2026-07-11)
+
+- `src/app/api/crm/appointments/route.ts` — CRM appointments now generate real IDs.
+- `src/server/crm/online-counsellor.ts` — lead conversion uses shared `bookAppointment`.
+- `src/app/app/crm/leads/[id]/page.tsx` — doctor dropdown for CRM appointment booking.
+- `src/server/whatsapp/service.ts` — new pharmacy WhatsApp templates.
+- `src/app/api/pharmacy/whatsapp/route.ts` — new WhatsApp endpoint for bills and POs.
+- `src/app/app/pharmacy/billing/page.tsx` and `purchase-orders/page.tsx` — WhatsApp buttons wired.
+- `src/app/api/crm/patient/[id]/route.ts` and `src/app/app/crm/patients/[id]/page.tsx` — pharmacy data surfaced in CRM patient profile.
+- `src/server/crm/visit-bridge.ts`, `src/server/nurse/index.ts`, `src/server/counsellor/index.ts` — lead status sync on visit complete.
+- `src/app/api/crm/offline-lead/route.ts` and `src/app/app/frontdesk/leads/page.tsx` — offline lead creation.
+
 ---
 
 ## 7. Developer commands
@@ -278,4 +340,4 @@ If build fails because of DB schema mismatch, run `npx prisma db push` first (re
 
 ---
 
-*Last updated: 2026-07-11 — IPD/Nurse integration + multi-invoice billing fix.*
+*Last updated: 2026-07-12 — new 11-item sprint started; this file is the handoff point for the current agent.*

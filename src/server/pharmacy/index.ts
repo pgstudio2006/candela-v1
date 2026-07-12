@@ -36,7 +36,7 @@ import type { DispenseResult } from "@/lib/pharmacy-state-mutations";
 import { validateDispenseQuantities, validateRejectReason } from "@/lib/pharmacy-validation";
 import { prisma } from "@/lib/prisma";
 import type { ServerContext } from "@/server/context";
-import { assertManager, assertPurchaseOrManager } from "@/server/pharmacy/guards";
+import { assertManager, assertPharmacyStaff, assertPurchaseOrManager } from "@/server/pharmacy/guards";
 import { writePlatformAudit } from "@/server/platform-audit";
 import { ensureRevenueSeeded } from "@/server/revenue/bootstrap";
 import { defaultPharmacyState, type PharmacyStateShape } from "@/server/revenue/state-seeds";
@@ -339,7 +339,7 @@ export async function quarantineBatch(ctx: ServerContext, operatorId: string, ba
 
 export async function addDrug(ctx: ServerContext, operatorId: string, drug: Omit<Drug, "id">) {
   await withOperator(ctx, operatorId, async (state, operator) => {
-    assertPurchaseOrManager(operator);
+    assertPharmacyStaff(operator);
     const next = mutateAddDrug(state, operator, drug);
     await writePlatformAudit({
       ctx,
@@ -355,7 +355,7 @@ export async function addDrug(ctx: ServerContext, operatorId: string, drug: Omit
 
 export async function updateDrug(ctx: ServerContext, operatorId: string, id: string, patch: Partial<Drug>) {
   await withOperator(ctx, operatorId, async (state, operator) => {
-    assertPurchaseOrManager(operator);
+    assertPharmacyStaff(operator);
     return mutateUpdateDrug(state, id, patch);
   });
 }

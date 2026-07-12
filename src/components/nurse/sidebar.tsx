@@ -5,7 +5,6 @@ import { CopilotMark } from "@/components/frontdesk/copilot-mark";
 import { SectionLabel } from "@/components/frontdesk/page-chrome";
 import { SidebarIcon } from "@/components/frontdesk/sidebar-icon";
 import { NURSE_NAV } from "@/design-system/nurse-nav";
-import { DEPARTMENTS } from "@/design-system/mock-data";
 import { isPataudiBranch } from "@/lib/auth-types";
 import {
   DropdownMenu,
@@ -139,22 +138,6 @@ export function NurseSidebar({
             {!collapsed && <span>Copilot</span>}
           </button>
         </nav>
-        {!collapsed && (
-          <>
-            <SectionLabel>Treatment bays</SectionLabel>
-            <nav className="space-y-0.5">
-              {["Physio Bay 1", "Physio Bay 2", "Procedure Room"].map((bay) => (
-                <div
-                  key={bay}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-[var(--attio-text-secondary)]"
-                >
-                  <span className="size-2 rounded-full bg-emerald-500 opacity-70" />
-                  <span className="truncate">{bay}</span>
-                </div>
-              ))}
-            </nav>
-          </>
-        )}
       </ScrollArea>
       <div className="shrink-0 border-t border-[var(--attio-border)] p-2">
         <div className={cn("flex items-center gap-2 px-1 py-1", collapsed && "flex-col")}>

@@ -20,3 +20,9 @@ export function assertPurchaseOrManager(operator: PharmacyStaff) {
     throw new ServerActionError("FORBIDDEN", "Purchase or manager access required.");
   }
 }
+
+export function assertPharmacyStaff(operator: PharmacyStaff) {
+  if (!operator.active) {
+    throw new ServerActionError("FORBIDDEN", "Pharmacy staff account is inactive.");
+  }
+}

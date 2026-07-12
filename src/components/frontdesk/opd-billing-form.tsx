@@ -207,9 +207,8 @@ export function OpdBillingForm({
       setIsBalancePayment(hasBalance);
 
       if (hasBalance) {
-        const totalDue = balanceDue + gstBreakdown.grandTotal;
         setPaymentScope("partial");
-        setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: totalDue }]);
+        setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: gstBreakdown.grandTotal }]);
         setPreviousPayments([{ mode: "previous", amount: amountPaid }]);
         setExistingInvoice(inv && (inv.status === "partial" || inv.balanceAmount > 0) ? inv : null);
       } else if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
@@ -260,7 +259,7 @@ export function OpdBillingForm({
           ? []
           : paymentScope === "partial"
             ? paymentSplits.filter((p) => p.amount > 0)
-            : [{ mode: paymentSplits[0]?.mode ?? "cash", amount: Math.max(0, net - previousPaid) }],
+            : [{ mode: paymentSplits[0]?.mode ?? "cash", amount: net }],
       ),
       amount: subtotal,
       collectedAmount: splitTotal,

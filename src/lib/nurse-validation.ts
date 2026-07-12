@@ -30,7 +30,7 @@ export const uploadConsentSchema = z.object({
 });
 
 export const startSessionSchema = z.object({
-  bay: z.string().min(1).max(80),
+  bay: z.string().max(80).optional(),
 });
 
 export function validateSaveVitals(vitals: z.infer<typeof vitalsInputSchema>) {
@@ -63,7 +63,7 @@ export function validateUploadConsent(data: z.infer<typeof uploadConsentSchema>)
   return parsed.data;
 }
 
-export function validateStartSession(episode: NursingEpisode, consents: ConsentRecord[], bay: string) {
+export function validateStartSession(episode: NursingEpisode, consents: ConsentRecord[], bay?: string) {
   const parsed = startSessionSchema.safeParse({ bay });
   if (!parsed.success) {
     throw new ServerActionError("VALIDATION", parsed.error.issues[0]?.message ?? "Invalid bay");
