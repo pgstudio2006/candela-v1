@@ -1,5 +1,6 @@
 import type {
   Drug,
+  PaymentMode,
   PharmacyActivity,
   PharmacyBill,
   PharmacyBillLine,
@@ -517,6 +518,91 @@ export function mutateCreateReturn(
       `Return created for ${bill.patientName} — ${line.drugId} × ${input.qty}`,
       ret.id,
     ),
+  };
+}
+
+export type ManualPharmacyBillInput = {
+  patientName: string;
+  uhid?: string;
+  lines: { drugId: string; qty: number }[];
+  discount?: number;
+  discountReason?: string;
+  paymentMode?: PaymentMode;
+};
+
+export function mutateCreatePharmacyBill(
+  state: PharmacyStateShape,
+  operator: PharmacyStaff,
+  input: ManualPharmacyBillInput,
+): { state: PharmacyStateShape; bill: PharmacyBill } {
+  if (!input.lines.length) throw new ServerActionError("VALIDATION", "Bill must have at least one item.");
+
+  let stock = [...state.stock];
+  const billLines: PharmacyBillLine[] = [];
+
+  for (const line of input.lines) {
+    const drug = state.drugs.find((d) => d.id === line.drugId);
+    if (!drug) throw new ServerActionError("NOT_FOUND", `Drug ${line.drugId} not found.`);
+    if (line.qty <= 0) throw new ServerActionError("VALIDATION", `Invalid quantity for ${drug.brandName}.`);
+
+    const allocations = allocateBatches(stock, line.drugId, line.qty);
+    if (!allocations) throw new ServerActionError("VALIDATION", `Insufficient stock for ${drug.brandName}.`);
+
+    for (const alloc of allocations) {
+      if (daysToExpiry(alloc.batch.expiry) < 0) {
+        throw new ServerActionError("VALIDATION", `Expired batch for ${drug.brandName}.`);
+      }
+      stock = stock.map((s) =>
+        s.id === alloc.batchId ? { ...s, qtyOnHand: s.qtyOnHand - alloc.qty } : s,
+      );
+      billLines.push({
+        drugId: line.drugId,
+        batchId: alloc.batchId,
+        qty: alloc.qty,
+        rate: alloc.batch.mrp,
+        purchaseRate: alloc.batch.purchaseRate,
+        gstPercent: drug.gstPercent,
+      });
+    }
+  }
+
+  const gross = billLines.reduce((s, l) => s + l.qty * l.rate, 0);
+  const gstTotal = billLines.reduce((s, l) => s + (l.qty * l.rate * l.gstPercent) / 100, 0);
+  const maxDiscount = gross + gstTotal;
+  const discount = Math.max(0, Math.min(maxDiscount, input.discount ?? 0));
+  const total = Math.max(0, gross + gstTotal - discount);
+  const now = new Date().toISOString();
+  const billId = `bill_${Date.now()}`;
+
+  const bill: PharmacyBill = {
+    id: billId,
+    patientName: input.patientName,
+    uhid: input.uhid,
+    lines: billLines,
+    subtotal: gross,
+    gstTotal,
+    discount,
+    total,
+    paymentMode: input.paymentMode ?? "cash",
+    paid: false,
+    createdAt: now,
+    createdBy: operator.name,
+  };
+
+  return {
+    state: {
+      ...state,
+      stock,
+      bills: [bill, ...state.bills],
+      activities: appendPharmacyActivity(
+        state.activities,
+        operator.name,
+        "bill_create",
+        `Manual bill ${billId} created for ${input.patientName} — ₹${total.toFixed(0)}`,
+        billId,
+      ),
+    },
+    bill,
   };
 }
 

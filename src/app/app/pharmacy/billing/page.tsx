@@ -4,9 +4,10 @@ import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, StatusBadge, Panel } from "@/components/frontdesk/ui";
 import { PharmacyDialog, PharmacyInput, PharmacySelect, FormRow } from "@/components/pharmacy/ui";
+import { PharmacyBillingForm } from "@/components/pharmacy/pharmacy-billing-form";
 import type { PharmacyBill } from "@/design-system/pharmacy-data";
 import type { PaymentMode } from "@/design-system/pharmacy-data";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export default function PharmacyBillingPage() {
@@ -18,6 +19,7 @@ export default function PharmacyBillingPage() {
   const [applyingDiscount, setApplyingDiscount] = useState(false);
   const [whatsappSending, setWhatsappSending] = useState(false);
   const [cartUhid, setCartUhid] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const cartBills = useMemo(() => {
     if (!cartUhid) return [];
@@ -70,6 +72,12 @@ export default function PharmacyBillingPage() {
       breadcrumbs={[{ label: "Pharmacy", href: "/app/pharmacy" }, { label: "Billing" }]}
       title="Counter billing"
       meta="Rx-linked bills · GST · discount · payment collection · print · WhatsApp"
+      actions={
+        <AttioButton variant="primary" onClick={() => setCreateOpen(true)}>
+          <Plus className="mr-1 size-4" />
+          New counter bill
+        </AttioButton>
+      }
     >
       <DataTable
         columns={[
@@ -327,6 +335,18 @@ export default function PharmacyBillingPage() {
               </AttioButton>
             </div>
           </div>
+        </PharmacyDialog>
+      )}
+
+      {createOpen && (
+        <PharmacyDialog
+          open={createOpen}
+          title="New counter bill"
+          subtitle="Search patient, add medicines, apply discount and collect payment"
+          onClose={() => setCreateOpen(false)}
+          width="max-w-2xl"
+        >
+          <PharmacyBillingForm onSuccess={() => setCreateOpen(false)} />
         </PharmacyDialog>
       )}
     </PageChrome>

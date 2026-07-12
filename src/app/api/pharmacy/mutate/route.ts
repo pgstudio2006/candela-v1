@@ -8,6 +8,7 @@ import {
   addDrug,
   addSupplier,
   addSupplierCatalogueItem,
+  createPharmacyBill,
   deleteDrug,
   deletePurchaseOrder,
   deleteSupplier,
@@ -70,6 +71,7 @@ type ActionBody = {
   rxLines?: Array<{ drug: string; dose: string; frequency: string; duration: string; instructions?: string }>;
   discount?: number;
   discountReason?: string;
+  billLines?: Array<{ drugId: string; qty: number }>;
   returnType?: "patient" | "ipd" | "walk_in";
   lineIndex?: number;
   amount?: number;
@@ -164,6 +166,16 @@ export async function POST(request: Request) {
           patientType: body.patientType,
           referral: body.referral,
           lines: body.rxLines!,
+        });
+        break;
+      case "createPharmacyBill":
+        result = await createPharmacyBill(ctx, operatorId, {
+          patientName: body.patientName!,
+          uhid: body.uhid,
+          lines: body.billLines ?? [],
+          discount: body.discount,
+          discountReason: body.discountReason,
+          paymentMode: body.mode as PaymentMode,
         });
         break;
       case "applyBillDiscount":

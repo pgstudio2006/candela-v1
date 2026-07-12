@@ -3,6 +3,7 @@
 import {
   PHARMACY_MANAGER_ID,
   type Drug,
+  type PaymentMode,
   type PharmacyBill,
   type PharmacyStaff,
   type PoLine,
@@ -72,6 +73,14 @@ type Store = PharmacySnapshot & {
   applyBillDiscount: (billId: string, discount: number, discountReason: string) => Promise<{ ok: boolean; error?: string }>;
   approveReturn: (id: string) => Promise<void>;
   restockReturn: (id: string) => Promise<void>;
+  createPharmacyBill: (input: {
+    patientName: string;
+    uhid?: string;
+    lines: { drugId: string; qty: number }[];
+    discount?: number;
+    discountReason?: string;
+    paymentMode?: PaymentMode;
+  }) => Promise<{ ok: boolean; error?: string; billId?: string }>;
   createReturn: (input: {
     type: "patient" | "ipd" | "walk_in";
     billId: string;
@@ -353,6 +362,26 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
       restockReturn: async (id) => {
         await pharmacyMutate({ op: "restockReturn", operatorId: opId(), id });
         await refresh({ silent: true });
+      },
+      createPharmacyBill: async (input) => {
+        try {
+          const res = await pharmacyMutate({
+            op: "createPharmacyBill",
+            operatorId: opId(),
+            patientName: input.patientName,
+            uhid: input.uhid,
+            billLines: input.lines,
+            discount: input.discount,
+            discountReason: input.discountReason,
+            mode: input.paymentMode ?? "cash",
+          });
+          if (!res.ok) return { ok: false, error: res.error };
+          await refresh({ silent: true });
+          return { ok: true, billId: res.data?.billId as string | undefined };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Something went wrong.";
+          return { ok: false, error: msg };
+        }
       },
       createReturn: async (input) => {
         try {

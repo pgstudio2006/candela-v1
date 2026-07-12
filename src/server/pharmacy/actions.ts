@@ -11,6 +11,7 @@ import {
   addDrug,
   adjustStock,
   approveReturn,
+  createPharmacyBill,
   createPO,
   dispensePrescription,
   fulfillIndent,
@@ -67,6 +68,21 @@ export async function dispensePrescriptionAction(
 export async function markBillPaidAction(operatorId: string, billId: string, mode: PaymentMode) {
   const ctx = await requireModule("pharmacy");
   return markBillPaid(ctx, operatorId, billId, mode);
+}
+
+export async function createPharmacyBillAction(
+  operatorId: string,
+  input: {
+    patientName: string;
+    uhid?: string;
+    lines: { drugId: string; qty: number }[];
+    discount?: number;
+    discountReason?: string;
+    paymentMode?: PaymentMode;
+  },
+) {
+  const ctx = await requireModule("pharmacy");
+  return createPharmacyBill(ctx, operatorId, input);
 }
 
 export async function adjustStockAction(operatorId: string, batchId: string, delta: number, reason: string) {

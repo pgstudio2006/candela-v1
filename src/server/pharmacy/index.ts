@@ -16,6 +16,7 @@ import {
   mutateAdjustStock,
   mutateApplyBillDiscount,
   mutateApproveReturn,
+  mutateCreatePharmacyBill,
   mutateCreatePO,
   mutateCreateReturn,
   mutateDeleteDrug,
@@ -36,6 +37,7 @@ import {
   mutateVerifyPrescription,
   resolveStaffOperator,
 } from "@/lib/pharmacy-state-mutations";
+import type { ManualPharmacyBillInput } from "@/lib/pharmacy-state-mutations";
 import type { DispenseResult } from "@/lib/pharmacy-state-mutations";
 import { validateDispenseQuantities, validateRejectReason } from "@/lib/pharmacy-validation";
 import { prisma } from "@/lib/prisma";
@@ -351,6 +353,31 @@ export async function markBillPaid(ctx: ServerContext, operatorId: string, billI
     });
     return next;
   });
+}
+
+export async function createPharmacyBill(
+  ctx: ServerContext,
+  operatorId: string,
+  input: ManualPharmacyBillInput,
+): Promise<{ billId: string; total: number }> {
+  let billId = "";
+  let total = 0;
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    const next = mutateCreatePharmacyBill(state, operator, input);
+    billId = next.bill.id;
+    total = next.bill.total;
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "bill_created",
+      entityType: "bill",
+      entityId: billId,
+      summary: `Counter bill ${billId} created for ${input.patientName} — ₹${total.toFixed(0)}`,
+      payload: { uhid: input.uhid, lineCount: input.lines.length, total },
+    });
+    return next.state;
+  });
+  return { billId, total };
 }
 
 export async function adjustStock(ctx: ServerContext, operatorId: string, batchId: string, delta: number, reason: string) {
