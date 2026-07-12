@@ -5,10 +5,11 @@ import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, StatusBadge, Panel } from "@/components/frontdesk/ui";
 import { PharmacyDialog, PharmacyInput, PharmacySelect, PharmacyTextarea, FormRow } from "@/components/pharmacy/ui";
 import type { Supplier } from "@/design-system/pharmacy-data";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
 export default function PharmacySuppliersPage() {
-  const { suppliers, drugs, stock, purchaseOrders, addSupplier, updateSupplier, isManager, isPurchase } = usePharmacyStore();
+  const { suppliers, drugs, stock, purchaseOrders, addSupplier, updateSupplier, deleteSupplier, isManager, isPurchase } = usePharmacyStore();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Supplier | null>(null);
   const [editing, setEditing] = useState<Supplier | null>(null);
@@ -45,6 +46,8 @@ export default function PharmacySuppliersPage() {
     preferred: false, 
     active: true 
   });
+
+  const canDelete = isManager();
 
   if (!isManager() && !isPurchase()) {
     return (
@@ -141,13 +144,27 @@ export default function PharmacySuppliersPage() {
           type: (s.type || "wholesaler").replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
           status: <StatusBadge label={s.active ? (s.preferred ? "Preferred" : "Active") : "Inactive"} variant="success" />,
           actions: (
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
               <button type="button" className="text-[12px] text-[var(--attio-accent)] hover:underline" onClick={() => setSelected(s)}>
                 View
               </button>
               <button type="button" className="text-[12px] text-[var(--attio-accent)] hover:underline" onClick={() => handleEdit(s)}>
                 Edit
               </button>
+              {canDelete && (
+                <button
+                  type="button"
+                  className="text-red-600 hover:text-red-700"
+                  title="Delete supplier"
+                  onClick={() => {
+                    if (window.confirm(`Delete supplier ${s.name}? This cannot be undone.`)) {
+                      void deleteSupplier(s.id).catch((err: Error) => alert(err.message));
+                    }
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              )}
             </div>
           ),
         }))}

@@ -5,12 +5,13 @@ import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, StatusBadge } from "@/components/frontdesk/ui";
 import { PharmacyDialog, PharmacyInput, PharmacySelect, FormRow } from "@/components/pharmacy/ui";
 import type { Drug, DrugSchedule } from "@/design-system/pharmacy-data";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
-const SCHEDULES: DrugSchedule[] = ["OTC", "H", "H1", "X"];
+const SCHEDULES: DrugSchedule[] = ["OTC"];
 
 export default function PharmacyDrugsPage() {
-  const { drugs, stock, addDrug, updateDrug, isManager, isPurchase } = usePharmacyStore();
+  const { drugs, stock, addDrug, updateDrug, deleteDrug, isManager, isPurchase } = usePharmacyStore();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Drug | null>(null);
   const [saving, setSaving] = useState(false);
@@ -22,7 +23,7 @@ export default function PharmacyDrugsPage() {
     form: "Tablet",
     route: "Oral",
     therapeuticClass: "",
-    schedule: "H",
+    schedule: "OTC",
     hsn: "3004",
     gstPercent: 12,
     unit: "strip",
@@ -35,6 +36,7 @@ export default function PharmacyDrugsPage() {
   });
 
   const canEdit = isManager() || isPurchase();
+  const canDelete = isManager();
   const canAdd = true;
 
   const reset = () => {
@@ -46,7 +48,7 @@ export default function PharmacyDrugsPage() {
       form: "Tablet",
       route: "Oral",
       therapeuticClass: "",
-      schedule: "H",
+      schedule: "OTC",
       hsn: "3004",
       gstPercent: 12,
       unit: "strip",
@@ -125,11 +127,29 @@ export default function PharmacyDrugsPage() {
             mrp: `₹${d.defaultMrp}`,
             reorder: d.reorderLevel,
             active: <StatusBadge label={d.active ? "Active" : "Inactive"} variant={d.active ? "success" : "neutral"} />,
-            actions: canEdit ? (
-              <button type="button" className="text-[12px] text-[var(--attio-accent)] hover:underline" onClick={() => openEdit(d)}>
-                Edit
-              </button>
-            ) : null,
+            actions: (
+              <div className="flex items-center gap-3">
+                {canEdit && (
+                  <button type="button" className="text-[12px] text-[var(--attio-accent)] hover:underline" onClick={() => openEdit(d)}>
+                    Edit
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    className="text-red-600 hover:text-red-700"
+                    title="Delete drug"
+                    onClick={() => {
+                      if (window.confirm(`Delete ${d.brandName}? This cannot be undone.`)) {
+                        void deleteDrug(d.id).catch((err: Error) => alert(err.message));
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                )}
+              </div>
+            ),
           };
         })}
       />

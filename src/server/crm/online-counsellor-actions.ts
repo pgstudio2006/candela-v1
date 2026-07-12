@@ -1,7 +1,7 @@
 "use server";
 
 import type { CrmCallOutcome, CrmLeadStatus } from "@/design-system/crm-data";
-import { requireModule } from "@/server/auth";
+import { requireModule, requireAnyModule } from "@/server/auth";
 import { runAction, type ActionResult } from "@/server/action-result";
 import { getServerContext } from "@/server/context";
 import {
@@ -54,7 +54,7 @@ export async function convertLeadToPatientAction(
   },
 ): Promise<ActionResult<LeadToPatientResult>> {
   return runAction(async () => {
-    const ctx = await requireModule("crm");
+    const ctx = await requireAnyModule("crm", "frontdesk");
     return convertLeadToPatient(ctx, leadId, options);
   });
 }
@@ -63,7 +63,7 @@ export async function detectLeadByMobileAction(
   phone: string,
 ): Promise<ActionResult<MobileDetectionResult>> {
   return runAction(async () => {
-    const ctx = await requireModule("crm");
+    const ctx = await requireAnyModule("crm", "frontdesk");
     return detectLeadByMobile(ctx, phone);
   });
 }
@@ -132,7 +132,7 @@ export async function updateCommissionStatusAction(
 
 export async function getWalkInCounsellorAction(): Promise<ActionResult<{ id: string; name: string } | null>> {
   return runAction(async () => {
-    const ctx = await requireModule("crm");
+    const ctx = await requireAnyModule("crm", "frontdesk");
     return resolveWalkInCounsellor(ctx);
   });
 }

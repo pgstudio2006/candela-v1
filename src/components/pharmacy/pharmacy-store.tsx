@@ -58,10 +58,13 @@ type Store = PharmacySnapshot & {
   }) => Promise<{ ok: boolean; error?: string }>;
   addDrug: (drug: Omit<Drug, "id">) => Promise<void>;
   updateDrug: (id: string, patch: Partial<Drug>) => Promise<void>;
+  deleteDrug: (id: string) => Promise<void>;
   addSupplier: (s: Omit<Supplier, "id">) => Promise<void>;
   updateSupplier: (id: string, patch: Partial<Supplier>) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
   createPO: (supplierId: string, lines: PoLine[], notes?: string) => Promise<void>;
   updatePOStatus: (id: string, status: PurchaseOrder["status"]) => Promise<void>;
+  deletePurchaseOrder: (id: string) => Promise<void>;
   receivePO: (poId: string, received: Record<string, { qty: number; batchNo: string; expiry: string; shelf?: string; box?: string }>) => Promise<void>;
   adjustStock: (batchId: string, delta: number, reason: string) => Promise<void>;
   quarantineBatch: (batchId: string, quarantined: boolean) => Promise<void>;
@@ -285,6 +288,11 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
         if (!res.ok) throw new Error(res.error ?? "Failed to update drug");
         await refresh({ silent: true });
       },
+      deleteDrug: async (id) => {
+        const res = await pharmacyMutate({ op: "deleteDrug", operatorId: opId(), id });
+        if (!res.ok) throw new Error(res.error ?? "Failed to delete drug");
+        await refresh({ silent: true });
+      },
       addSupplier: async (s) => {
         await pharmacyMutate({ op: "addSupplier", operatorId: opId(), supplier: s });
         await refresh({ silent: true });
@@ -293,12 +301,22 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
         await pharmacyMutate({ op: "updateSupplier", operatorId: opId(), id, patch });
         await refresh({ silent: true });
       },
+      deleteSupplier: async (id) => {
+        const res = await pharmacyMutate({ op: "deleteSupplier", operatorId: opId(), id });
+        if (!res.ok) throw new Error(res.error ?? "Failed to delete supplier");
+        await refresh({ silent: true });
+      },
       createPO: async (supplierId, lines, notes) => {
         await pharmacyMutate({ op: "createPO", operatorId: opId(), supplierId, lines, notes });
         await refresh({ silent: true });
       },
       updatePOStatus: async (id, status) => {
         await pharmacyMutate({ op: "updatePOStatus", operatorId: opId(), id, status });
+        await refresh({ silent: true });
+      },
+      deletePurchaseOrder: async (id) => {
+        const res = await pharmacyMutate({ op: "deletePurchaseOrder", operatorId: opId(), id });
+        if (!res.ok) throw new Error(res.error ?? "Failed to delete purchase order");
         await refresh({ silent: true });
       },
       receivePO: async (poId, received) => {

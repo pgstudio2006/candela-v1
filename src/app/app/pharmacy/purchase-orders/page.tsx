@@ -10,7 +10,7 @@ import { Plus, Trash2, Download, MessageSquare, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 export default function PharmacyPurchaseOrdersPage() {
-  const { purchaseOrders, suppliers, drugs, createPO, updatePOStatus, receivePO, payPOBill, isManager, isPurchase } = usePharmacyStore();
+  const { purchaseOrders, suppliers, drugs, createPO, updatePOStatus, deletePurchaseOrder, receivePO, payPOBill, isManager, isPurchase } = usePharmacyStore();
   const [receiveId, setReceiveId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [supplierId, setSupplierId] = useState("");
@@ -39,6 +39,8 @@ export default function PharmacyPurchaseOrdersPage() {
       setWhatsappSending(null);
     }
   };
+
+  const canDelete = isManager();
 
   if (!isManager() && !isPurchase()) {
     return (
@@ -150,6 +152,20 @@ export default function PharmacyPurchaseOrdersPage() {
                 {p.status === "draft" && (
                   <AttioButton variant="ghost" className="!h-7 !text-[11px]" onClick={() => void updatePOStatus(p.id, "approved")}>
                     Approve
+                  </AttioButton>
+                )}
+                {p.status === "draft" && canDelete && (
+                  <AttioButton
+                    variant="ghost"
+                    className="!h-7 !text-[11px] text-red-600 hover:text-red-700"
+                    title="Delete PO"
+                    onClick={() => {
+                      if (window.confirm(`Delete ${p.id}? This cannot be undone.`)) {
+                        void deletePurchaseOrder(p.id).catch((err: Error) => alert(err.message));
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-3" />
                   </AttioButton>
                 )}
                 {["approved", "partial"].includes(p.status) && (

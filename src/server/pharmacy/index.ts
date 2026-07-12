@@ -18,6 +18,9 @@ import {
   mutateApproveReturn,
   mutateCreatePO,
   mutateCreateReturn,
+  mutateDeleteDrug,
+  mutateDeletePurchaseOrder,
+  mutateDeleteSupplier,
   mutateDispensePrescription,
   mutateFulfillIndent,
   mutateMarkBillPaid,
@@ -406,6 +409,22 @@ export async function updateDrug(ctx: ServerContext, operatorId: string, id: str
   });
 }
 
+export async function deleteDrug(ctx: ServerContext, operatorId: string, id: string) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    assertManager(operator);
+    const next = mutateDeleteDrug(state, operator, id);
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "drug_deleted",
+      entityType: "drug",
+      entityId: id,
+      summary: `Drug deleted by ${operator.name}`,
+    });
+    return next;
+  });
+}
+
 export async function addSupplier(ctx: ServerContext, operatorId: string, supplier: Omit<Supplier, "id">) {
   await withOperator(ctx, operatorId, async (state, operator) => {
     assertPurchaseOrManager(operator);
@@ -417,6 +436,22 @@ export async function updateSupplier(ctx: ServerContext, operatorId: string, id:
   await withOperator(ctx, operatorId, async (state, operator) => {
     assertPurchaseOrManager(operator);
     return mutateUpdateSupplier(state, id, patch);
+  });
+}
+
+export async function deleteSupplier(ctx: ServerContext, operatorId: string, id: string) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    assertManager(operator);
+    const next = mutateDeleteSupplier(state, operator, id);
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "supplier_deleted",
+      entityType: "supplier",
+      entityId: id,
+      summary: `Supplier deleted by ${operator.name}`,
+    });
+    return next;
   });
 }
 
@@ -473,6 +508,22 @@ export async function receivePO(
       entityType: "purchase_order",
       entityId: poId,
       summary: `GRN recorded for ${poId} by ${operator.name}`,
+    });
+    return next;
+  });
+}
+
+export async function deletePurchaseOrder(ctx: ServerContext, operatorId: string, id: string) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    assertManager(operator);
+    const next = mutateDeletePurchaseOrder(state, operator, id);
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "po_deleted",
+      entityType: "purchase_order",
+      entityId: id,
+      summary: `Purchase order deleted by ${operator.name}`,
     });
     return next;
   });

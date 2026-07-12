@@ -8,6 +8,9 @@ import {
   addDrug,
   addSupplier,
   addSupplierCatalogueItem,
+  deleteDrug,
+  deletePurchaseOrder,
+  deleteSupplier,
   adjustStock,
   applyBillDiscount,
   approveReturn,
@@ -118,11 +121,17 @@ export async function POST(request: Request) {
       case "updateDrug":
         result = await updateDrug(ctx, operatorId, body.id!, body.patch as Partial<Drug>);
         break;
+      case "deleteDrug":
+        result = await deleteDrug(ctx, operatorId, body.id!);
+        break;
       case "addSupplier":
         result = await addSupplier(ctx, operatorId, body.supplier!);
         break;
       case "updateSupplier":
         result = await updateSupplier(ctx, operatorId, body.id!, body.patch as Partial<Supplier>);
+        break;
+      case "deleteSupplier":
+        result = await deleteSupplier(ctx, operatorId, body.id!);
         break;
       case "createPO":
         result = await createPO(ctx, operatorId, body.supplierId!, body.lines!, body.notes);
@@ -132,6 +141,9 @@ export async function POST(request: Request) {
         break;
       case "receivePO":
         result = await receivePO(ctx, operatorId, body.poId!, body.received!);
+        break;
+      case "deletePurchaseOrder":
+        result = await deletePurchaseOrder(ctx, operatorId, body.id!);
         break;
       case "approveReturn":
         result = await approveReturn(ctx, operatorId, body.id!);
