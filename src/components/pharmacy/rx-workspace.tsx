@@ -10,7 +10,7 @@ import { RX_STATUS_LABELS } from "@/design-system/pharmacy-data";
 import { daysToExpiry, isControlledSchedule, pickFefoBatch } from "@/lib/pharmacy-platform";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: () => void }) {
   const { drugs, stock, verifyPrescription, rejectPrescription, dispensePrescription, prescriptions } = usePharmacyStore();
@@ -25,18 +25,30 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
   const [dispensing, setDispensing] = useState(false);
   const [newDrugId, setNewDrugId] = useState("");
   const dispenseSchema = usePublishedFormSchema("pharmacy-dispense");
-
+  const liveRxRef = useRef(liveRx);
   useEffect(() => {
+    liveRxRef.current = liveRx;
+  }, [liveRx]);
+
+  const lastUpdatedAt = useRef<string | null>(null);
+  useEffect(() => {
+    if (liveRx.updatedAt === lastUpdatedAt.current) return;
+    lastUpdatedAt.current = liveRx.updatedAt;
     const init: Record<string, number> = {};
     const initBatch: Record<string, string> = {};
-    rx.lines.forEach((l) => {
-      init[l.id] = l.qtyPrescribed - l.qtyDispensed;
+    liveRx.lines.forEach((l) => {
+      const drugId = l.substituteDrugId ?? l.drugId;
+      const remaining = l.qtyPrescribed - l.qtyDispensed;
+      const available = stock
+        .filter((s) => s.drugId === drugId && !s.quarantined)
+        .reduce((n, s) => n + s.qtyOnHand - s.reserved, 0);
+      init[l.id] = Math.min(remaining, available);
       initBatch[l.id] = "";
     });
     setQtys(init);
     setBatchIds(initBatch);
     setAddedLines([]);
-  }, [rx]);
+  }, [liveRx]);
 
   const needsWitness = liveRx.lines.some((l) => {
     const d = drugs.find((x) => x.id === (l.substituteDrugId ?? l.drugId));
@@ -157,8 +169,13 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
               {[...liveRx.lines, ...addedLines].map((l) => {
                 const drugId = l.substituteDrugId ?? l.drugId;
                 const drug = drugs.find((d) => d.id === drugId);
-                const remaining = "_local" in l && l._local ? qtys[l.id] ?? 0 : l.qtyPrescribed - l.qtyDispensed;
-                const qty = qtys[l.id] ?? 0;
+                const isLocal = "_local" in l && l._local;
+                const remaining = isLocal ? (qtys[l.id] ?? l.qtyPrescribed) : l.qtyPrescribed - l.qtyDispensed;
+                const available = stock
+                  .filter((s) => s.drugId === drugId && !s.quarantined)
+                  .reduce((n, s) => n + s.qtyOnHand - s.reserved, 0);
+                const maxQty = isLocal ? available : Math.min(remaining, available);
+                const qty = Math.max(0, Math.min(maxQty, qtys[l.id] ?? 0));
                 const selectedBatchId = batchIds[l.id];
                 const selectedBatch = selectedBatchId ? stock.find((s) => s.id === selectedBatchId && s.drugId === drugId) : undefined;
                 const fefoBatch = qty > 0 ? pickFefoBatch(drugId, stock, qty) : null;
@@ -169,7 +186,7 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                       <div>
                         <p className="text-[13px] font-medium">{drug?.brandName ?? l.drugName ?? l.drugId}</p>
                         <p className="text-[11px] text-[var(--attio-text-tertiary)]">
-                          {l.dose} · {l.frequency} · {l.duration} · Remaining: {remaining}
+                          {l.dose} · {l.frequency} · {l.duration} · Remaining: {remaining} · Stock: {available}
                         </p>
                         {l.notes && <p className="text-[11px] text-[var(--attio-text-tertiary)] italic">{l.notes}</p>}
                       </div>
@@ -193,12 +210,14 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                       <Input
                         type="number"
                         min={0}
-                        max={remaining}
+                        max={maxQty}
                         value={qty}
                         onChange={(e) => {
-                          const v = Number(e.target.value);
+                          let v = Number(e.target.value);
+                          if (Number.isNaN(v) || v < 0) v = 0;
+                          if (v > maxQty) v = maxQty;
                           setQtys((q) => ({ ...q, [l.id]: v }));
-                          if ("_local" in l && l._local) {
+                          if (isLocal) {
                             setAddedLines((prev) => prev.map((x) => (x.id === l.id ? { ...x, qtyPrescribed: v } : x)));
                           }
                         }}
