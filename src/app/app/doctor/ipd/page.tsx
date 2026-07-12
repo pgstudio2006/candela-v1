@@ -39,9 +39,9 @@ export default function DoctorIpdPage() {
   }, []);
 
   const handleSaveRound = useCallback(
-    async (data: Record<string, string | number | boolean>) => {
+    async (data: Record<string, string | number | boolean>, medicationLines?: import("@/design-system/doctor-data").PrescriptionLine[]) => {
       if (!selected) return;
-      await saveIpdRound(selected.id, data);
+      await saveIpdRound(selected.id, data, medicationLines);
       await loadHistory(selected.id);
     },
     [selected, saveIpdRound, loadHistory],

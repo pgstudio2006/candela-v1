@@ -104,7 +104,11 @@ type DoctorStoreValue = {
     handoff: Record<string, string | number | boolean>;
     sendWhatsapp: boolean;
   }) => Promise<{ ok: boolean; error?: string }>;
-  saveIpdRound: (ipdId: string, note: Record<string, string | number | boolean>) => void;
+  saveIpdRound: (
+    ipdId: string,
+    note: Record<string, string | number | boolean>,
+    medicationLines?: PrescriptionLine[],
+  ) => void;
   getDashboardKpis: () => { label: string; value: string; delta: string; trend: "up" | "down" | "neutral" }[];
   getAnalytics: () => {
     consultsToday: number;
@@ -535,7 +539,11 @@ export function DoctorStoreProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const saveIpdRound = (ipdId: string, note: Record<string, string | number | boolean>) => {
+    const saveIpdRound = (
+      ipdId: string,
+      note: Record<string, string | number | boolean>,
+      medicationLines?: PrescriptionLine[],
+    ) => {
       const text = `S: ${note.subjective}\nO: ${note.objective}\nA: ${note.assessment}\nP: ${note.plan}`;
       syncDoctor((prev) => ({
         ...prev,
@@ -545,7 +553,7 @@ export function DoctorStoreProvider({ children }: { children: ReactNode }) {
             : ip,
         ),
       }));
-      void doctorMutate({ op: "saveIpdRound", ipdId, note }).then(() => refresh({ silent: true }));
+      void doctorMutate({ op: "saveIpdRound", ipdId, note, medicationLines }).then(() => refresh({ silent: true }));
     };
 
     const completed = doctor.consultations.filter((c) => c.status === "completed");

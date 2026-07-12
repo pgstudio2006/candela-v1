@@ -25,6 +25,8 @@ import { backfillBranchScope } from "@/server/branch-scope";
 import { loadClinicalRoster, resolveDoctorProfile } from "@/server/clinical/roster";
 import { createVisitInvoice } from "@/server/invoicing";
 import { computeGstInvoice, parseBranchGstSettings } from "@/lib/gst-invoicing";
+import { readPharmacyWorkspace } from "@/server/workspace-state";
+import { defaultPharmacyState } from "@/server/revenue/state-seeds";
 import {
   generateDischargeSummaryFromRounds,
   generateDeathSummaryFromRounds,
@@ -613,6 +615,56 @@ function parseCart(raw: unknown): IpdCartItem[] {
       typeof (item as IpdCartItem).amount === "number" &&
       typeof (item as IpdCartItem).quantity === "number",
   );
+}
+
+export type IpdPharmacyChargeLine = {
+  drugId: string;
+  label: string;
+  quantity: number;
+  rate: number;
+  purchaseRate: number;
+  gstPercent: number;
+  taxableAmount: number;
+};
+
+export async function getIpdPharmacyCharges(
+  ctx: ServerContext,
+  visitId: string,
+): Promise<{ lines: IpdPharmacyChargeLine[]; subtotal: number; totalProfit: number }> {
+  try {
+    const state = await readPharmacyWorkspace(ctx, () => defaultPharmacyState({}));
+    const lines: IpdPharmacyChargeLine[] = [];
+    let subtotal = 0;
+    let totalProfit = 0;
+
+    for (const rx of state.prescriptions) {
+      if (rx.source !== "ipd" || rx.encounterId !== visitId) continue;
+      if (!["dispensed", "partially_dispensed"].includes(rx.status)) continue;
+      for (const line of rx.lines) {
+        if (line.qtyDispensed <= 0) continue;
+        const drug = state.drugs.find((d) => d.id === line.drugId);
+        const batch = state.stock.find((s) => s.id === line.batchId);
+        const rate = line.dispenseRate ?? drug?.defaultMrp ?? 0;
+        const purchaseRate = batch?.purchaseRate ?? 0;
+        const gstPercent = drug?.gstPercent ?? 12;
+        const taxableAmount = line.qtyDispensed * rate;
+        subtotal += taxableAmount;
+        totalProfit += line.qtyDispensed * (rate - purchaseRate);
+        lines.push({
+          drugId: line.drugId,
+          label: drug?.brandName ?? line.drugName ?? line.drugId,
+          quantity: line.qtyDispensed,
+          rate,
+          purchaseRate,
+          gstPercent,
+          taxableAmount,
+        });
+      }
+    }
+    return { lines, subtotal, totalProfit };
+  } catch {
+    return { lines: [], subtotal: 0, totalProfit: 0 };
+  }
 }
 
 export async function getIpdCart(ctx: ServerContext, admissionId: string): Promise<IpdCartItem[]> {

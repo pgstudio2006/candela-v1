@@ -92,9 +92,13 @@ export async function deleteDoctorTemplateAction(id: string) {
   return deleteDoctorTemplate(ctx, id);
 }
 
-export async function saveIpdRoundAction(ipdId: string, note: Record<string, string | number | boolean>) {
+export async function saveIpdRoundAction(
+  ipdId: string,
+  note: Record<string, string | number | boolean>,
+  medicationLines?: import("@/design-system/doctor-data").PrescriptionLine[],
+) {
   const ctx = await requireModule("doctor");
-  return saveIpdRound(ctx, ipdId, note);
+  return saveIpdRound(ctx, ipdId, note, medicationLines);
 }
 
 export async function getIpdRoundHistoryAction(ipdId: string) {

@@ -434,6 +434,7 @@ export default function PatientRecordPage() {
                         <span className="font-medium">{inv.invoiceNumber}</span>
                         <StatusBadge label={inv.status} variant={inv.status === "paid" ? "success" : inv.status === "partial" ? "warning" : "neutral"} />
                         {inv.treatmentPath === "ipd" && <StatusBadge label="IPD" variant="info" />}
+                        {(inv as { hasPharmacy?: boolean }).hasPharmacy && <StatusBadge label="Pharmacy" variant="neutral" />}
                       </div>
                       <span className="text-[12px] text-[var(--attio-text-tertiary)]">{new Date(inv.createdAt).toLocaleString("en-IN")}</span>
                     </div>

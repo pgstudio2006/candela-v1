@@ -1,4 +1,5 @@
 import type { PrescriptionLine as DoctorPrescriptionLine } from "@/design-system/doctor-data";
+export type { DoctorPrescriptionLine };
 import type { ServerContext } from "@/server/context";
 import { pushPrescriptionFromDoctor } from "@/server/pharmacy/index";
 import { queueNotification } from "@/server/notifications";

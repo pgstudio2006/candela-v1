@@ -763,7 +763,7 @@ function buildPrescriptionFromLines(
     referral: input.referral,
     status: "pending",
     lines: input.lines.map((l, idx) => {
-      const drugId = l.drug.toLowerCase().replace(/\s+/g, "_");
+      const drugId = (l as { drugId?: string }).drugId?.trim() || l.drug.toLowerCase().replace(/\s+/g, "_");
       const days = typeof l.days === "number" && l.days > 0 ? l.days : Math.max(1, Math.ceil(parseInt(l.duration ?? "7", 10) || 7));
       const qty = Math.max(1, Math.ceil(dosesPerDayFromFrequency(l.frequency) * days));
       const durationText = l.duration ?? `${days} day${days === 1 ? "" : "s"}`;

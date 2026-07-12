@@ -63,7 +63,7 @@ export async function createVisitInvoice(
     collected: number;
     mode: string;
     paymentScope: string;
-    lines?: { label: string; quantity: number; taxableAmount: number }[];
+    lines?: { label: string; quantity: number; taxableAmount: number; category?: string; gstRatePercent?: number }[];
     paymentSplits?: { mode: string; amount: number }[];
     gstOverride?: Partial<Pick<GstSettings, "gstRatePercent" | "taxMode">>;
     packageLines?: { packageId: string; label: string; amount: number; quantity: number }[];
@@ -130,7 +130,7 @@ export async function createVisitInvoice(
         id: `line_${input.visitId}_${timestamp}_${i}`,
         invoiceId,
         label: line.label,
-        category: "opd",
+        category: line.category ?? "opd",
         quantity: line.quantity,
         unitPrice: invoiceLines[i]?.taxableAmount ?? line.taxableAmount,
         taxPercent: line.gstRatePercent,
@@ -359,6 +359,7 @@ export async function getPatientInvoices(ctx: ServerContext, patientId: string) 
     include: {
       visit: { select: { id: true, treatmentPath: true } },
       payments: { orderBy: { paidAt: "asc" } },
+      lines: { select: { category: true } },
     },
   });
   return invoices.map((inv) => ({
@@ -372,6 +373,7 @@ export async function getPatientInvoices(ctx: ServerContext, patientId: string) 
     balanceAmount: Number(inv.balanceAmount),
     createdAt: inv.createdAt.toISOString(),
     treatmentPath: inv.visit?.treatmentPath,
+    hasPharmacy: inv.lines.some((l) => l.category === "pharmacy"),
     payments: inv.payments.map((p) => ({ mode: p.mode, amount: Number(p.amount), paidAt: p.paidAt ? p.paidAt.toISOString() : null })),
   }));
 }

@@ -43,6 +43,7 @@ type ActionBody = {
   // ipd round
   ipdId?: string;
   note?: Record<string, string | number | boolean>;
+  medicationLines?: PrescriptionLine[];
   // document template
   kind?: DocumentTemplate["kind"];
   label?: string;
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
         result = { visitId: body.visitId };
         break;
       case "saveIpdRound":
-        result = await saveIpdRound(ctx, body.ipdId!, body.note!);
+        result = await saveIpdRound(ctx, body.ipdId!, body.note!, body.medicationLines);
         break;
       case "createDoctorTemplate":
         result = await createDoctorTemplate(ctx, body.doctorId!, body.tpl!);

@@ -1,6 +1,7 @@
 "use client";
 
 import { AttioButton } from "@/components/frontdesk/ui";
+import { DoctorDrugSearch } from "@/components/doctor/doctor-drug-search";
 import type { PrescriptionLine } from "@/design-system/doctor-data";
 import { PRESCRIPTION_FREQUENCY_OPTIONS } from "@/design-system/doctor-data";
 import { Plus, Trash2 } from "lucide-react";
@@ -48,12 +49,13 @@ export function PrescriptionEditor({ lines, onChange }: PrescriptionEditorProps)
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-medium text-[var(--attio-text-tertiary)]">#{i + 1}</span>
-              <input
-                value={line.drug}
-                onChange={(e) => update(line.id, { drug: e.target.value })}
-                placeholder="Drug name & strength"
-                className="min-w-0 flex-1 rounded border border-[var(--attio-border)] bg-white px-2 py-1.5 text-[13px] outline-none focus:border-[var(--attio-accent)]"
-              />
+              <div className="min-w-0 flex-1">
+                <DoctorDrugSearch
+                  value={line}
+                  onChange={(patch) => update(line.id, patch)}
+                  placeholder="Search pharmacy medicine or add manually…"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-4 gap-2">
               <input

@@ -39,7 +39,10 @@ export type IpdRoundWorkspaceProps = {
   visitId?: string;
   roundHistory: IpdRoundRecord[];
   schema: FormSchema;
-  onSaveRound: (data: Record<string, string | number | boolean>) => void | Promise<void>;
+  onSaveRound: (
+    data: Record<string, string | number | boolean>,
+    medicationLines?: PrescriptionLine[],
+  ) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
 };
 
@@ -342,7 +345,7 @@ export function IpdRoundWorkspace({
     const lines = medicationLines.filter((l) => l.drug.trim());
     if (!lines.length) return toast("Add at least one medicine", "error");
     setOrderSaving(true);
-    await onSaveRound({ medicines: formatMedicinesText(lines) });
+    await onSaveRound({ medicines: formatMedicinesText(lines) }, lines);
     toast("Medication ordered and sent to pharmacy", "success");
     setMedicationLines([]);
     setOrderSaving(false);

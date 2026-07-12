@@ -57,6 +57,9 @@ export function computePharmacyKpis(
   const salesToday = bills
     .filter((b) => b.createdAt.startsWith(today))
     .reduce((s, b) => s + b.lines.reduce((ls, l) => ls + l.qty, 0), 0);
+  const profitToday = bills
+    .filter((b) => b.createdAt.startsWith(today) && b.paid)
+    .reduce((s, b) => s + b.lines.reduce((ls, l) => ls + l.qty * (l.rate - (l.purchaseRate ?? 0)), 0), 0);
   const openPo = purchaseOrders.filter((p) => ["submitted", "approved", "partial"].includes(p.status)).length;
   const pendingReturns = bills.filter((b) => b.createdAt.startsWith(today) && !b.paid).length;
 
@@ -64,6 +67,7 @@ export function computePharmacyKpis(
     { label: "Today's Sales", value: String(salesToday), delta: "Units dispensed", trend: "up" },
     { label: "Today's Bills", value: String(billsToday), delta: "Counter transactions", trend: "up" },
     { label: "Today's Revenue", value: `₹${revenueToday.toLocaleString("en-IN")}`, delta: "Gross collection", trend: "up" },
+    { label: "Today's Profit", value: `₹${profitToday.toLocaleString("en-IN")}`, delta: "Selling - purchase", trend: profitToday >= 0 ? "up" : "down" },
     { label: "Pending Orders", value: String(pending), delta: "Awaiting verify", trend: pending ? "down" : "neutral" },
     { label: "Pending Returns", value: String(pendingReturns), delta: "Unpaid bills", trend: pendingReturns ? "down" : "neutral" },
     { label: "Low Stock", value: String(lowStock), delta: "At/below reorder", trend: lowStock ? "down" : "neutral" },

@@ -18,6 +18,7 @@ export type GstLineBreakdown = {
   label: string;
   quantity: number;
   taxableAmount: number;
+  category?: string;
   sacCode: string;
   gstRatePercent: number;
   cgst: number;
@@ -105,22 +106,29 @@ export function computeGstLine(
 
 export function computeGstInvoice(input: {
   settings: GstSettings;
-  lines: { label: string; quantity: number; taxableAmount: number }[];
+  lines: { label: string; quantity: number; taxableAmount: number; gstRatePercent?: number; category?: string }[];
   discount?: number;
 }): GstInvoiceBreakdown {
   const discount = Math.max(0, input.discount ?? 0);
-  const rawLines = input.lines.map((l) =>
-    computeGstLine(l.label, l.quantity, l.taxableAmount, input.settings),
-  );
+  const rawLines = input.lines.map((l) => ({
+    ...computeGstLine(l.label, l.quantity, l.taxableAmount, {
+      ...input.settings,
+      gstRatePercent: l.gstRatePercent ?? input.settings.gstRatePercent,
+    }),
+    category: l.category,
+  }));
   const taxableSubtotal = rawLines.reduce((s, l) => s + l.taxableAmount, 0);
   const discountRatio = taxableSubtotal > 0 ? Math.min(1, discount / taxableSubtotal) : 0;
 
   const lines = rawLines.map((l) => {
     if (discountRatio <= 0) return l;
     const adjustedTaxable = l.taxableAmount * (1 - discountRatio);
-    const discounted = computeGstLine(l.label, l.quantity, adjustedTaxable, input.settings);
+    const discounted = computeGstLine(l.label, l.quantity, adjustedTaxable, {
+      ...input.settings,
+      gstRatePercent: l.gstRatePercent ?? input.settings.gstRatePercent,
+    });
     // Keep the original pre-discount taxable amount for display; lineTotal remains discounted.
-    return { ...discounted, taxableAmount: l.taxableAmount };
+    return { ...discounted, taxableAmount: l.taxableAmount, category: l.category };
   });
 
   const cgstTotal = round2(lines.reduce((s, l) => s + l.cgst, 0));

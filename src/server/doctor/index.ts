@@ -920,6 +920,7 @@ export async function saveIpdRound(
   ctx: ServerContext,
   ipdId: string,
   note: Record<string, string | number | boolean>,
+  medicationLines?: PrescriptionLine[],
 ) {
   const doctorId = await resolveDoctorIdForContext(ctx);
   const profile = await resolveDoctorProfile(ctx);
@@ -985,17 +986,29 @@ export async function saveIpdRound(
   ]);
 
   const medicineText = typeof note.medicines === "string" ? note.medicines.trim() : "";
-  if (medicineText) {
+  if (medicineText || (medicationLines && medicationLines.length > 0)) {
     try {
       const patient = await prisma.patient.findUnique({ where: { id: ipd.patientId } });
       if (!patient) throw new Error("Patient not found for IPD prescription.");
-      const lines = parseMedicineTextToLines(medicineText).map((l) => ({
-        drug: l.drug,
-        dose: l.dose,
-        frequency: l.frequency,
-        duration: l.duration,
-        instructions: l.instructions,
-      }));
+      const lines =
+        medicationLines && medicationLines.length > 0
+          ? medicationLines.map((l) => ({
+              id: l.id,
+              drugId: l.drugId,
+              drug: l.drug,
+              dose: l.dose,
+              frequency: l.frequency,
+              days: l.days,
+              duration: l.duration,
+              instructions: l.instructions,
+            }))
+          : parseMedicineTextToLines(medicineText).map((l) => ({
+              drug: l.drug,
+              dose: l.dose,
+              frequency: l.frequency,
+              duration: l.duration,
+              instructions: l.instructions,
+            }));
       if (lines.length) {
         await pushPrescriptionFromDoctor(ctx, {
           visitId: ipd.visitId,

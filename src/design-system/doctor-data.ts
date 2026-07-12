@@ -18,6 +18,9 @@ export const PRESCRIPTION_FREQUENCY_OPTIONS = [
 export type PrescriptionLine = {
   id: string;
   drug: string;
+  drugId?: string;
+  genericName?: string;
+  isManual?: boolean;
   dose: string;
   frequency: string;
   days: number;

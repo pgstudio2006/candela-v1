@@ -41,7 +41,7 @@ import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 import { loadClinicalRoster } from "@/server/clinical/roster";
 import { withPrismaError } from "@/server/prisma-errors";
 import { doctorIdVariants, resolveDoctorName, staffIdFromDoctorId } from "@/lib/clinical-roster";
-import { ensureIpdWardBed } from "@/server/ipd";
+import { ensureIpdWardBed, getIpdPharmacyCharges } from "@/server/ipd";
 import { createId } from "@/lib/id";
 import type { ClinicalRoster } from "@/lib/clinical-roster";
 import { notifyAppointmentReminder } from "@/server/notifications";
@@ -839,16 +839,40 @@ export async function processBilling(
   const previousAmountPaid = visit.amountPaid ?? 0;
   const previousBalance = visit.balanceDue ?? 0;
   const splitsTotal = payload.paymentSplits.reduce((s, p) => s + p.amount, 0);
+  const isIpd = visit.treatmentPath === "ipd" || Boolean(visit.ipdAdmissionId);
+  const ipdPharmacy = isIpd ? await getIpdPharmacyCharges(ctx, visitId) : { lines: [] as { drugId: string; label: string; quantity: number; rate: number; purchaseRate: number; gstPercent: number; taxableAmount: number }[], subtotal: 0, totalProfit: 0 };
+  const pharmacyGstSettings = {
+    ...parseBranchGstSettings(branch?.meta),
+    taxMode: "cgst_sgst" as const,
+    gstRatePercent: 0,
+  };
+  const pharmacyGstInvoice =
+    ipdPharmacy.lines.length > 0
+      ? computeGstInvoice({
+          settings: pharmacyGstSettings,
+          lines: ipdPharmacy.lines.map((l) => ({
+            label: l.label,
+            quantity: l.quantity,
+            taxableAmount: l.taxableAmount,
+            gstRatePercent: l.gstPercent,
+          })),
+          discount: 0,
+        })
+      : null;
+  const pharmacyNet = pharmacyGstInvoice?.grandTotal ?? 0;
+  const combinedNet = net + pharmacyNet;
+
   const currentCollected =
     payload.skipBilling || paymentScope === "defer"
       ? 0
-      : Math.min(splitsTotal, previousBalance + net);
-  const newBillAmount = previousBillAmount + net;
+      : Math.min(splitsTotal, previousBalance + combinedNet);
+  const newBillAmount = previousBillAmount + combinedNet;
   const newAmountPaid = previousAmountPaid + currentCollected;
   const newBalance = Math.max(0, newBillAmount - newAmountPaid);
   const isFinal = newBalance === 0 && newAmountPaid > 0;
 
-  const isIpd = visit.treatmentPath === "ipd" || Boolean(visit.ipdAdmissionId);
+  const serviceCollected = combinedNet > 0 && !payload.skipBilling && paymentScope !== "defer" ? Math.round((currentCollected * net) / combinedNet) : currentCollected;
+  const pharmacyCollected = combinedNet > 0 && !payload.skipBilling && paymentScope !== "defer" ? currentCollected - serviceCollected : 0;
 
   const route = isIpd
     ? {
@@ -931,7 +955,7 @@ export async function processBilling(
         data: { cart: [] as unknown as object },
       });
     }
-    if (payload.packageLines.length > 0 || currentCollected > 0) {
+    if (payload.packageLines.length > 0 || serviceCollected > 0) {
       await createVisitInvoice(
         ctx,
         {
@@ -942,13 +966,40 @@ export async function processBilling(
           discount: invoiceDiscount,
           discountMode: payload.discountMode,
           discountPercent: payload.discountPercent,
-          collected: currentCollected,
+          collected: serviceCollected,
           mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
           paymentScope: invoicePaymentScope,
           lines: invoiceLines,
-          paymentSplits: payload.paymentSplits,
+          paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: serviceCollected > 0 ? Math.round((s.amount * serviceCollected) / currentCollected) : 0 })).filter((s) => s.amount > 0),
           gstOverride: invoiceGstOverride,
           packageLines: payload.packageLines,
+        },
+        tx,
+      );
+    }
+
+    if (ipdPharmacy.lines.length > 0) {
+      const pharmacyPaymentScope = pharmacyCollected >= pharmacyNet ? "full" : pharmacyCollected > 0 ? "partial" : invoicePaymentScope === "defer" ? "defer" : "partial";
+      await createVisitInvoice(
+        ctx,
+        {
+          visitId,
+          patientId: visit.patientId,
+          label: "IPD pharmacy supplies",
+          subtotal: pharmacyGstInvoice!.taxableSubtotal,
+          discount: 0,
+          collected: pharmacyCollected,
+          mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
+          paymentScope: pharmacyPaymentScope,
+          lines: ipdPharmacy.lines.map((l) => ({
+            label: `${l.label} (${l.quantity})`,
+            quantity: l.quantity,
+            taxableAmount: l.taxableAmount,
+            category: "pharmacy" as const,
+            gstRatePercent: l.gstPercent,
+          })),
+          paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: pharmacyCollected > 0 ? Math.round((s.amount * pharmacyCollected) / currentCollected) : 0 })).filter((s) => s.amount > 0),
+          gstOverride: { taxMode: "cgst_sgst", gstRatePercent: 0 },
         },
         tx,
       );
@@ -964,7 +1015,7 @@ export async function processBilling(
     action: "billing_processed",
     entityType: "visit",
     entityId: visitId,
-    summary: `Billing ₹${net} (${mode}) — ${route.routingLabel}`,
+    summary: `Billing ₹${combinedNet} (${mode}) — ${route.routingLabel}${ipdPharmacy.lines.length ? ` · pharmacy ₹${pharmacyNet}` : ""}`,
   });
 
   const invoice = await prisma.invoice.findFirst({
