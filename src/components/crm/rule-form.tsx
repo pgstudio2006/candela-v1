@@ -59,7 +59,7 @@ export function CrmRuleFormModal({
   onClose: () => void;
   initial?: CrmAssignmentRule;
   agents: CrmAgent[];
-  onSave: (rule: Omit<CrmAssignmentRule, "id">) => void;
+  onSave: (rule: Omit<CrmAssignmentRule, "id">) => Promise<void>;
 }) {
   const [label, setLabel] = useState("");
   const [strategy, setStrategy] = useState<CrmAssignmentRule["strategy"]>("percentage");
@@ -68,6 +68,8 @@ export function CrmRuleFormModal({
   const [specialty, setSpecialty] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [weights, setWeights] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const teamAgents = useMemo(() => agents.filter((a) => a.role !== "manager"), [agents]);
   const teamAgentIds = useMemo(() => teamAgents.map((a) => a.id), [teamAgents]);
@@ -89,7 +91,7 @@ export function CrmRuleFormModal({
 
   const weightSum = selectedIds.reduce((s, id) => s + (weights[id] ?? 0), 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!label.trim() || !selectedIds.length) return;
     const agentWeights: Record<string, number> = {};
@@ -97,17 +99,30 @@ export function CrmRuleFormModal({
       for (const id of selectedIds) {
         agentWeights[id] = weights[id] ?? Math.floor(100 / selectedIds.length);
       }
+      const total = selectedIds.reduce((s, id) => s + agentWeights[id], 0);
+      if (total !== 100) {
+        setError("Percentage weights must total 100%.");
+        return;
+      }
     }
-    onSave({
-      label: label.trim(),
-      active,
-      strategy,
-      source: strategy === "by_source" && source ? (source as CrmAssignmentRule["source"]) : undefined,
-      specialty: strategy === "by_specialty" ? specialty : undefined,
-      assignToAgentIds: selectedIds,
-      agentWeights: strategy === "percentage" ? agentWeights : undefined,
-    });
-    onClose();
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({
+        label: label.trim(),
+        active,
+        strategy,
+        source: strategy === "by_source" && source ? (source as CrmAssignmentRule["source"]) : undefined,
+        specialty: strategy === "by_specialty" ? specialty : undefined,
+        assignToAgentIds: selectedIds,
+        agentWeights: strategy === "percentage" ? agentWeights : undefined,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save rule.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!open) return null;
@@ -126,6 +141,7 @@ export function CrmRuleFormModal({
         </div>
 
         <form onSubmit={handleSubmit} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700">{error}</p>}
           <section className="mb-4 space-y-3">
             <Field label="Rule name" required>
               <Input value={label} onChange={(e) => setLabel(e.target.value)} required />
@@ -218,8 +234,8 @@ export function CrmRuleFormModal({
             <AttioButton type="button" variant="secondary" onClick={onClose}>
               Cancel
             </AttioButton>
-            <AttioButton type="submit" variant="primary">
-              Save rule
+            <AttioButton type="submit" variant="primary" disabled={saving}>
+              {saving ? "Saving..." : "Save rule"}
             </AttioButton>
           </div>
         </form>

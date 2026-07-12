@@ -290,12 +290,41 @@ async function ensureCrmUser(
   });
 }
 
+async function ensureCrmOperatorInState(ctx: ServerContext, state: CrmStateShape, operatorId: string): Promise<CrmStateShape> {
+  if (!operatorId) return state;
+  const existing = state.agents.find((a) => a.id === operatorId);
+  if (existing?.active) return state;
+  const credential = await prisma.crmOperatorCredential.findUnique({ where: { id: operatorId } });
+  if (!credential || !credential.active) return state;
+  const agents = state.agents.filter((a) => a.id !== operatorId);
+  const updated: CrmStateShape = {
+    ...state,
+    agents: [
+      ...agents,
+      {
+        id: credential.id,
+        name: credential.name,
+        email: credential.email,
+        role: credential.role as CrmAgent["role"],
+        active: true,
+        specialtyTags: (credential.specialtyTags as string[]) ?? [],
+        maxOpenLeads: credential.maxOpenLeads ?? 25,
+        leadWeightPercent: credential.leadWeightPct ?? 0,
+        backupAgentId: credential.backupAgentId ?? undefined,
+      },
+    ],
+  };
+  await persistState(ctx, updated);
+  return updated;
+}
+
 async function withOperator(
   ctx: ServerContext,
   operatorId: string,
   fn: (state: CrmStateShape, operator: CrmAgent) => Promise<CrmStateShape>,
 ) {
-  const state = await readState(ctx);
+  let state = await readState(ctx);
+  state = await ensureCrmOperatorInState(ctx, state, operatorId);
   const operator = resolveCrmOperator(state, operatorId);
   const next = await fn(state, operator);
   await persistState(ctx, next);
@@ -307,7 +336,8 @@ function isManagerOperator(operator: CrmAgent) {
 }
 
 export async function getCrmSnapshot(ctx: ServerContext, operatorId: string): Promise<CrmSnapshot> {
-  const state = await readState(ctx);
+  let state = await readState(ctx);
+  state = await ensureCrmOperatorInState(ctx, state, operatorId);
   let activeOperatorId = operatorId;
   let activeOperatorName = "CRM Agent";
   let activeOperatorRole = "agent";

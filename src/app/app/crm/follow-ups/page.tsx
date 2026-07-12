@@ -230,8 +230,8 @@ export default function CrmFollowUpsPage() {
         onClose={() => setCompleteId(null)}
         leadName={completeLead?.fullName ?? "Lead"}
         onSave={(outcome) => {
-          if (completeId) completeFollowUp(completeId, outcome);
-          setCompleteId(null);
+          if (completeId) return completeFollowUp(completeId, outcome);
+          return Promise.resolve();
         }}
       />
     </PageChrome>

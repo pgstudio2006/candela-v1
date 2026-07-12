@@ -37,7 +37,7 @@ export function FollowUpScheduleModal({
   agents: CrmAgent[];
   defaultLeadId?: string;
   defaultAssigneeId?: string;
-  onSave: (fu: Omit<CrmFollowUp, "id" | "status">) => void;
+  onSave: (fu: Omit<CrmFollowUp, "id" | "status">) => Promise<void>;
 }) {
   const openLeads = useMemo(
     () => leads.filter((l) => !["won", "lost"].includes(l.stageId)).sort((a, b) => a.fullName.localeCompare(b.fullName)),
@@ -51,6 +51,8 @@ export function FollowUpScheduleModal({
   const [scheduledAt, setScheduledAt] = useState(defaultScheduleLocal());
   const [notes, setNotes] = useState("");
   const [followupSchema, setFollowupSchema] = useState<Record<string, string | number | boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -65,19 +67,27 @@ export function FollowUpScheduleModal({
 
   if (!open) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leadId || !assigneeId || !scheduledAt) return;
     const followupNotes = String(followupSchema.followupNotes ?? notes).trim();
     const outcome = followupSchema.outcome ? ` [${followupSchema.outcome}]` : "";
-    onSave({
-      leadId,
-      assigneeId,
-      channel,
-      scheduledAt: new Date(scheduledAt).toISOString(),
-      notes: followupNotes ? `${followupNotes}${outcome}` : outcome.trim() || undefined,
-    });
-    onClose();
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({
+        leadId,
+        assigneeId,
+        channel,
+        scheduledAt: new Date(scheduledAt).toISOString(),
+        notes: followupNotes ? `${followupNotes}${outcome}` : outcome.trim() || undefined,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to schedule follow-up.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -90,6 +100,7 @@ export function FollowUpScheduleModal({
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4 p-4">
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700">{error}</p>}
           <div className="space-y-1.5">
             <Label htmlFor="fu-lead">Lead</Label>
             <Select value={leadId} onValueChange={(v) => v && setLeadId(v)}>
@@ -162,8 +173,8 @@ export function FollowUpScheduleModal({
             <AttioButton type="button" variant="secondary" onClick={onClose}>
               Cancel
             </AttioButton>
-            <AttioButton type="submit" variant="primary" disabled={!leadId || !assigneeId || openLeads.length === 0}>
-              Schedule
+            <AttioButton type="submit" variant="primary" disabled={saving || !leadId || !assigneeId || openLeads.length === 0}>
+              {saving ? "Saving..." : "Schedule"}
             </AttioButton>
           </div>
         </form>
@@ -181,12 +192,17 @@ export function FollowUpCompleteModal({
   open: boolean;
   onClose: () => void;
   leadName: string;
-  onSave: (outcome: string) => void;
+  onSave: (outcome: string) => Promise<void>;
 }) {
   const [outcome, setOutcome] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (open) setOutcome("");
+    if (open) {
+      setOutcome("");
+      setError("");
+    }
   }, [open]);
 
   if (!open) return null;
@@ -201,14 +217,23 @@ export function FollowUpCompleteModal({
           </button>
         </div>
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
             if (!outcome.trim()) return;
-            onSave(outcome.trim());
-            onClose();
+            setSaving(true);
+            setError("");
+            try {
+              await onSave(outcome.trim());
+              onClose();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Failed to save outcome.");
+            } finally {
+              setSaving(false);
+            }
           }}
           className="space-y-4 p-4"
         >
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700">{error}</p>}
           <p className="text-[13px] text-[var(--attio-text-secondary)]">{leadName}</p>
           <div className="space-y-1.5">
             <Label htmlFor="fu-outcome">Outcome</Label>
@@ -225,8 +250,8 @@ export function FollowUpCompleteModal({
             <AttioButton type="button" variant="secondary" onClick={onClose}>
               Cancel
             </AttioButton>
-            <AttioButton type="submit" variant="primary" disabled={!outcome.trim()}>
-              Save
+            <AttioButton type="submit" variant="primary" disabled={saving || !outcome.trim()}>
+              {saving ? "Saving..." : "Save"}
             </AttioButton>
           </div>
         </form>

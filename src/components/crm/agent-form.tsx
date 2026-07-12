@@ -21,7 +21,7 @@ type AgentFormProps = {
   onClose: () => void;
   initial?: CrmAgent;
   agents?: CrmAgent[];
-  onSave: (data: Omit<CrmAgent, "id">, password?: string) => void;
+  onSave: (data: Omit<CrmAgent, "id">, password?: string) => Promise<void>;
 };
 
 export function CrmAgentFormModal({ open, onClose, initial, agents = [], onSave }: AgentFormProps) {
@@ -34,6 +34,8 @@ export function CrmAgentFormModal({ open, onClose, initial, agents = [], onSave 
   const [backupAgentId, setBackupAgentId] = useState("");
   const [active, setActive] = useState(true);
   const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -54,23 +56,31 @@ export function CrmAgentFormModal({ open, onClose, initial, agents = [], onSave 
     setSpecialtyTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) return;
-    onSave(
-      {
-        name: name.trim(),
-        email: email.trim(),
-        role,
-        specialtyTags,
-        maxOpenLeads,
-        leadWeightPercent,
-        backupAgentId: backupAgentId || undefined,
-        active,
-      },
-      password.trim() || undefined,
-    );
-    onClose();
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(
+        {
+          name: name.trim(),
+          email: email.trim(),
+          role,
+          specialtyTags,
+          maxOpenLeads,
+          leadWeightPercent,
+          backupAgentId: backupAgentId || undefined,
+          active,
+        },
+        password.trim() || undefined,
+      );
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save team member.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -83,6 +93,7 @@ export function CrmAgentFormModal({ open, onClose, initial, agents = [], onSave 
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4 p-4">
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <Label className="text-[12px]">Full name *</Label>
@@ -163,8 +174,8 @@ export function CrmAgentFormModal({ open, onClose, initial, agents = [], onSave 
             <AttioButton variant="secondary" type="button" onClick={onClose}>
               Cancel
             </AttioButton>
-            <AttioButton variant="primary" type="submit">
-              {initial ? "Save" : "Add person"}
+            <AttioButton variant="primary" type="submit" disabled={saving}>
+              {saving ? "Saving..." : initial ? "Save" : "Add person"}
             </AttioButton>
           </div>
         </form>

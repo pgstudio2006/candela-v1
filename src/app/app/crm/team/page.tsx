@@ -259,7 +259,7 @@ export default function CrmTeamPage() {
         initial={editingRule}
         agents={agents}
         onSave={(rule) => {
-          void (editingRule ? updateRule(editingRule.id, rule) : addRule(rule));
+          return editingRule ? updateRule(editingRule.id, rule) : addRule(rule);
         }}
       />
       {absenceAgent && (
