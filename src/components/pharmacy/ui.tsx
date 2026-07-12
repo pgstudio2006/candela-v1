@@ -1,8 +1,10 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
+import type { Drug } from "@/design-system/pharmacy-data";
+import { Search, X } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function PharmacyDialog({ open, title, subtitle, children, onClose, width = "max-w-2xl" }: {
   open: boolean;
@@ -95,6 +97,108 @@ export function TabBar<T extends string>({ tabs, active, onChange }: { tabs: { i
           {t.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+export function DrugSearch({
+  drugs,
+  value,
+  onChange,
+  placeholder = "Search medicine…",
+}: {
+  drugs: Drug[];
+  value?: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = drugs.find((d) => d.id === value);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return drugs.slice(0, 40);
+    return drugs
+      .filter(
+        (d) =>
+          d.brandName.toLowerCase().includes(q) ||
+          d.genericName.toLowerCase().includes(q) ||
+          d.therapeuticClass.toLowerCase().includes(q),
+      )
+      .slice(0, 40);
+  }, [drugs, query]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative min-w-0">
+      {selected ? (
+        <div className="flex h-9 items-center justify-between rounded-md border border-[var(--attio-border)] bg-white px-3 text-[13px]">
+          <span className="truncate">
+            {selected.brandName}{" "}
+            <span className="text-[var(--attio-text-tertiary)]">({selected.genericName})</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setQuery("");
+              setOpen(true);
+            }}
+            className="ml-2 shrink-0 rounded p-1 hover:bg-[var(--attio-hover)]"
+          >
+            <X className="size-3.5 text-[var(--attio-text-tertiary)]" />
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--attio-text-tertiary)]" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder={placeholder}
+            className="h-9 w-full rounded-md border border-[var(--attio-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-[var(--attio-text)]"
+          />
+        </div>
+      )}
+      {open && !selected && (
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-[var(--attio-border)] bg-white py-1 shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-[12px] text-[var(--attio-text-tertiary)]">No medicines found</div>
+          ) : (
+            filtered.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => {
+                  onChange(d.id);
+                  setOpen(false);
+                  setQuery("");
+                }}
+                className="w-full px-3 py-2 text-left text-[13px] hover:bg-[var(--attio-hover)]"
+              >
+                <div className="font-medium">{d.brandName}</div>
+                <div className="text-[11px] text-[var(--attio-text-tertiary)]">
+                  {d.genericName} · {d.strength} · {d.form}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
