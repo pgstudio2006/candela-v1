@@ -271,11 +271,13 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
         }
       },
       addDrug: async (drug) => {
-        await pharmacyMutate({ op: "addDrug", operatorId: opId(), drug });
+        const res = await pharmacyMutate({ op: "addDrug", operatorId: opId(), drug });
+        if (!res.ok) throw new Error(res.error ?? "Failed to add drug");
         await refresh({ silent: true });
       },
       updateDrug: async (id, patch) => {
-        await pharmacyMutate({ op: "updateDrug", operatorId: opId(), id, patch });
+        const res = await pharmacyMutate({ op: "updateDrug", operatorId: opId(), id, patch });
+        if (!res.ok) throw new Error(res.error ?? "Failed to update drug");
         await refresh({ silent: true });
       },
       addSupplier: async (s) => {

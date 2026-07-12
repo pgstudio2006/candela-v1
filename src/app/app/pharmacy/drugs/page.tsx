@@ -13,6 +13,8 @@ export default function PharmacyDrugsPage() {
   const { drugs, stock, addDrug, updateDrug, isManager, isPurchase } = usePharmacyStore();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Drug | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<Drug, "id">>({
     genericName: "",
     brandName: "",
@@ -36,6 +38,7 @@ export default function PharmacyDrugsPage() {
   const canAdd = true;
 
   const reset = () => {
+    setSaveError(null);
     setForm({
       genericName: "",
       brandName: "",
@@ -57,12 +60,22 @@ export default function PharmacyDrugsPage() {
     setSelected(null);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.brandName || !form.genericName) return;
-    if (selected) {
-      void updateDrug(selected.id, form).then(() => { setOpen(false); reset(); });
-    } else {
-      void addDrug(form).then(() => { setOpen(false); reset(); });
+    setSaving(true);
+    setSaveError(null);
+    try {
+      if (selected) {
+        await updateDrug(selected.id, form);
+      } else {
+        await addDrug(form);
+      }
+      setOpen(false);
+      reset();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save drug");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -214,9 +227,12 @@ export default function PharmacyDrugsPage() {
               </PharmacySelect>
             </FormRow>
           </div>
+          {saveError && (
+            <p className="mt-3 text-[13px] text-red-600">{saveError}</p>
+          )}
           <div className="mt-4 flex justify-end gap-2">
-            <AttioButton variant="secondary" onClick={() => { setOpen(false); reset(); }}>Cancel</AttioButton>
-            <AttioButton variant="primary" onClick={save}>Save</AttioButton>
+            <AttioButton variant="secondary" onClick={() => { setOpen(false); reset(); }} disabled={saving}>Cancel</AttioButton>
+            <AttioButton variant="primary" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</AttioButton>
           </div>
         </PharmacyDialog>
       )}
