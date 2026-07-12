@@ -35,13 +35,6 @@ export const PHARMACY_NAV: PharmacyNavItem[] = [
   { id: "ipd", label: "IPD", href: "/app/pharmacy/ipd", icon: BedDouble, group: "operations" },
   { id: "indents", label: "Ward indents", href: "/app/pharmacy/indents", icon: FileText, group: "operations" },
   { id: "returns", label: "Returns", href: "/app/pharmacy/returns", icon: RotateCcw, group: "operations" },
-  { id: "inventory", label: "Stock", href: "/app/pharmacy/inventory", icon: Warehouse, group: "supply" },
-  { id: "drugs", label: "Drugs & formulary", href: "/app/pharmacy/drugs", icon: Pill, group: "supply" },
-  { id: "suppliers", label: "Suppliers", href: "/app/pharmacy/suppliers", icon: Truck, group: "supply", managerOnly: true, purchaseOnly: true },
-  { id: "purchase-orders", label: "Purchase orders", href: "/app/pharmacy/purchase-orders", icon: ShoppingCart, group: "supply", managerOnly: true, purchaseOnly: true },
-  { id: "expiry", label: "Expiry", href: "/app/pharmacy/expiry", icon: FlaskConical, group: "supply" },
-  { id: "schedule-h", label: "Schedule H", href: "/app/pharmacy/schedule-h", icon: Shield, group: "compliance", managerOnly: true },
-  { id: "audit", label: "Audit trail", href: "/app/pharmacy/audit", icon: FileText, group: "compliance", managerOnly: true },
   { id: "reports", label: "Reports", href: "/app/pharmacy/reports", icon: BarChart3, group: "insights" },
   { id: "settings", label: "Settings", href: "/app/pharmacy/settings", icon: Settings, group: "insights" },
 ];

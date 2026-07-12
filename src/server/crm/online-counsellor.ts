@@ -162,6 +162,23 @@ async function updateWorkspaceLeadAfterConversion(
   }
 }
 
+async function generateUniqueUhid(branchId: string): Promise<string> {
+  const year = new Date().getFullYear();
+  const prefix = `NV-${year}-`;
+  const existing = await prisma.patient.findMany({
+    where: { branchId, uhid: { startsWith: prefix } },
+    select: { uhid: true },
+  });
+  const used = new Set(existing.map((p) => p.uhid));
+  let n = existing.length + 1;
+  let uhid = `${prefix}${String(n).padStart(4, "0")}`;
+  while (used.has(uhid)) {
+    n++;
+    uhid = `${prefix}${String(n).padStart(4, "0")}`;
+  }
+  return uhid;
+}
+
 export async function convertLeadToPatient(
   ctx: ServerContext,
   leadId: string,
@@ -178,40 +195,44 @@ export async function convertLeadToPatient(
     where: { id: leadId, branchId: ctx.branchId },
   });
   if (!lead) throw new ServerActionError("NOT_FOUND", "Lead not found.");
+  if (!lead.fullName) throw new ServerActionError("VALIDATION", "Lead name is required.");
 
-  const existingPatient = await prisma.patient.findFirst({
-    where: { branchId: ctx.branchId, phone: lead.phone },
-  });
+  const agentName = lead.assigneeId ? await getAgentName(lead.assigneeId).catch(() => null) : null;
 
-  let patientId: string;
-  let uhid: string;
+  let patientId = "";
+  let uhid = "";
 
-  if (existingPatient) {
-    patientId = existingPatient.id;
-    uhid = existingPatient.uhid;
-    const agentName = lead.assigneeId ? await getAgentName(lead.assigneeId) : null;
-    await prisma.patient.update({
-      where: { id: patientId },
-      data: {
-        assignedCounsellorId: lead.assigneeId ?? null,
-        assignedCounsellorName: agentName,
-        leadSourceId: leadId,
-      },
+  if (lead.phone) {
+    const existingPatient = await prisma.patient.findFirst({
+      where: { branchId: ctx.branchId, phone: lead.phone },
     });
-  } else {
-    const count = await prisma.patient.count({ where: { branchId: ctx.branchId } });
-    uhid = `NV-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
-    const agentName = lead.assigneeId ? await getAgentName(lead.assigneeId) : null;
+    if (existingPatient) {
+      patientId = existingPatient.id;
+      uhid = existingPatient.uhid;
+      await prisma.patient.update({
+        where: { id: patientId },
+        data: {
+          name: lead.fullName,
+          fullName: lead.fullName,
+          assignedCounsellorId: lead.assigneeId ?? null,
+          assignedCounsellorName: agentName,
+          leadSourceId: leadId,
+        },
+      });
+    }
+  }
 
+  if (!uhid) {
+    uhid = await generateUniqueUhid(ctx.branchId);
     const created = await prisma.patient.create({
       data: {
-        id: `pat_${Date.now()}`,
+        id: createId("pat"),
         tenantId: ctx.tenantId,
         branchId: ctx.branchId,
         uhid,
         name: lead.fullName,
         fullName: lead.fullName,
-        phone: lead.phone,
+        phone: lead.phone ?? null,
         email: lead.email ?? null,
         age: lead.age ?? null,
         gender: lead.gender ?? null,
@@ -221,6 +242,10 @@ export async function convertLeadToPatient(
       },
     });
     patientId = created.id;
+  }
+
+  if (!patientId || !uhid) {
+    throw new ServerActionError("INTERNAL_ERROR", "Could not create or link patient from lead.");
   }
 
   await prisma.lead.update({
@@ -234,26 +259,30 @@ export async function convertLeadToPatient(
   await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "patient");
 
   if (options.bookAppointment && options.doctorName) {
-    const bookResult = await bookAppointment(ctx, {
-      data: {
-        patient: uhid,
-        doctor: options.doctorId ?? options.doctorName,
-        department: "dept_spine",
-        date: options.appointmentDate ?? new Date().toISOString().slice(0, 10),
-        time: options.appointmentTime ?? "",
-        duration: "15",
-        notes: `Booked by ${options.source ?? "online counsellor"}`,
-      },
-      appointmentId: createId("ap"),
-      visitId: createId("v"),
-    });
-
-    if (!bookResult.error && bookResult.visitId) {
-      await prisma.lead.update({
-        where: { id: leadId },
-        data: { leadStatus: "appointment_booked" },
+    try {
+      const bookResult = await bookAppointment(ctx, {
+        data: {
+          patient: uhid,
+          doctor: options.doctorId ?? options.doctorName,
+          department: "dept_spine",
+          date: options.appointmentDate ?? new Date().toISOString().slice(0, 10),
+          time: options.appointmentTime ?? "",
+          duration: "15",
+          notes: `Booked by ${options.source ?? "online counsellor"}`,
+        },
+        appointmentId: createId("ap"),
+        visitId: createId("v"),
       });
-      await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "appointment_booked");
+
+      if (!bookResult.error && bookResult.visitId) {
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: { leadStatus: "appointment_booked" },
+        });
+        await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "appointment_booked");
+      }
+    } catch (err) {
+      console.error("[convertLeadToPatient] bookAppointment failed:", err);
     }
   }
 

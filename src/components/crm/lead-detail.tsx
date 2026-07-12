@@ -169,9 +169,13 @@ export function LeadDetailPanel({
   useEffect(() => {
     let mounted = true;
     void (async () => {
-      const next = await getCrmLeadClinicalHistoryAction(currentLead);
-      if (!mounted) return;
-      setHistory(next);
+      try {
+        const next = await getCrmLeadClinicalHistoryAction(currentLead);
+        if (!mounted) return;
+        setHistory(next);
+      } catch (err) {
+        console.error("[LeadDetail] history load failed:", err);
+      }
     })();
     return () => {
       mounted = false;

@@ -121,7 +121,9 @@ async function pharmacyMutate(body: Record<string, unknown>): Promise<{ ok: bool
 
 export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
   const { authReady, session } = useSession();
-  const operatorId = session?.pharmacyOperatorId ?? "";
+  const operatorId =
+    session?.pharmacyOperatorId ??
+    (session?.role === "admin" ? PHARMACY_MANAGER_ID : "");
   const [state, setState] = useState<PharmacySnapshot | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);

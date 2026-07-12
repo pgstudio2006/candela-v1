@@ -7,7 +7,7 @@ import { AttioButton, StatusBadge } from "@/components/frontdesk/ui";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
 import type { Prescription, PrescriptionLine } from "@/design-system/pharmacy-data";
 import { RX_STATUS_LABELS } from "@/design-system/pharmacy-data";
-import { daysToExpiry, isControlledSchedule, pickFefoBatch } from "@/lib/pharmacy-platform";
+import { daysToExpiry, pickFefoBatch } from "@/lib/pharmacy-platform";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,7 +17,6 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
   const liveRx = useMemo(() => prescriptions.find((p) => p.id === rx.id) ?? rx, [prescriptions, rx]);
   const [tab, setTab] = useState<"verify" | "dispense">(liveRx.status === "pending" ? "verify" : "dispense");
   const [rejectReason, setRejectReason] = useState("");
-  const [witness, setWitness] = useState("");
   const [qtys, setQtys] = useState<Record<string, number>>({});
   const [batchIds, setBatchIds] = useState<Record<string, string>>({});
   const [addedLines, setAddedLines] = useState<Array<PrescriptionLine & { _local?: boolean }>>([]);
@@ -49,11 +48,6 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
     setBatchIds(initBatch);
     setAddedLines([]);
   }, [liveRx]);
-
-  const needsWitness = liveRx.lines.some((l) => {
-    const d = drugs.find((x) => x.id === (l.substituteDrugId ?? l.drugId));
-    return d && (d.schedule === "H1" || d.schedule === "X");
-  });
 
   return (
     <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/35 p-4">
@@ -116,9 +110,6 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                           {l.dose} · {l.frequency} · {l.duration} · Qty {l.qtyPrescribed}
                         </p>
                         {l.notes && <p className="text-[11px] text-[var(--attio-text-tertiary)] italic">{l.notes}</p>}
-                        {drug && isControlledSchedule(drug.schedule) && (
-                          <StatusBadge label={`Schedule ${drug.schedule}`} variant="danger" />
-                        )}
                         {batch && (
                           <p className="mt-1 text-[11px] text-[var(--attio-text-tertiary)]">
                             Shelf: {batch.rack} · Box: {batch.batchNo} · Batch: {batch.batchNo}
@@ -279,9 +270,6 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                   Add medicine
                 </AttioButton>
               </div>
-              {needsWitness && (
-                <Input placeholder="Witness pharmacist name (Schedule H1/X)" value={witness} onChange={(e) => setWitness(e.target.value)} className="h-9 text-[13px]" />
-              )}
               <PublishedSchemaForm
                 schema={dispenseSchema}
                 submitLabel="Confirm checklist"
@@ -304,7 +292,7 @@ export function RxWorkspaceModal({ rx, onClose }: { rx: Prescription; onClose: (
                   const cleanedBatchIds = Object.fromEntries(
                     Object.entries(batchIds).filter(([k]) => (qtys[k] ?? 0) > 0),
                   );
-                  dispensePrescription(rx.id, qtys, witness || undefined, cleanedBatchIds, newLines)
+                  dispensePrescription(rx.id, qtys, undefined, cleanedBatchIds, newLines)
                     .then((result) => {
                       if (!result.ok) {
                         setMsg({ text: result.error ?? "Dispense failed", type: "error" });

@@ -38,10 +38,10 @@ export async function requirePermission(
   }
 }
 
-/** Admin role may access admin module only unless explicit cross-module permission */
+/** Admin role can access any module; other roles need explicit cross-module permission */
 export async function canAccessModule(ctx: ServerContext, module: string): Promise<boolean> {
   if (ctx.role === module) return true;
-  if (ctx.role === "admin" && module === "admin") return true;
+  if (ctx.role === "admin") return true;
   const readKey = `perm_${module}_read`;
   const writeKey = `perm_${module}_write`;
   const perms = await loadPermissions(ctx.userId, ctx.tenantId, ctx.role);

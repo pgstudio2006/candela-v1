@@ -24,26 +24,28 @@ export function PharmacyShell({ children }: { children: ReactNode }) {
   usePharmacyPoll();
   const [copilotOpen, setCopilotOpen] = useState(false);
   const current = getPharmacyNavItem(pathname);
+  const isAdmin = session?.role === "admin";
+  const effectiveOperatorId = session?.pharmacyOperatorId ?? (isAdmin ? PHARMACY_MANAGER_ID : "");
 
   useEffect(() => {
     if (sessionLoading || !session) return;
-    if (session.role !== "pharmacy") {
+    if (session.role !== "pharmacy" && !isAdmin) {
       router.replace(`/app/${session.role}`);
       return;
     }
-    if (!session.pharmacyOperatorId) {
+    if (!session.pharmacyOperatorId && !isAdmin) {
       router.replace("/workspace");
     }
-  }, [session, sessionLoading, router]);
+  }, [session, sessionLoading, router, isAdmin]);
 
   useEffect(() => {
-    if (!session?.pharmacyOperatorId) return;
-    const manager = session.pharmacyOperatorId === PHARMACY_MANAGER_ID;
+    if (!effectiveOperatorId) return;
+    const manager = effectiveOperatorId === PHARMACY_MANAGER_ID;
     if (!manager) {
       const blocked = PHARMACY_NAV.find((n) => n.managerOnly && !n.purchaseOnly && pathname.startsWith(n.href));
       if (blocked) router.replace("/app/pharmacy");
     }
-  }, [pathname, session?.pharmacyOperatorId, router]);
+  }, [pathname, effectiveOperatorId, router]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,7 +58,7 @@ export function PharmacyShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [commandOpen, setCommandOpen]);
 
-  if (sessionLoading || !session?.pharmacyOperatorId) return null;
+  if (sessionLoading || !session || !effectiveOperatorId) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--attio-canvas)] text-[var(--attio-text)]" data-candela-app>

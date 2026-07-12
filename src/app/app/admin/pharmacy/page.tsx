@@ -1,0 +1,41 @@
+"use client";
+
+import { PageChrome } from "@/components/frontdesk/page-chrome";
+import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
+import Link from "next/link";
+
+export default function AdminPharmacyPage() {
+  const { ready } = usePharmacyStore();
+
+  const cards = [
+    { label: "Stock inventory", href: "/app/pharmacy/inventory", desc: "View live batches, expiry, low stock and quarantine." },
+    { label: "Drugs & formulary", href: "/app/pharmacy/drugs", desc: "Add/edit medicines, schedules, reorder levels and GST." },
+    { label: "Suppliers & catalogue", href: "/app/pharmacy/suppliers", desc: "Manage suppliers and their item catalogues." },
+    { label: "Purchase orders", href: "/app/pharmacy/purchase-orders", desc: "Create POs, receive stock and pay bills." },
+  ];
+
+  return (
+    <PageChrome
+      breadcrumbs={[{ label: "Admin", href: "/app/admin" }, { label: "Pharmacy inventory" }]}
+      title="Pharmacy inventory"
+      meta="Admin-only management of drugs, stock, suppliers and purchase orders"
+    >
+      {!ready ? (
+        <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading pharmacy workspace…</p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {cards.map((c) => (
+            <Link
+              key={c.href}
+              href={c.href}
+              className="rounded-xl border border-[var(--attio-border)] bg-[var(--attio-surface)] p-4 transition hover:border-[var(--attio-text)]"
+            >
+              <p className="text-[14px] font-medium">{c.label}</p>
+              <p className="mt-1 text-[12px] text-[var(--attio-text-tertiary)]">{c.desc}</p>
+            </Link>
+          ))}
+        </div>
+      )}
+    </PageChrome>
+  );
+}

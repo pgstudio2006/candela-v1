@@ -15,7 +15,7 @@ import type {
   WardIndent,
 } from "@/design-system/pharmacy-data";
 import type { PharmacyStateShape } from "@/server/revenue/state-seeds";
-import { calcBillTotals, daysToExpiry, isControlledSchedule, pickFefoBatch } from "@/lib/pharmacy-platform";
+import { calcBillTotals, daysToExpiry, pickFefoBatch } from "@/lib/pharmacy-platform";
 import { ServerActionError } from "@/server/errors";
 
 function allocateBatches(
@@ -151,7 +151,6 @@ export function mutateDispensePrescription(
 
   let stock = [...state.stock];
   const lines: PharmacyBillLine[] = [];
-  let scheduleEntries = [...state.scheduleH];
 
   const updatedLines = allLines.map((line) => {
     const qty = quantities[line.id] ?? line.qtyPrescribed - line.qtyDispensed;
@@ -171,10 +170,6 @@ export function mutateDispensePrescription(
       throw new ServerActionError("VALIDATION", `One or more selected batches are expired for ${drug?.brandName ?? drugId}.`);
     }
 
-    if (drug && (drug.schedule === "H1" || drug.schedule === "X") && !witnessName?.trim()) {
-      throw new ServerActionError("VALIDATION", "Witness pharmacist name is required for Schedule H1/X drugs.");
-    }
-
     for (const alloc of allocations) {
       stock = stock.map((s) =>
         s.id === alloc.batchId ? { ...s, qtyOnHand: s.qtyOnHand - alloc.qty, reserved: Math.max(0, s.reserved - alloc.qty) } : s,
@@ -190,24 +185,6 @@ export function mutateDispensePrescription(
     }
     const totalQty = allocations.reduce((sum, a) => sum + a.qty, 0);
     const leadBatch = allocations[0].batch;
-
-    if (drug && isControlledSchedule(drug.schedule)) {
-      const bal = (scheduleEntries.filter((e) => e.drugId === drugId).at(-1)?.balanceAfter ?? 0) + totalQty;
-      scheduleEntries.push({
-        id: `sh_${Date.now()}_${line.id}`,
-        prescriptionId: rxId,
-        patientName: rx.patientName,
-        uhid: rx.uhid,
-        doctorName: rx.doctorName,
-        drugId,
-        batchId: leadBatch.id,
-        qty: totalQty,
-        balanceAfter: bal,
-        pharmacistId: operator.id,
-        witnessName: drug.schedule === "H1" || drug.schedule === "X" ? witnessName : undefined,
-        at: new Date().toISOString(),
-      });
-    }
 
     return { ...line, qtyDispensed: line.qtyDispensed + totalQty, batchId: leadBatch.id, dispenseRate: leadBatch.mrp };
   });
@@ -227,7 +204,6 @@ export function mutateDispensePrescription(
     const nextState: PharmacyStateShape = {
       ...state,
       stock,
-      scheduleH: scheduleEntries,
       prescriptions: state.prescriptions.map((r) =>
         r.id === rxId
           ? {
@@ -236,7 +212,6 @@ export function mutateDispensePrescription(
               status: newStatus,
               dispensedAt: allDone ? now : r.dispensedAt,
               updatedAt: now,
-              witnessName,
               assigneeId: operator.id,
             }
           : r,
@@ -283,7 +258,6 @@ export function mutateDispensePrescription(
   const nextState: PharmacyStateShape = {
     ...state,
     stock,
-    scheduleH: scheduleEntries,
     prescriptions: state.prescriptions.map((r) =>
       r.id === rxId
         ? {
@@ -292,7 +266,6 @@ export function mutateDispensePrescription(
             status: newStatus,
             dispensedAt: allDone ? now : r.dispensedAt,
             updatedAt: now,
-            witnessName,
             assigneeId: operator.id,
           }
         : r,
