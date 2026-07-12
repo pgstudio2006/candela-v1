@@ -128,6 +128,17 @@ export default function RegistrationPage() {
       .flatMap((f) => (f.options ?? []).map((o) => o.value)),
   );
 
+  const sourceToReferrer: Record<string, string> = {
+    doctor_referral: "doctor",
+    walk_in: "walkin",
+    google_forms: "google",
+    website: "google",
+    meta_ads: "social",
+    phone: "other",
+    whatsapp: "other",
+    camp: "camp",
+  };
+
   const leadToRegistrationValues = (
     lead: Partial<CrmLead> & { age?: number | null; valueEstimate?: number | null },
   ): Record<string, string | number | boolean> => {
@@ -140,7 +151,9 @@ export default function RegistrationPage() {
       const genderMap: Record<string, string> = { male: "M", female: "F", other: "O", prefer_not: "O" };
       values.gender = genderMap[lead.gender] ?? "O";
     }
-    if (lead.age != null && typeof lead.age === "number") {
+    if (lead.dob && typeof lead.dob === "string") {
+      values.dob = lead.dob;
+    } else if (lead.age != null && typeof lead.age === "number") {
       const today = new Date();
       const dob = new Date(today.getFullYear() - lead.age, today.getMonth(), today.getDate());
       values.dob = dob.toISOString().split("T")[0];
@@ -149,6 +162,12 @@ export default function RegistrationPage() {
     if (lead.state) values.state = lead.state;
     if (lead.district) values.district = lead.district;
     if (lead.city) values.city = lead.city;
+    if (lead.houseNumber) values.houseNumber = lead.houseNumber;
+    if (lead.street) values.street = lead.street;
+    if (lead.locality) values.locality = lead.locality;
+    if (lead.landmark) values.landmark = lead.landmark;
+    if (lead.address) values.address = lead.address;
+    if (lead.pincode) values.pincode = lead.pincode;
     if (lead.appointmentCentre && appointmentCentreValues.has(lead.appointmentCentre)) {
       values.appointmentCentre = lead.appointmentCentre;
     }
@@ -159,6 +178,24 @@ export default function RegistrationPage() {
         (d) => d.label.toLowerCase().includes(specialty) || d.id.toLowerCase().includes(specialty),
       );
       if (dept) values.department = dept.id;
+    }
+    if (lead.source && sourceToReferrer[lead.source]) {
+      values.referrer = sourceToReferrer[lead.source];
+    }
+    if (lead.sourceDetail && values.referrer !== "doctor") {
+      values.referrerName = lead.sourceDetail;
+    }
+    if (lead.doctorName) {
+      values.referrerName = lead.doctorName;
+      const matched = referralDoctors.find(
+        (d) => d.name.trim().toLowerCase() === lead.doctorName!.trim().toLowerCase(),
+      );
+      if (matched) {
+        values.referralDoctor = matched.id;
+      } else {
+        values.referralDoctor = "other";
+        values.referralDoctor__other_detail = lead.doctorName;
+      }
     }
     if (lead.formData) {
       Object.entries(lead.formData).forEach(([key, value]) => {

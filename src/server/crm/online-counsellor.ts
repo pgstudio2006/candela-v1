@@ -380,6 +380,19 @@ export async function detectLeadByMobile(
   }
 
   const agent = lead.assigneeId ? await prisma.agent.findUnique({ where: { id: lead.assigneeId } }) : null;
+  const workspace = await readCrmWorkspace(ctx, () => defaultCrmState({}));
+  const workspaceLead = workspace.leads.find((l) => l.id === lead.id);
+  const extra = workspaceLead
+    ? {
+        dob: workspaceLead.dob,
+        houseNumber: workspaceLead.houseNumber,
+        street: workspaceLead.street,
+        locality: workspaceLead.locality,
+        landmark: workspaceLead.landmark,
+        address: workspaceLead.address,
+        pincode: workspaceLead.pincode,
+      }
+    : {};
 
   return {
     found: true,
@@ -396,11 +409,18 @@ export async function detectLeadByMobile(
       alternatePhone: lead.alternatePhone ?? undefined,
       email: lead.email ?? undefined,
       age: lead.age ?? undefined,
+      dob: extra.dob,
       gender: (lead.gender as CrmLead["gender"] | undefined) ?? undefined,
       city: lead.city ?? undefined,
       district: lead.district ?? undefined,
       state: lead.state ?? undefined,
       country: lead.country ?? undefined,
+      houseNumber: extra.houseNumber,
+      street: extra.street,
+      locality: extra.locality,
+      landmark: extra.landmark,
+      address: extra.address,
+      pincode: extra.pincode,
       doctorName: lead.doctorName ?? undefined,
       appointmentDate: lead.appointmentDate?.toISOString() ?? undefined,
       appointmentTime: lead.appointmentTime ?? undefined,
