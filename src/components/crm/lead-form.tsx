@@ -194,6 +194,16 @@ export function CrmLeadFormModal({ open, onClose, initial, onSaved }: CrmLeadFor
   const { stages, agents, isManager, operatorId, addLead, updateLead } = useCrmStore();
   const { roster } = useFrontdeskStore();
   const schema = useFrontdeskFormSchema("registration", roster, undefined, undefined);
+  const filteredSchema = useMemo(() => {
+    if (!schema) return schema;
+    return {
+      ...schema,
+      sections: schema.sections.map((section) => ({
+        ...section,
+        fields: section.fields.filter((f) => f.id !== "fullName" && f.id !== "phone"),
+      })),
+    };
+  }, [schema]);
   const [form, setForm] = useState<CrmLeadFormValues>(EMPTY_LEAD_FORM);
   const [captureValues, setCaptureValues] = useState<Record<string, string | number | boolean>>({});
   const [error, setError] = useState("");
@@ -338,8 +348,32 @@ export function CrmLeadFormModal({ open, onClose, initial, onSaved }: CrmLeadFor
             )}
           </section>
 
+          <section className="mb-6">
+            <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--attio-text-tertiary)]">
+              Patient details
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Full name" required>
+                <Input
+                  value={form.fullName}
+                  onChange={(e) => set("fullName", e.target.value)}
+                  placeholder="Patient full name"
+                  className="h-9 text-[13px]"
+                />
+              </Field>
+              <Field label="Mobile no" required>
+                <Input
+                  value={form.phone}
+                  onChange={(e) => set("phone", e.target.value)}
+                  placeholder="10-digit mobile"
+                  className="h-9 text-[13px]"
+                />
+              </Field>
+            </div>
+          </section>
+
           <PublishedSchemaForm
-            schema={schema}
+            schema={filteredSchema}
             hideSubmit
             formKey={initial?.id ?? "new-lead"}
             initialValues={captureValues}
