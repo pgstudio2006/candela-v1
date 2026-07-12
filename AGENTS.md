@@ -278,6 +278,65 @@ A new batch of 11 user-reported issues is being worked on. This section tracks t
 - `src/server/crm/visit-bridge.ts`, `src/server/nurse/index.ts`, `src/server/counsellor/index.ts` — lead status sync on visit complete.
 - `src/app/api/crm/offline-lead/route.ts` and `src/app/app/frontdesk/leads/page.tsx` — offline lead creation.
 
+## 6.2 Pharmacy-connected prescriptions & IPD pharmacy billing — completed 2026-07-12
+
+A follow-up sprint integrated the doctor module with pharmacy inventory and made IPD pharmacy charges bill separately from IPD services.
+
+### Completed
+
+- **Doctor drug search now pharmacy-aware**
+  - New `DoctorDrugSearch` component (`src/components/doctor/doctor-drug-search.tsx`) lets doctors search formulary drugs by brand/generic name with live stock, or add a manual medicine when the drug is not in stock.
+  - New server action `getPharmacyDrugsForDoctorAction` (`src/app/actions/pharmacy-actions.ts`) returns branch drugs with current stock and pricing.
+  - `PrescriptionLine` type extended with optional `drugId`, `genericName`, and `isManual` (`src/design-system/doctor-data.ts`).
+  - `PrescriptionEditor` (`src/components/doctor/prescription-editor.tsx`) replaced free-text drug input with `DoctorDrugSearch`.
+
+- **IPD rounds push structured medication orders to pharmacy**
+  - `IpdRoundWorkspace` (`src/components/doctor/ipd-round-workspace.tsx`) now collects structured medication lines via `DoctorDrugSearch`.
+  - `saveIpdRound` (store, API route, server action, and server function) accepts an optional `medicationLines` array and pushes a source=`ipd` prescription to pharmacy.
+  - `src/server/doctor/index.ts` `saveIpdRound` falls back to parsing legacy medicine text if no structured lines are provided.
+
+- **IPD pharmacy charges get their own invoice**
+  - `src/server/ipd/index.ts` gained `getIpdPharmacyCharges`, which reads dispensed/partially-dispensed IPD prescriptions from the pharmacy workspace and computes taxable amounts and profit.
+  - `processBilling` in `src/server/clinical/index.ts` now:
+    - Calculates IPD pharmacy GST separately from service GST.
+    - Combines service and pharmacy net amounts for visit totals.
+    - Splits the collected payment proportionally between services and pharmacy.
+    - Creates a separate "IPD pharmacy supplies" invoice with `category=pharmacy`.
+  - `createVisitInvoice` (`src/server/invoicing.ts`) and `computeGstInvoice` (`src/lib/gst-invoicing.ts`) now support per-line `category` and `gstRatePercent`.
+
+- **Patient profile surfaces pharmacy invoices**
+  - `getPatientInvoices` returns a `hasPharmacy` flag.
+  - Patient profile billing tab shows a "Pharmacy" badge on invoices that contain pharmacy lines.
+
+- **Pharmacy profit KPI**
+  - `computePharmacyKpis` (`src/lib/pharmacy-platform.ts`) now includes a "Today's Profit" metric calculated as `qty × (rate − purchaseRate)` for paid pharmacy bills.
+
+### Validation & commit
+
+- `npx tsc --noEmit` passed with 0 errors.
+- Changes committed as `5f4629f` and pushed to `origin/master`.
+
+### Changed files (this sprint)
+
+- `src/app/actions/pharmacy-actions.ts` (new)
+- `src/app/actions/doctor-actions.ts`
+- `src/app/api/doctor/mutate/route.ts`
+- `src/app/app/doctor/ipd/page.tsx`
+- `src/app/app/frontdesk/patients/[id]/page.tsx`
+- `src/components/doctor/doctor-drug-search.tsx` (new)
+- `src/components/doctor/doctor-store.tsx`
+- `src/components/doctor/ipd-round-workspace.tsx`
+- `src/components/doctor/prescription-editor.tsx`
+- `src/design-system/doctor-data.ts`
+- `src/lib/gst-invoicing.ts`
+- `src/lib/pharmacy-platform.ts`
+- `src/server/clinical/index.ts`
+- `src/server/doctor/index.ts`
+- `src/server/invoicing.ts`
+- `src/server/ipd/index.ts`
+- `src/server/pharmacy-rx-bridge.ts`
+- `src/server/pharmacy/index.ts`
+
 ---
 
 ## 7. Developer commands
@@ -340,4 +399,27 @@ If build fails because of DB schema mismatch, run `npx prisma db push` first (re
 
 ---
 
-*Last updated: 2026-07-12 — new 11-item sprint started; this file is the handoff point for the current agent.*
+## 9. Tenant-wise scenario testing (in progress)
+
+Automated end-to-end audits are being executed on the live staging tenant `os.candela.adrine.in` using Playwright. Test data uses branch-specific role credentials and synthetic patients (`AutoTest`, `AutoTest2`, etc.).
+
+### Gurgaon Center progress
+
+- **Tenant login & branch isolation**: OK. Selecting `Gurgaon Center` after `/tenant` login routes to Gurgaon-specific data and price list.
+- **Frontdesk registration → check-in → billing**: OK. New patient `AutoTest2` (UHID `NV-GU-2026-0070`, token #79) registered, assigned to `Parth`, billed for `OPD Spine` ₹500, receipt generated.
+- **Junior exam handoff**: OK. Vitals, chief complaint, impression and handoff note saved and visible to doctor.
+- **Doctor consultation + pharmacy-linked Rx**: OK after filling required `Primary diagnosis`. `Calpol` (Paracetamol 650mg) selected from pharmacy stock and completed successfully. Patient removed from doctor queue; prescription pushed to pharmacy module.
+- **Findings / blockers**:
+  - `Complete consult` silently does nothing unless the Diagnosis section has a value for the required `Primary diagnosis` field. UX issue: no visible guidance that diagnosis is missing.
+  - `navyaupharmacy1@gmail.com / navyaupharmacy1` (the credentials provided for Gurgaon pharmacy) fails with "Invalid email or password for this branch". Pharmacy dispense + billing cannot be verified until the correct password is supplied.
+  - Earlier patient `AutoTest` (assigned to `Dr. Sunil Saini`) could not be completed because his password is not in the provided credential list.
+
+### Pataudi Center progress
+
+- **Tenant login & branch selection**: OK. `Pataudi Center` can be selected independently.
+- **Frontdesk login**: Blocked. `fdp1@gmail.com` password is truncated in the provided credential sheet; attempted guesses (`fdp1@p`, `fdp1@pataudi`) failed. Admin account can log in to Pataudi but is redirected away from `/app/frontdesk` (admin is not authorized for frontdesk operations).
+- **Next steps**: Need correct Pataudi frontdesk password and Gurgaon pharmacy password to complete pharmacy, IPD, and cross-branch isolation tests.
+
+---
+
+*Last updated: 2026-07-12 — pharmacy-connected prescriptions, IPD pharmacy billing, and profit KPI completed; Gurgaon OPD registration-to-consult path tested end-to-end; pharmacy fulfillment and Pataudi full path pending correct role credentials.*
