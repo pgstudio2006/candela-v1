@@ -2,13 +2,13 @@
 
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
-import { MetricStrip, Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { AttioButton, MetricStrip, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { RX_STATUS_LABELS } from "@/design-system/pharmacy-data";
 import { daysToExpiry } from "@/lib/pharmacy-platform";
 import Link from "next/link";
 
 export default function PharmacyDashboardPage() {
-  const { getKpis, getActivePrescriptions, stock, drugs, activities, purchaseOrders, getDrug } = usePharmacyStore();
+  const { getKpis, getActivePrescriptions, stock, drugs, activities, purchaseOrders, getDrug, isManager, resetWorkspace } = usePharmacyStore();
   const kpis = getKpis();
   const urgent = getActivePrescriptions().slice(0, 6);
   const alerts = stock
@@ -20,6 +20,15 @@ export default function PharmacyDashboardPage() {
       return (d >= 0 && d <= 30) || low || out;
     })
     .slice(0, 6);
+
+  const handleReset = async () => {
+    if (!confirm("Clear all demo pharmacy data for this branch? This cannot be undone.")) return;
+    try {
+      await resetWorkspace();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Reset failed.");
+    }
+  };
 
   return (
     <PageChrome
@@ -34,6 +43,11 @@ export default function PharmacyDashboardPage() {
           <Link href="/app/pharmacy/prescriptions" className="inline-flex h-8 items-center rounded-md bg-[var(--attio-text)] px-3 text-[12px] font-medium text-white">
             Open Rx queue
           </Link>
+          {isManager() && (
+            <AttioButton variant="secondary" className="!h-8 !text-[12px]" onClick={() => void handleReset()}>
+              Reset demo data
+            </AttioButton>
+          )}
         </div>
       }
     >

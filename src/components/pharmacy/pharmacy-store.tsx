@@ -80,6 +80,7 @@ type Store = PharmacySnapshot & {
   fulfillIndent: (id: string, qty: number) => Promise<void>;
   addSupplierCatalogueItem: (item: Omit<import("@/design-system/pharmacy-data").SupplierCatalogueItem, "id">) => Promise<void>;
   updateSupplierCatalogueItem: (id: string, patch: Partial<import("@/design-system/pharmacy-data").SupplierCatalogueItem>) => Promise<void>;
+  resetWorkspace: () => Promise<void>;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -373,6 +374,11 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
       },
       updateSupplierCatalogueItem: async (id, patch) => {
         await pharmacyMutate({ op: "updateSupplierCatalogueItem", operatorId: opId(), id, patch });
+        await refresh({ silent: true });
+      },
+      resetWorkspace: async () => {
+        const res = await pharmacyMutate({ op: "resetWorkspace", operatorId: opId() });
+        if (!res.ok) throw new Error(res.error ?? "Failed to reset pharmacy workspace.");
         await refresh({ silent: true });
       },
     };

@@ -17,6 +17,7 @@ import { AttioButton, StatusBadge } from "@/components/frontdesk/ui";
 import { formatStageStatus } from "@/lib/frontdesk-workflow";
 import { channelLabel, followUpDisplayStatus } from "@/lib/crm-follow-ups";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { convertLeadToPatientAction } from "@/server/crm/online-counsellor-actions";
 import { getCrmLeadClinicalHistoryAction, type CrmPatientHistory } from "@/server/crm/actions";
 import { useEffect, useMemo, useState } from "react";
 
@@ -126,9 +127,11 @@ export function LeadDetailPanel({
   activities: CrmActivity[];
   followUps: CrmFollowUp[];
 }) {
-  const { addFollowUp, agents: storeAgents, stages: storeStages, getOperator, moveLeadStage, getFilteredLeads } = useCrmStore();
+  const { addFollowUp, agents: storeAgents, stages: storeStages, getOperator, moveLeadStage, getFilteredLeads, refresh } = useCrmStore();
   const currentLead = useMemo(() => getFilteredLeads().find((l) => l.id === lead.id) ?? lead, [getFilteredLeads, lead]);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState("");
   const [tab, setTab] = useState("overview");
   const [historyTick, setHistoryTick] = useState(0);
   const [history, setHistory] = useState<CrmPatientHistory>({
@@ -183,6 +186,24 @@ export function LeadDetailPanel({
         : undefined;
   const currentStageLabel = storeStages.find((s) => s.id === currentLead.stageId)?.label ?? currentLead.stageId;
 
+  const handleConvert = async () => {
+    setConverting(true);
+    setConvertError("");
+    try {
+      const result = await convertLeadToPatientAction(currentLead.id, { bookAppointment: false, source: "crm_manager" });
+      if (!result.ok) {
+        setConvertError(result.error || "Failed to convert lead to patient.");
+        return;
+      }
+      await refresh({ silent: true });
+      setHistoryTick((n) => n + 1);
+    } catch (err) {
+      setConvertError(err instanceof Error ? err.message : "Conversion failed.");
+    } finally {
+      setConverting(false);
+    }
+  };
+
   const { billing, patient, timeline, visits, pharmacyRx, pharmacyBills, counselSessions } = history;
   const leadFollowUps = followUps
     .filter((f) => f.leadId === currentLead.id)
@@ -190,7 +211,7 @@ export function LeadDetailPanel({
 
   return (
     <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-xl flex-col border-l border-[var(--attio-border)] bg-white shadow-xl">
-      <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="relative flex items-center justify-between border-b px-4 py-3">
         <div className="min-w-0">
           <h2 className="truncate text-[15px] font-semibold">{currentLead.fullName}</h2>
           {patient && (
@@ -215,12 +236,22 @@ export function LeadDetailPanel({
           <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={onEdit}>
             Edit
           </AttioButton>
-          <AttioButton variant="primary" className="!h-7 !text-[11px]" onClick={onEdit}>
-            Fill lead form
-          </AttioButton>
+          {currentLead.uhid ? (
+            <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">Patient registered</span>
+          ) : (
+            <AttioButton
+              variant="primary"
+              className="!h-7 !text-[11px]"
+              disabled={converting}
+              onClick={() => void handleConvert()}
+            >
+              {converting ? "Converting…" : "Convert to patient"}
+            </AttioButton>
+          )}
           <button type="button" onClick={onClose} className="text-[12px] text-[var(--attio-text-tertiary)] hover:underline">
             Close
           </button>
+          {convertError && <p className="absolute right-0 top-10 z-50 rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700">{convertError}</p>}
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createId } from "@/lib/id";
@@ -6,7 +6,7 @@ import { getServerContext } from "@/server/context";
 import { serializeForClient } from "@/server/serialize";
 import { bookAppointment } from "@/server/clinical";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ ok: false, error: "Please sign in first." }, { status: 401 });
@@ -14,34 +14,46 @@ export async function GET() {
 
   try {
     const ctx = await getServerContext();
+    const branchId = request.nextUrl.searchParams.get("branchId") || ctx.branchId;
 
-    // Get all doctors for this branch
-    const doctors = await prisma.adminStaff.findMany({
-      where: { branchId: ctx.branchId, role: "doctor" },
-      select: { id: true, name: true, departmentIds: true },
+    const branches = await prisma.branch.findMany({
+      where: { tenantId: ctx.tenantId },
+      select: { id: true, name: true },
     }).catch(() => []);
+    const selectedBranch = branches.find((b) => b.id === branchId) ?? { id: ctx.branchId, name: ctx.branchName };
 
-    // Get all appointments for this branch
-    const appointments = await prisma.appointment.findMany({
-      where: {
-        branchId: ctx.branchId,
-      },
-      orderBy: [{ date: "asc" }, { time: "asc" }],
-      take: 200,
-      include: {
-        patient: {
-          select: { id: true, name: true, uhid: true, phone: true },
+    const [departments, doctors, appointments] = await Promise.all([
+      prisma.department.findMany({
+        where: { branchId: selectedBranch.id },
+        select: { id: true, label: true },
+      }).catch(() => []),
+      prisma.adminStaff.findMany({
+        where: { branchId: selectedBranch.id, role: "doctor" },
+        select: { id: true, name: true, departmentIds: true },
+      }).catch(() => []),
+      prisma.appointment.findMany({
+        where: { branchId: selectedBranch.id },
+        orderBy: [{ date: "asc" }, { time: "asc" }],
+        take: 200,
+        include: {
+          patient: {
+            select: { id: true, name: true, uhid: true, phone: true },
+          },
         },
-      },
-    }).catch(() => []);
+      }).catch(() => []),
+    ]);
 
     return NextResponse.json({
       ok: true,
       data: serializeForClient({
+        branches,
+        selectedBranchId: selectedBranch.id,
+        departments: departments.map((d) => ({ id: d.id, label: d.label })),
         doctors: doctors.map((d) => ({
           id: d.id,
           name: d.name,
           department: Array.isArray(d.departmentIds) ? (d.departmentIds as string[]).join(", ") : "",
+          departmentIds: Array.isArray(d.departmentIds) ? (d.departmentIds as string[]) : [],
         })),
         appointments: appointments.map((a) => ({
           id: a.id,
@@ -76,13 +88,23 @@ export async function POST(request: Request) {
       patientUhid: string;
       doctorId: string;
       departmentId: string;
+      branchId: string;
       date: string;
       time: string;
       duration?: string;
       notes?: string;
     };
 
-    const result = await bookAppointment(ctx, {
+    const bookingBranch = await prisma.branch.findFirst({
+      where: { id: body.branchId, tenantId: ctx.tenantId },
+      select: { id: true, name: true },
+    });
+    if (!bookingBranch) {
+      return NextResponse.json({ ok: false, error: "Selected branch not found." }, { status: 400 });
+    }
+    const bookingCtx = { ...ctx, branchId: bookingBranch.id, branchName: bookingBranch.name };
+
+    const result = await bookAppointment(bookingCtx, {
       data: {
         patient: body.patientUhid,
         doctor: body.doctorId,

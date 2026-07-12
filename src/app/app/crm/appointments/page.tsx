@@ -15,7 +15,10 @@ import { Calendar, Plus, Search, Stethoscope } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type AppointmentData = {
-  doctors: { id: string; name: string; department: string }[];
+  branches: { id: string; name: string }[];
+  selectedBranchId: string;
+  departments: { id: string; label: string }[];
+  doctors: { id: string; name: string; department: string; departmentIds: string[] }[];
   appointments: {
     id: string;
     patientId: string;
@@ -40,6 +43,8 @@ export default function CrmAppointmentsPage() {
 
   const [bookingOpen, setBookingOpen] = useState(false);
   const [patients, setPatients] = useState<{ id: string; fullName: string | null; uhid: string; phone: string | null }[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [selectedPatientUhid, setSelectedPatientUhid] = useState("");
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
   const [date, setDate] = useState("");
@@ -49,26 +54,32 @@ export default function CrmAppointmentsPage() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (bookingOpen) {
-      void (async () => {
-        try {
-          const res = await fetch("/api/crm/patients", { credentials: "include" });
-          const json = await res.json();
-          if (json.ok) setPatients((json.data ?? []).map((p: any) => ({ id: p.id, fullName: p.fullName, uhid: p.uhid, phone: p.phone })));
-        } catch {
-          setPatients([]);
-        }
-      })();
-    }
-  }, [bookingOpen]);
-
-  const load = async () => {
+  const loadPatients = async (branchId: string) => {
     try {
-      const res = await fetch("/api/crm/appointments", { credentials: "include" });
+      const res = await fetch(`/api/crm/patients?branchId=${encodeURIComponent(branchId)}`, { credentials: "include" });
+      const json = await res.json();
+      if (json.ok) setPatients((json.data ?? []).map((p: any) => ({ id: p.id, fullName: p.fullName, uhid: p.uhid, phone: p.phone })));
+    } catch {
+      setPatients([]);
+    }
+  };
+
+  useEffect(() => {
+    if (bookingOpen && selectedBranchId) {
+      void loadPatients(selectedBranchId);
+    }
+  }, [bookingOpen, selectedBranchId]);
+
+  const load = async (branchId?: string) => {
+    try {
+      const url = branchId
+        ? `/api/crm/appointments?branchId=${encodeURIComponent(branchId)}`
+        : "/api/crm/appointments";
+      const res = await fetch(url, { credentials: "include" });
       const json = await res.json();
       if (json.ok) {
         setData(json.data);
+        setSelectedBranchId(json.data.selectedBranchId);
         setError(null);
       } else {
         setError(json.error ?? "Failed to load appointments.");
@@ -115,8 +126,8 @@ export default function CrmAppointmentsPage() {
   }, [filteredAppointments]);
 
   const handleBook = async () => {
-    if (!selectedPatientUhid || !selectedDoctorId || !date || !time) {
-      setBookingError("Please select a patient, doctor, date and time.");
+    if (!selectedBranchId || !selectedDepartmentId || !selectedDoctorId || !selectedPatientUhid || !date || !time) {
+      setBookingError("Please select a branch, department, doctor, patient, date and time.");
       return;
     }
     const doctor = data?.doctors.find((d) => d.id === selectedDoctorId);
@@ -134,7 +145,8 @@ export default function CrmAppointmentsPage() {
         body: JSON.stringify({
           patientUhid: selectedPatientUhid,
           doctorId: selectedDoctorId,
-          departmentId: doctor.department ? doctor.department.split(",")[0].trim() : "dept_spine",
+          departmentId: selectedDepartmentId,
+          branchId: selectedBranchId,
           date,
           time,
           duration,
@@ -146,6 +158,7 @@ export default function CrmAppointmentsPage() {
         setBookingOpen(false);
         setSelectedPatientUhid("");
         setSelectedDoctorId("");
+        setSelectedDepartmentId("");
         setDate("");
         setTime("");
         setDuration("15");
@@ -276,16 +289,42 @@ export default function CrmAppointmentsPage() {
           </DialogHeader>
           <div className="space-y-3 py-2 text-[13px]">
             <div>
-              <Label className="text-[12px]">Patient</Label>
+              <Label className="text-[12px]">Branch</Label>
               <select
-                value={selectedPatientUhid}
-                onChange={(e) => setSelectedPatientUhid(e.target.value)}
+                value={selectedBranchId}
+                onChange={(e) => {
+                  const branchId = e.target.value;
+                  setSelectedBranchId(branchId);
+                  setSelectedDepartmentId("");
+                  setSelectedDoctorId("");
+                  setSelectedPatientUhid("");
+                  void load(branchId);
+                  void loadPatients(branchId);
+                }}
                 className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
               >
-                <option value="">Select patient</option>
-                {patients.map((p) => (
-                  <option key={p.uhid} value={p.uhid}>
-                    {p.fullName || p.uhid} · {p.uhid} · {p.phone ?? "—"}
+                <option value="">Select branch</option>
+                {data?.branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-[12px]">Department</Label>
+              <select
+                value={selectedDepartmentId}
+                onChange={(e) => {
+                  setSelectedDepartmentId(e.target.value);
+                  setSelectedDoctorId("");
+                }}
+                className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
+              >
+                <option value="">Select department</option>
+                {data?.departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
                   </option>
                 ))}
               </select>
@@ -298,9 +337,26 @@ export default function CrmAppointmentsPage() {
                 className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
               >
                 <option value="">Select doctor</option>
-                {data?.doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} {d.department ? `(${d.department})` : ""}
+                {data?.doctors
+                  .filter((d) => !selectedDepartmentId || d.departmentIds.includes(selectedDepartmentId))
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} {d.department ? `(${d.department})` : ""}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-[12px]">Patient</Label>
+              <select
+                value={selectedPatientUhid}
+                onChange={(e) => setSelectedPatientUhid(e.target.value)}
+                className="mt-1 h-9 w-full rounded-md border px-2 text-[13px]"
+              >
+                <option value="">Select patient</option>
+                {patients.map((p) => (
+                  <option key={p.uhid} value={p.uhid}>
+                    {p.fullName || p.uhid} · {p.uhid} · {p.phone ?? "—"}
                   </option>
                 ))}
               </select>

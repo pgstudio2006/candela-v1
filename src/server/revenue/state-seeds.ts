@@ -45,6 +45,7 @@ import {
   type SupplierCatalogueItem,
   type WardIndent,
 } from "@/design-system/pharmacy-data";
+import { isDemoSeedEnabled } from "@/lib/demo-seed";
 
 export type PharmacyStateShape = {
   staff: PharmacyStaff[];
@@ -90,22 +91,25 @@ export type ClinicalSnapshot = {
   visits: Visit[];
 };
 
-export const defaultPharmacyState = (passwords: Record<string, string>): PharmacyStateShape => ({
-  staff: structuredClone(SEED_PHARMACY_STAFF),
-  staffPasswords: passwords,
-  drugs: structuredClone(SEED_DRUGS),
-  stock: structuredClone(SEED_STOCK),
-  suppliers: structuredClone(SEED_SUPPLIERS),
-  supplierCatalogue: [],
-  purchaseOrders: structuredClone(SEED_PURCHASE_ORDERS),
-  prescriptions: structuredClone(SEED_PRESCRIPTIONS),
-  bills: structuredClone(SEED_BILLS),
-  returns: structuredClone(SEED_RETURNS),
-  indents: structuredClone(SEED_INDENTS),
-  scheduleH: [],
-  activities: [],
-  operatorId: "",
-});
+export const defaultPharmacyState = (passwords: Record<string, string>): PharmacyStateShape => {
+  const demo = isDemoSeedEnabled();
+  return {
+    staff: structuredClone(SEED_PHARMACY_STAFF),
+    staffPasswords: passwords,
+    drugs: demo ? structuredClone(SEED_DRUGS) : [],
+    stock: demo ? structuredClone(SEED_STOCK) : [],
+    suppliers: demo ? structuredClone(SEED_SUPPLIERS) : [],
+    supplierCatalogue: [],
+    purchaseOrders: demo ? structuredClone(SEED_PURCHASE_ORDERS) : [],
+    prescriptions: demo ? structuredClone(SEED_PRESCRIPTIONS) : [],
+    bills: demo ? structuredClone(SEED_BILLS) : [],
+    returns: demo ? structuredClone(SEED_RETURNS) : [],
+    indents: demo ? structuredClone(SEED_INDENTS) : [],
+    scheduleH: [],
+    activities: [],
+    operatorId: "",
+  };
+};
 
 export const defaultCounsellorState = (): CounsellorStateShape => ({
   sessions: [],

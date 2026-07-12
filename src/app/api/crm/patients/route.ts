@@ -13,7 +13,8 @@ export async function GET(request: Request) {
   try {
     const ctx = await getServerContext();
     const counsellorId = (session as any).crmOperatorId;
-    const scope = { tenantId: ctx.tenantId, branchId: ctx.branchId };
+    const branchId = new URL(request.url).searchParams.get("branchId") || ctx.branchId;
+    const scope = { tenantId: ctx.tenantId, branchId };
 
     // If a manager is viewing, optionally return all patients. Default to assigned only.
     const all = new URL(request.url).searchParams.get("all") === "1";

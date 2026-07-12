@@ -204,6 +204,23 @@ export async function getPharmacySnapshotForContext(ctx: ServerContext): Promise
   return readState(ctx);
 }
 
+export async function resetPharmacyWorkspace(ctx: ServerContext, operatorId: string) {
+  const state = await readState(ctx);
+  const operator = resolveStaffOperator(state, operatorId);
+  assertManager(operator);
+  const empty = defaultPharmacyState({});
+  await persistState(ctx, empty);
+  await writePlatformAudit({
+    ctx,
+    module: "pharmacy",
+    action: "workspace_reset",
+    entityType: "pharmacy",
+    entityId: ctx.branchId,
+    summary: `Pharmacy workspace reset by ${operator.name}`,
+    payload: { operatorId: operator.id },
+  });
+}
+
 export async function verifyPrescription(
   ctx: ServerContext,
   operatorId: string,

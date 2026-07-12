@@ -21,6 +21,7 @@ import {
   quarantineBatch,
   receivePO,
   rejectPrescription,
+  resetPharmacyWorkspace,
   restockReturn,
   updateDrug,
   updatePOStatus,
@@ -173,6 +174,9 @@ export async function POST(request: Request) {
         break;
       case "updateSupplierCatalogueItem":
         result = await updateSupplierCatalogueItem(ctx, operatorId, body.id!, body.patch as Partial<import("@/design-system/pharmacy-data").SupplierCatalogueItem>);
+        break;
+      case "resetWorkspace":
+        result = await resetPharmacyWorkspace(ctx, operatorId);
         break;
       default:
         return NextResponse.json({ ok: false, error: `Unknown operation: ${op}` }, { status: 400 });
