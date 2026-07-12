@@ -208,49 +208,57 @@ export default function PharmacyPurchaseOrdersPage() {
 
             <Panel title="Order Lines">
               <div className="space-y-3">
-                <div className="hidden grid-cols-[1.5fr_80px_100px_80px_80px_40px] gap-3 px-3 text-[11px] font-medium text-[var(--attio-text-secondary)] sm:grid">
+                <div className="hidden grid-cols-[2fr_80px_110px_90px_40px] gap-3 px-3 text-[11px] font-medium text-[var(--attio-text-secondary)] sm:grid">
                   <div>Medicine</div>
                   <div>Qty</div>
                   <div>Rate</div>
-                  <div>GST %</div>
                   <div>Total</div>
                   <div></div>
                 </div>
-                {poLines.map((line, idx) => (
-                  <div key={idx} className="grid grid-cols-1 items-end gap-3 rounded-lg border p-3 sm:grid-cols-[1.5fr_80px_100px_80px_80px_40px]">
-                    <div className="min-w-0 space-y-1">
-                      <label className="text-[11px] font-medium text-[var(--attio-text-secondary)] sm:hidden">Medicine</label>
-                      <DrugSearch
-                        drugs={drugs}
-                        value={line.drugId}
-                        placeholder="Search medicine…"
-                        onChange={(id) =>
-                          setPoLines(
-                            poLines.map((l, i) =>
-                              i === idx
-                                ? {
-                                    ...l,
-                                    drugId: id,
-                                    gst: id ? String(drugs.find((d) => d.id === id)?.gstPercent ?? l.gst) : l.gst,
-                                  }
-                                : l,
-                            ),
-                          )
-                        }
-                      />
+                {poLines.map((line, idx) => {
+                  const drug = drugs.find((d) => d.id === line.drugId);
+                  const gstPercent = drug?.gstPercent ?? 0;
+                  const lineTotal = (Number(line.qty) || 0) * (Number(line.rate) || 0) * (1 + gstPercent / 100);
+                  return (
+                    <div key={idx} className="grid grid-cols-1 items-end gap-3 rounded-lg border p-3 sm:grid-cols-[2fr_80px_110px_90px_40px]">
+                      <div className="min-w-0 space-y-1">
+                        <label className="text-[11px] font-medium text-[var(--attio-text-secondary)] sm:hidden">Medicine</label>
+                        <DrugSearch
+                          drugs={drugs}
+                          value={line.drugId}
+                          placeholder="Search medicine…"
+                          onChange={(id) =>
+                            setPoLines(
+                              poLines.map((l, i) =>
+                                i === idx
+                                  ? {
+                                      ...l,
+                                      drugId: id,
+                                      gst: id ? String(drugs.find((d) => d.id === id)?.gstPercent ?? 0) : "0",
+                                    }
+                                  : l,
+                              ),
+                            )
+                          }
+                        />
+                        {drug && (
+                          <div className="text-[11px] text-[var(--attio-text-tertiary)]">
+                            GST {gstPercent}% · {drug.unit}
+                          </div>
+                        )}
+                      </div>
+                      <PharmacyInput type="number" placeholder="Qty" value={line.qty} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, qty: e.target.value } : l)))} />
+                      <PharmacyInput type="number" placeholder="Rate" value={line.rate} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, rate: e.target.value } : l)))} />
+                      <div className="flex h-9 items-center text-[13px] font-medium text-[var(--attio-text-secondary)]">
+                        ₹{lineTotal.toFixed(2)}
+                      </div>
+                      <button type="button" className="flex h-9 items-center justify-center text-red-600 hover:text-red-700" onClick={() => setPoLines(poLines.filter((_, i) => i !== idx))}>
+                        <Trash2 className="size-4" />
+                      </button>
                     </div>
-                    <PharmacyInput type="number" placeholder="Qty" value={line.qty} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, qty: e.target.value } : l)))} />
-                    <PharmacyInput type="number" placeholder="Rate" value={line.rate} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, rate: e.target.value } : l)))} />
-                    <PharmacyInput type="number" placeholder="GST %" value={line.gst} onChange={(e) => setPoLines(poLines.map((l, i) => (i === idx ? { ...l, gst: e.target.value } : l)))} />
-                    <div className="flex h-9 items-center text-[13px] font-medium text-[var(--attio-text-secondary)]">
-                      ₹{((Number(line.qty) || 0) * (Number(line.rate) || 0) * (1 + (Number(line.gst) || 0) / 100)).toFixed(2)}
-                    </div>
-                    <button type="button" className="flex h-9 items-center justify-center text-red-600 hover:text-red-700" onClick={() => setPoLines(poLines.filter((_, i) => i !== idx))}>
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                ))}
-                <AttioButton variant="secondary" onClick={() => setPoLines([...poLines, { drugId: "", qty: "", rate: "", gst: "12" }])}>Add line</AttioButton>
+                  );
+                })}
+                <AttioButton variant="secondary" onClick={() => setPoLines([...poLines, { drugId: "", qty: "", rate: "", gst: "0" }])}>Add line</AttioButton>
               </div>
             </Panel>
 

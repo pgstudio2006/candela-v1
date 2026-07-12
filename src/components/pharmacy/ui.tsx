@@ -141,10 +141,10 @@ export function DrugSearch({
   return (
     <div ref={ref} className="relative min-w-0">
       {selected ? (
-        <div className="flex h-9 items-center justify-between rounded-md border border-[var(--attio-border)] bg-white px-3 text-[13px]">
-          <span className="truncate">
-            {selected.brandName}{" "}
-            <span className="text-[var(--attio-text-tertiary)]">({selected.genericName})</span>
+        <div className="flex h-9 items-center justify-between rounded-md border border-[var(--attio-border)] bg-white px-3 text-[13px] focus-within:border-[var(--attio-text)] focus-within:ring-1 focus-within:ring-[var(--attio-text)]">
+          <span className="truncate" title={`${selected.brandName} (${selected.genericName})`}>
+            {selected.brandName}
+            <span className="ml-1 text-[var(--attio-text-tertiary)]">({selected.genericName})</span>
           </span>
           <button
             type="button"
@@ -170,32 +170,37 @@ export function DrugSearch({
             }}
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
-            className="h-9 w-full rounded-md border border-[var(--attio-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-[var(--attio-text)]"
+            className="h-9 w-full rounded-md border border-[var(--attio-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-[var(--attio-text)] focus:ring-1 focus:ring-[var(--attio-text)]"
           />
         </div>
       )}
       {open && !selected && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-[var(--attio-border)] bg-white py-1 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-72 min-w-[300px] max-w-[420px] overflow-auto rounded-md border border-[var(--attio-border)] bg-white py-1 shadow-xl">
           {filtered.length === 0 ? (
             <div className="px-3 py-2 text-[12px] text-[var(--attio-text-tertiary)]">No medicines found</div>
           ) : (
-            filtered.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => {
-                  onChange(d.id);
-                  setOpen(false);
-                  setQuery("");
-                }}
-                className="w-full px-3 py-2 text-left text-[13px] hover:bg-[var(--attio-hover)]"
-              >
-                <div className="font-medium">{d.brandName}</div>
-                <div className="text-[11px] text-[var(--attio-text-tertiary)]">
-                  {d.genericName} · {d.strength} · {d.form}
-                </div>
-              </button>
-            ))
+            <>
+              <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--attio-text-tertiary)]">
+                {filtered.length} medicine{filtered.length === 1 ? "" : "s"} found
+              </div>
+              {filtered.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(d.id);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className="w-full px-3 py-2 text-left text-[13px] transition-colors hover:bg-[var(--attio-hover)] focus:bg-[var(--attio-hover)]"
+                >
+                  <div className="font-medium">{d.brandName}</div>
+                  <div className="text-[11px] text-[var(--attio-text-tertiary)]">
+                    {d.genericName} · {d.strength} · {d.form}
+                  </div>
+                </button>
+              ))}
+            </>
           )}
         </div>
       )}
