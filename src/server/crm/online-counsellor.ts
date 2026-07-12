@@ -232,7 +232,7 @@ export async function convertLeadToPatient(
         uhid,
         name: lead.fullName,
         fullName: lead.fullName,
-        phone: lead.phone ?? null,
+        phone: lead.phone ?? "",
         email: lead.email ?? null,
         age: lead.age ?? null,
         gender: lead.gender ?? null,
@@ -256,7 +256,12 @@ export async function convertLeadToPatient(
       leadStatus: "patient",
     },
   });
-  await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "patient");
+
+  try {
+    await updateWorkspaceLeadAfterConversion(ctx, leadId, patientId, uhid, "patient");
+  } catch (err) {
+    console.error("[convertLeadToPatient] workspace update failed:", err);
+  }
 
   if (options.bookAppointment && options.doctorName) {
     try {
@@ -286,42 +291,46 @@ export async function convertLeadToPatient(
     }
   }
 
-  await prisma.activity.create({
-    data: {
-      id: `act_${leadId}_${Date.now()}`,
-      tenantId: ctx.tenantId,
-      branchId: ctx.branchId,
-      leadId,
-      actor: "Online Counsellor",
-      type: "conversion",
-      summary: `Lead converted to patient — UHID: ${uhid}${options.bookAppointment ? " + appointment booked" : ""}`,
-      at: new Date(),
-    },
-  });
-
-  if (options.source === "front_desk" && lead.assigneeId) {
+  try {
     await prisma.activity.create({
       data: {
-        id: `act_${leadId}_${Date.now()}_notify`,
+        id: `act_${leadId}_${Date.now()}`,
         tenantId: ctx.tenantId,
         branchId: ctx.branchId,
         leadId,
-        actor: "Front Desk",
-        type: "notification",
-        summary: `Patient registered from your lead — UHID: ${uhid}`,
+        actor: "Online Counsellor",
+        type: "conversion",
+        summary: `Lead converted to patient — UHID: ${uhid}${options.bookAppointment ? " + appointment booked" : ""}`,
         at: new Date(),
       },
     });
-  }
 
-  await writePlatformAudit({
-    ctx,
-    module: "crm",
-    action: "lead_to_patient",
-    entityType: "lead",
-    entityId: leadId,
-    summary: `Lead ${lead.fullName} converted to patient ${uhid}`,
-  });
+    if (options.source === "front_desk" && lead.assigneeId) {
+      await prisma.activity.create({
+        data: {
+          id: `act_${leadId}_${Date.now()}_notify`,
+          tenantId: ctx.tenantId,
+          branchId: ctx.branchId,
+          leadId,
+          actor: "Front Desk",
+          type: "notification",
+          summary: `Patient registered from your lead — UHID: ${uhid}`,
+          at: new Date(),
+        },
+      });
+    }
+
+    await writePlatformAudit({
+      ctx,
+      module: "crm",
+      action: "lead_to_patient",
+      entityType: "lead",
+      entityId: leadId,
+      summary: `Lead ${lead.fullName} converted to patient ${uhid}`,
+    });
+  } catch (err) {
+    console.error("[convertLeadToPatient] activity/audit failed:", err);
+  }
 
   return { patientId, uhid, leadId };
 }
