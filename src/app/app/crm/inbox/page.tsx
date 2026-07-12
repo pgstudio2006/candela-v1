@@ -17,11 +17,7 @@ export default function CrmInboxPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [selected, setSelected] = useState<CrmLead | null>(null);
   const [filters, setFilters] = useState<CrmLeadFilter>(DEFAULT_CRM_LEAD_FILTER);
-  const firstStageId = [...stages].sort((a, b) => a.order - b.order)[0]?.id;
-  const inbox = useMemo(
-    () => applyCrmLeadFilters(getFilteredLeads().filter((l) => l.stageId === firstStageId), filters),
-    [getFilteredLeads, firstStageId, filters],
-  );
+  const allLeads = useMemo(() => applyCrmLeadFilters(getFilteredLeads(), filters), [getFilteredLeads, filters]);
 
   return (
     <PageChrome
@@ -36,13 +32,13 @@ export default function CrmInboxPage() {
       }
     >
       <CrmLeadFilterBar filters={filters} onChange={setFilters} agents={agents} stages={stages} />
-      <Panel className="mt-4" title={`${inbox.length} uncontacted leads`}>
-        <CrmLeadListView leads={inbox} stages={stages} agents={agents} onSelect={setSelected} />
+      <Panel className="mt-4" title={`${allLeads.length} leads`}>
+        <CrmLeadListView leads={allLeads} stages={stages} agents={agents} onSelect={setSelected} />
       </Panel>
 
       {selected && (
         <LeadDetailPanel
-          lead={inbox.find((l) => l.id === selected.id) ?? selected}
+          lead={allLeads.find((l) => l.id === selected.id) ?? selected}
           agent={agents.find((a) => a.id === selected.assigneeId)}
           stageLabel={stages.find((s) => s.id === selected.stageId)?.label ?? selected.stageId}
           onClose={() => setSelected(null)}

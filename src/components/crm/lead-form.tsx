@@ -200,7 +200,7 @@ export function CrmLeadFormModal({ open, onClose, initial, onSaved }: CrmLeadFor
       ...schema,
       sections: schema.sections.map((section) => ({
         ...section,
-        fields: section.fields.filter((f) => f.id !== "fullName" && f.id !== "phone"),
+        fields: section.fields.filter((f) => !["fullName", "phone", "firstName", "lastName"].includes(f.id)),
       })),
     };
   }, [schema]);

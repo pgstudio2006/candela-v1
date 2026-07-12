@@ -18,7 +18,7 @@ import { formatStageStatus } from "@/lib/frontdesk-workflow";
 import { channelLabel, followUpDisplayStatus } from "@/lib/crm-follow-ups";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { getCrmLeadClinicalHistoryAction, type CrmPatientHistory } from "@/server/crm/actions";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type HistoryEvent = CrmPatientHistory["timeline"][number];
 
@@ -126,7 +126,8 @@ export function LeadDetailPanel({
   activities: CrmActivity[];
   followUps: CrmFollowUp[];
 }) {
-  const { addFollowUp, agents: storeAgents, stages: storeStages, getOperator, moveLeadStage } = useCrmStore();
+  const { addFollowUp, agents: storeAgents, stages: storeStages, getOperator, moveLeadStage, getFilteredLeads } = useCrmStore();
+  const currentLead = useMemo(() => getFilteredLeads().find((l) => l.id === lead.id) ?? lead, [getFilteredLeads, lead]);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [tab, setTab] = useState("overview");
   const [historyTick, setHistoryTick] = useState(0);
@@ -165,28 +166,33 @@ export function LeadDetailPanel({
   useEffect(() => {
     let mounted = true;
     void (async () => {
-      const next = await getCrmLeadClinicalHistoryAction(lead);
+      const next = await getCrmLeadClinicalHistoryAction(currentLead);
       if (!mounted) return;
       setHistory(next);
     })();
     return () => {
       mounted = false;
     };
-  }, [lead, activities, followUps, historyTick]);
+  }, [currentLead.id, activities, followUps, historyTick]);
 
   const genderLabel =
-    lead.gender === "prefer_not" ? "Prefer not to say" : lead.gender ? lead.gender.charAt(0).toUpperCase() + lead.gender.slice(1) : undefined;
+    currentLead.gender === "prefer_not"
+      ? "Prefer not to say"
+      : currentLead.gender
+        ? currentLead.gender.charAt(0).toUpperCase() + currentLead.gender.slice(1)
+        : undefined;
+  const currentStageLabel = storeStages.find((s) => s.id === currentLead.stageId)?.label ?? currentLead.stageId;
 
   const { billing, patient, timeline, visits, pharmacyRx, pharmacyBills, counselSessions } = history;
   const leadFollowUps = followUps
-    .filter((f) => f.leadId === lead.id)
+    .filter((f) => f.leadId === currentLead.id)
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 
   return (
     <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-xl flex-col border-l border-[var(--attio-border)] bg-white shadow-xl">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="min-w-0">
-          <h2 className="truncate text-[15px] font-semibold">{lead.fullName}</h2>
+          <h2 className="truncate text-[15px] font-semibold">{currentLead.fullName}</h2>
           {patient && (
             <p className="text-[11px] text-[var(--attio-text-tertiary)]">
               {patient.uhid} · Registered patient · {history.matchType.replace("_", " ")} match
@@ -194,7 +200,7 @@ export function LeadDetailPanel({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Select value={lead.stageId} onValueChange={(stageId) => stageId && moveLeadStage(lead.id, stageId)}>
+          <Select value={currentLead.stageId} onValueChange={(stageId) => stageId && moveLeadStage(currentLead.id, stageId)}>
             <SelectTrigger size="sm" className="w-36 text-[12px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -241,28 +247,28 @@ export function LeadDetailPanel({
         <div className="min-h-0 flex-1 overflow-y-auto p-4 text-[13px]">
           <TabsContent value="overview" className="mt-0 space-y-4">
             <div className="flex flex-wrap gap-2">
-              <StatusBadge label={stageLabel} variant="info" />
-              <StatusBadge label={SOURCE_LABELS[lead.source]} variant="neutral" />
-              {lead.priority === "high" && <StatusBadge label="High priority" variant="danger" />}
+              <StatusBadge label={currentStageLabel} variant="info" />
+              <StatusBadge label={SOURCE_LABELS[currentLead.source]} variant="neutral" />
+              {currentLead.priority === "high" && <StatusBadge label="High priority" variant="danger" />}
             </div>
 
             <dl className="rounded-lg border border-[var(--attio-border-subtle)] px-3">
-              <DetailRow label="Status" value={stageLabel} />
-              <DetailRow label="Lost reason" value={lead.lostReason} />
+              <DetailRow label="Status" value={currentStageLabel} />
+              <DetailRow label="Lost reason" value={currentLead.lostReason} />
               <DetailRow label="Assignee" value={agent?.name} />
-              <DetailRow label="UHID" value={lead.uhid ?? patient?.uhid} />
-              <DetailRow label="Est. pipeline value" value={lead.valueEstimate ? `₹${lead.valueEstimate.toLocaleString("en-IN")}` : undefined} />
-              <DetailRow label="Capture time" value={formatRelativeTime(lead.createdAt)} />
+              <DetailRow label="UHID" value={currentLead.uhid ?? patient?.uhid} />
+              <DetailRow label="Est. pipeline value" value={currentLead.valueEstimate ? `₹${currentLead.valueEstimate.toLocaleString("en-IN")}` : undefined} />
+              <DetailRow label="Capture time" value={formatRelativeTime(currentLead.createdAt)} />
             </dl>
 
             <p className="text-[11px] font-semibold uppercase text-[var(--attio-text-tertiary)]">Patient</p>
             <dl className="rounded-lg border border-[var(--attio-border-subtle)] px-3">
-              <DetailRow label="Phone" value={lead.phone} />
-              <DetailRow label="Alternate" value={lead.alternatePhone} />
-              <DetailRow label="Email" value={lead.email} />
-              <DetailRow label="Age" value={lead.age ?? patient?.age} />
+              <DetailRow label="Phone" value={currentLead.phone} />
+              <DetailRow label="Alternate" value={currentLead.alternatePhone} />
+              <DetailRow label="Email" value={currentLead.email} />
+              <DetailRow label="Age" value={currentLead.age ?? patient?.age} />
               <DetailRow label="Gender" value={genderLabel} />
-              <DetailRow label="City" value={lead.city} />
+              <DetailRow label="City" value={currentLead.city} />
               <DetailRow label="Department" value={patient?.department} />
               <DetailRow label="Referrer" value={patient?.referrer} />
               <DetailRow label="Last visit" value={patient?.lastVisit} />
@@ -270,15 +276,15 @@ export function LeadDetailPanel({
 
             <p className="text-[11px] font-semibold uppercase text-[var(--attio-text-tertiary)]">Appointment intent</p>
             <dl className="rounded-lg border border-[var(--attio-border-subtle)] px-3">
-              <DetailRow label="Doctor" value={lead.doctorName} />
-              <DetailRow label="Specialty" value={lead.specialty} />
-              <DetailRow label="Date" value={lead.appointmentDate} />
-              <DetailRow label="Time" value={lead.appointmentTime} />
-              <DetailRow label="Centre" value={lead.appointmentCentre} />
+              <DetailRow label="Doctor" value={currentLead.doctorName} />
+              <DetailRow label="Specialty" value={currentLead.specialty} />
+              <DetailRow label="Date" value={currentLead.appointmentDate} />
+              <DetailRow label="Time" value={currentLead.appointmentTime} />
+              <DetailRow label="Centre" value={currentLead.appointmentCentre} />
             </dl>
 
-            {lead.notes && (
-              <p className="rounded-lg bg-[var(--attio-surface)] p-3 text-[12px] leading-relaxed">{lead.notes}</p>
+            {currentLead.notes && (
+              <p className="rounded-lg bg-[var(--attio-surface)] p-3 text-[12px] leading-relaxed">{currentLead.notes}</p>
             )}
 
             {leadFollowUps.length > 0 && (
@@ -312,7 +318,7 @@ export function LeadDetailPanel({
               </>
             )}
 
-            {leadFollowUps.length === 0 && !["won", "lost"].includes(lead.stageId) && (
+            {leadFollowUps.length === 0 && !["won", "lost"].includes(currentLead.stageId) && (
               <AttioButton variant="secondary" className="!h-8 !text-[12px]" onClick={() => setScheduleOpen(true)}>
                 Schedule follow-up
               </AttioButton>
@@ -321,7 +327,7 @@ export function LeadDetailPanel({
             <div>
               <p className="mb-2 text-[11px] font-medium uppercase text-[var(--attio-text-tertiary)]">Reassign</p>
               <Select
-                value={lead.assigneeId || undefined}
+                value={currentLead.assigneeId || undefined}
                 onValueChange={(agentId) => agentId && onAssign(agentId)}
               >
                 <SelectTrigger size="sm" className="w-full">
@@ -427,10 +433,10 @@ export function LeadDetailPanel({
       <FollowUpScheduleModal
         open={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
-        leads={[lead]}
+        leads={[currentLead]}
         agents={storeAgents}
-        defaultLeadId={lead.id}
-        defaultAssigneeId={lead.assigneeId || getOperator()?.id}
+        defaultLeadId={currentLead.id}
+        defaultAssigneeId={currentLead.assigneeId || getOperator()?.id}
         onSave={addFollowUp}
       />
     </div>
