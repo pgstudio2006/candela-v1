@@ -116,8 +116,7 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
       setSubmitting(false);
       return;
     }
-    const collected = Math.min(splitAmount, total);
-    if (collected > 0) {
+    if (splitAmount >= total) {
       await markBillPaid(res.billId, paymentMode);
     }
     onSuccess?.(res.billId);
@@ -305,7 +304,7 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
 
           <div className="flex flex-wrap gap-2">
             <AttioButton variant="primary" disabled={submitting} onClick={handleCollectPayment}>
-              {submitting ? "Saving…" : splitAmount >= total ? "Collect payment & create bill" : "Create bill & collect partial"}
+              {submitting ? "Saving…" : splitAmount >= total ? "Collect payment & create bill" : "Create bill (payment logged later)"}
             </AttioButton>
             {ipdAdmissionId && (
               <AttioButton variant="secondary" disabled={submitting} onClick={handlePostToIpdCart}>
