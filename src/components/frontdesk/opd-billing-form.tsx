@@ -114,6 +114,24 @@ export function OpdBillingForm({
   const [isBalancePayment, setIsBalancePayment] = useState(false);
   const [billingMeta, setBillingMeta] = useState<Record<string, string | number | boolean>>({});
 
+  // Reset local billing state when the visit changes so stale service lines
+  // from a prior patient/visit do not leak into the current bill.
+  useEffect(() => {
+    setLines([]);
+    setDiscount(0);
+    setDiscountPercent(0);
+    setGstRatePercent(0);
+    setGstTaxMode("exempt");
+    setPaymentScope("full");
+    setSkipBilling(false);
+    setDeferReason("");
+    setPaymentSplits([{ mode: "cash", amount: 0 }]);
+    setPreviousPayments([]);
+    setExistingInvoice(null);
+    setIsBalancePayment(false);
+    setBillingMeta({});
+  }, [visit?.id]);
+
   const subtotal = lines.reduce((s, l) => s + l.amount * l.quantity, 0);
   const discountResolved = resolveBillingDiscount(subtotal, {
     discountMode,
@@ -208,11 +226,18 @@ export function OpdBillingForm({
 
       if (hasBalance) {
         setPaymentScope("partial");
-        setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: gstBreakdown.grandTotal }]);
+        // For OPD visits, clear stale service/package lines so already-billed items
+        // are not added to the outstanding balance again on the next collection screen.
+        // Keep IPD cart lines intact so final IPD billing still includes them.
+        if (!visit?.ipdAdmissionId) setLines([]);
+        // Default collection to the full amount now due (previous balance + new bill).
+        setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: net }]);
         setPreviousPayments([{ mode: "previous", amount: amountPaid }]);
         setExistingInvoice(inv && (inv.status === "partial" || inv.balanceAmount > 0) ? inv : null);
       } else if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
         setExistingInvoice(inv);
+        // Same guard: only drop stale lines for OPD, not IPD cart-based billing.
+        if (!visit?.ipdAdmissionId) setLines([]);
         setPreviousPayments(inv.paymentSplits);
         if (inv.discountMode) {
           setDiscountMode(inv.discountMode);
