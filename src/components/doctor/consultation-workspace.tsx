@@ -830,8 +830,9 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               {loadingData ? (
                 <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading...</p>
               ) : (
-                <div className="space-y-4">
-                  <div className="flex border-b">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="space-y-4">
+                    <div className="flex border-b">
                     {[
                       { id: "services" as const, label: "Services" },
                       { id: "packages" as const, label: "Packages" },
@@ -868,7 +869,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                     />
                   </div>
 
-                  <ul className="max-h-52 space-y-2 overflow-y-auto">
+                  <ul className="max-h-96 space-y-2 overflow-y-auto">
                     {cartTab === "services"
                       ? apiServices
                           .filter(
@@ -880,9 +881,21 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                             const inCart = cart.some((i) => i.id === svc.id && i.type === "service");
                             return (
                               <li key={svc.id}>
-                                <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--attio-border)] bg-white px-3 py-2 transition-colors hover:border-[var(--attio-accent)]">
+                                <div className={cn(
+                                  "flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors",
+                                  inCart
+                                    ? "border-emerald-300 bg-emerald-50/50"
+                                    : "border-[var(--attio-border)] bg-white hover:border-[var(--attio-accent)]",
+                                )}>
                                   <div className="min-w-0">
-                                    <p className="font-medium text-[13px]">{svc.label}</p>
+                                    <p className="font-medium text-[13px]">
+                                      {svc.label}
+                                      {inCart && (
+                                        <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700">
+                                          Added
+                                        </span>
+                                      )}
+                                    </p>
                                     <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                                       ₹{svc.amount.toLocaleString("en-IN")}
                                       {svc.gstPercent ? ` · GST ${svc.gstPercent}%` : ""}
@@ -911,9 +924,21 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                             const inCart = cart.some((i) => i.id === pkg.id && i.type === "package");
                             return (
                               <li key={pkg.id}>
-                                <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--attio-border)] bg-white px-3 py-2 transition-colors hover:border-[var(--attio-accent)]">
+                                <div className={cn(
+                                  "flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors",
+                                  inCart
+                                    ? "border-blue-300 bg-blue-50/50"
+                                    : "border-[var(--attio-border)] bg-white hover:border-[var(--attio-accent)]",
+                                )}>
                                   <div className="min-w-0">
-                                    <p className="font-medium text-[13px]">{pkg.label}</p>
+                                    <p className="font-medium text-[13px]">
+                                      {pkg.label}
+                                      {inCart && (
+                                        <span className="ml-1.5 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700">
+                                          Added
+                                        </span>
+                                      )}
+                                    </p>
                                     <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                                       ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
                                       {pkg.gstPercent ? ` · GST ${pkg.gstPercent}%` : ""}
@@ -949,43 +974,49 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                         <p className="text-[12px] text-[var(--attio-text-tertiary)]">No packages match.</p>
                       )}
                   </ul>
-
-                  {cart.length > 0 && (
-                    <div className="rounded-lg border border-[var(--attio-border)] bg-[var(--attio-surface)] p-3">
-                      <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Cart</p>
-                      <ul className="space-y-2">
-                        {cart.map((item) => (
-                          <li key={item.id} className="flex items-center gap-3 text-[13px]">
-                            <span className={cn(
-                              "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase",
-                              item.type === "package" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700",
-                            )}>
-                              {item.type === "package" ? "Pkg" : "Svc"}
-                            </span>
-                            <span className="flex-1 truncate">{item.label}</span>
-                            <input
-                              type="number"
-                              min={1}
-                              value={item.quantity}
-                              onChange={(e) => updateCartQuantity(item.id, Number(e.target.value))}
-                              className="h-8 w-14 rounded-md border border-[var(--attio-border)] bg-white px-2 text-center text-[12px]"
-                            />
-                            <span className="w-20 text-right tabular-nums">
-                              ₹{(item.amount * item.quantity).toLocaleString("en-IN")}
-                            </span>
-                            <button type="button" onClick={() => removeCartItem(item.id)} className="rounded p-1 text-red-600 hover:bg-red-50">
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="mt-3 flex items-center justify-between border-t border-[var(--attio-border-subtle)] pt-2 text-[13px] font-semibold">
-                        <span>Total</span>
-                        <span className="tabular-nums">₹{cartTotal.toLocaleString("en-IN")}</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
+
+                {cart.length > 0 ? (
+                  <div className="rounded-lg border border-[var(--attio-border)] bg-[var(--attio-surface)] p-3">
+                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Cart</p>
+                    <ul className="space-y-2">
+                      {cart.map((item) => (
+                        <li key={item.id} className="flex items-center gap-3 text-[13px]">
+                          <span className={cn(
+                            "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase",
+                            item.type === "package" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700",
+                          )}>
+                            {item.type === "package" ? "Pkg" : "Svc"}
+                          </span>
+                          <span className="flex-1 truncate">{item.label}</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={item.quantity}
+                            onChange={(e) => updateCartQuantity(item.id, Number(e.target.value))}
+                            className="h-8 w-14 rounded-md border border-[var(--attio-border)] bg-white px-2 text-center text-[12px]"
+                          />
+                          <span className="w-20 text-right tabular-nums">
+                            ₹{(item.amount * item.quantity).toLocaleString("en-IN")}
+                          </span>
+                          <button type="button" onClick={() => removeCartItem(item.id)} className="rounded p-1 text-red-600 hover:bg-red-50">
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 flex items-center justify-between border-t border-[var(--attio-border-subtle)] pt-2 text-[13px] font-semibold">
+                      <span>Total</span>
+                      <span className="tabular-nums">₹{cartTotal.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center rounded-lg border border-[var(--attio-border)] bg-[var(--attio-surface)] p-6 text-center">
+                    <p className="text-[13px] font-medium text-[var(--attio-text-secondary)]">Cart is empty</p>
+                    <p className="text-[12px] text-[var(--attio-text-tertiary)]">Select services or packages to add them here.</p>
+                  </div>
+                )}
+              </div>
               )}
             </Panel>
             <Panel title="Complete consultation">

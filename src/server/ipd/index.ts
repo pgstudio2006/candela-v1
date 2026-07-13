@@ -532,8 +532,8 @@ export async function updateIpdAdmission(
   if (!existing) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
 
   if (patch.status === "discharged") {
-    if (existing.status !== "doctor_ready") {
-      throw new ServerActionError("VALIDATION", "Doctor must mark the patient ready for discharge before final discharge can be done.");
+    if (existing.status === "discharged") {
+      throw new ServerActionError("VALIDATION", "Patient is already discharged.");
     }
     await assertIpdDischargeAllowed(ctx, existing);
   }

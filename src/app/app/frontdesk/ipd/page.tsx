@@ -131,6 +131,10 @@ export default function FrontdeskIpdPage() {
   const handleUpdate = async (formData: FormData) => {
     if (!selectedAdmission) return;
     const status = formData.get("status") as IpdAdmissionStatus;
+    if (status === "discharged") {
+      const confirmed = window.confirm("This will discharge the patient and free the bed. Continue?");
+      if (!confirmed) return;
+    }
     const expectedDischarge = formData.get("expectedDischarge") as string;
     const result = await updateIpdAdmissionAction(selectedAdmission.id, {
       status,
@@ -175,6 +179,7 @@ export default function FrontdeskIpdPage() {
     const result = await updateIpdAdmissionAction(selectedAdmission.id, { status: "discharged" });
     if (result.ok) {
       toast("Patient discharged and bed freed", "success");
+      setDialog(null);
       const res = await getIpdAdmissionAction(selectedAdmission.id);
       if (res.ok) setSelectedAdmission(res.data);
       setRefreshKey((k) => k + 1);
@@ -607,6 +612,7 @@ export default function FrontdeskIpdPage() {
                     >
                       <option value="admitted">Admitted</option>
                       <option value="discharge_planned">Discharge planned</option>
+                      <option value="discharged">Discharged</option>
                     </select>
                   </label>
                   <label className="block text-[12px]">
@@ -618,6 +624,28 @@ export default function FrontdeskIpdPage() {
                       className="h-9 w-full rounded-lg border border-[var(--attio-border)] px-3"
                     />
                   </label>
+                  {selectedAdmission?.status !== "discharged" && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-[12px] font-medium text-amber-900">Direct discharge</p>
+                      <p className="text-[11px] text-amber-800">
+                        Discharge the patient now and free the bed. Payment and service cart must be cleared.
+                      </p>
+                      <AttioButton
+                        type="button"
+                        variant="primary"
+                        className="mt-2 w-full bg-red-600 text-white hover:bg-red-700"
+                        onClick={handleFinalDischarge}
+                        disabled={!paymentClear}
+                      >
+                        Discharge patient
+                      </AttioButton>
+                      {!paymentClear && (
+                        <p className="mt-1 text-[11px] text-amber-600">
+                          Discharge is blocked until payment is cleared and the service cart is empty.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

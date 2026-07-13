@@ -578,6 +578,16 @@ export async function completeCounselSession(
     }
 
     if (sendBilling && validated.quote) {
+      const quotePackageId = validated.quote.packageId;
+      let resolvedPackageId: string | null = null;
+      if (quotePackageId) {
+        const pkg = await tx.package.findUnique({
+          where: { id: quotePackageId },
+          select: { id: true },
+        });
+        if (pkg) resolvedPackageId = pkg.id;
+      }
+
       const payload = (queueItem.payload ?? {}) as Partial<ConsultationRecord>;
       const handoffPayload: BillingHandoffPayload = {
         visitId,
@@ -616,7 +626,7 @@ export async function completeCounselSession(
           patientId: patient.id,
           patientName: handoffPayload.patientName,
           uhid: patient.uhid,
-          packageId: validated.quote.packageId,
+          packageId: resolvedPackageId,
           quote: handoffPayload.quote,
           counsellorName: operatorName,
           counselNotes: validated.internalNotes,
@@ -631,7 +641,7 @@ export async function completeCounselSession(
         update: {
           patientName: handoffPayload.patientName,
           uhid: patient.uhid,
-          packageId: validated.quote.packageId,
+          packageId: resolvedPackageId,
           quote: handoffPayload.quote,
           counsellorName: operatorName,
           counselNotes: validated.internalNotes,
