@@ -232,7 +232,7 @@ export function templatesForHandoff(handoff: NursingHandoffPayload): ConsentTemp
   const pkg = handoff.packageId;
   const path = handoff.treatmentPath;
   const hasInjection =
-    handoff.billingHandoff?.quote.lineItems.some((l) => /injection|regenerative/i.test(l.label)) ??
+    handoff.billingHandoff?.quote?.lineItems?.some((l) => /injection|regenerative/i.test(l.label)) ??
     handoff.packageId === "pkg_regen";
 
   return CONSENT_TEMPLATES.filter((t) => {

@@ -93,7 +93,7 @@ export function NursingHandoffView({ handoff, patient, visit }: NursingHandoffVi
         </div>
       )}
 
-      {handoff.billingHandoff?.quote.lineItems && (
+      {handoff.billingHandoff?.quote?.lineItems && (
         <div className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
           <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--attio-text-tertiary)]">Counsellor quote lines</p>
           <ul className="mt-2 space-y-1">
