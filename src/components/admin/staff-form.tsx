@@ -73,7 +73,12 @@ export function StaffFormModal({ open, onClose, departments, branchId, initial, 
   if (!open) return null;
 
   const toggleDept = (id: string) => {
-    setDepartmentIds((prev) => (prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]));
+    if (role === "nurse") {
+      // Nurses are assigned to exactly one department/ward.
+      setDepartmentIds((prev) => (prev.includes(id) ? [] : [id]));
+    } else {
+      setDepartmentIds((prev) => (prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]));
+    }
   };
 
   const needsDepartment = role === "doctor" || role === "nurse";

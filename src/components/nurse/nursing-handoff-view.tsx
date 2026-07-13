@@ -29,7 +29,7 @@ export function NursingHandoffView({ handoff, patient, visit }: NursingHandoffVi
           <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--attio-text-tertiary)]">Care plan</p>
           <p className="mt-1 font-medium">{handoff.packageLabel}</p>
           <div className="mt-2 flex flex-wrap gap-1">
-            <StatusBadge label={handoff.treatmentPath.toUpperCase()} variant="info" />
+            <StatusBadge label={handoff.treatmentPath?.toUpperCase() ?? "—"} variant="info" />
             <StatusBadge label={handoff.billingStatus} variant={handoff.billingStatus === "paid" ? "success" : "warning"} />
             {handoff.commercialConsent && <StatusBadge label="Commercial consent" variant="success" />}
           </div>
@@ -81,7 +81,7 @@ export function NursingHandoffView({ handoff, patient, visit }: NursingHandoffVi
               <dt className="text-[var(--attio-text-tertiary)]">Doctor</dt>
               <dd>{handoff.doctorName}</dd>
             </div>
-            {consult.prescription.length > 0 && (
+            {consult.prescription?.length > 0 && (
               <div>
                 <dt className="text-[var(--attio-text-tertiary)]">Rx ({consult.prescription.length} lines)</dt>
                 <dd className="mt-1 text-[11px] text-[var(--attio-text-secondary)]">

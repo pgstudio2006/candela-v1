@@ -145,7 +145,7 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
         { label: patient.name },
       ]}
       title={`Care episode · ${patient.name}`}
-      meta={`${handoff.packageLabel} · ${handoff.treatmentPath.toUpperCase()} · ${handoff.doctorName}`}
+      meta={`${handoff.packageLabel} · ${handoff.treatmentPath?.toUpperCase() ?? "—"} · ${handoff.doctorName}`}
       actions={
         <Link
           href="/app/nurse/queue"

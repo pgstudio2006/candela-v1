@@ -16,6 +16,12 @@ import {
 import { useToast } from "@/components/ui/toast-provider";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 
+function toISOStringSafe(value: string | undefined, fallback = new Date()): string {
+  const d = value ? new Date(value) : fallback;
+  if (Number.isNaN(d.getTime())) return fallback.toISOString();
+  return d.toISOString();
+}
+
 export function IpdDischargeSummaryPanel({ admissionId, onSaved }: { admissionId: string; onSaved?: () => void }) {
   const { toast } = useToast();
   const [admission, setAdmission] = useState<IpdAdmissionDetail | null>(null);
@@ -45,9 +51,9 @@ export function IpdDischargeSummaryPanel({ admissionId, onSaved }: { admissionId
     if (res.ok) {
       setSummary({
         ...res.data,
-        admissionDate: new Date(res.data.admissionDate).toLocaleString("en-IN"),
-        dischargeDate: "dischargeDate" in res.data ? new Date((res.data as any).dischargeDate).toLocaleString("en-IN") : "",
-        deathDate: "deathDate" in res.data ? new Date((res.data as any).deathDate).toLocaleString("en-IN") : "",
+        admissionDate: res.data.admissionDate,
+        dischargeDate: "dischargeDate" in res.data ? (res.data as any).dischargeDate : "",
+        deathDate: "deathDate" in res.data ? (res.data as any).deathDate : "",
       });
     } else {
       toast(res.error ?? "Failed to generate summary", "error");
@@ -57,25 +63,28 @@ export function IpdDischargeSummaryPanel({ admissionId, onSaved }: { admissionId
 
   const save = async () => {
     setSaving(true);
-    const payload = {
-      ...summary,
-      admissionDate: new Date(summary.admissionDate).toISOString(),
-      preparedAt: new Date().toISOString(),
-    } as any;
-    if (mode === "discharge") {
-      payload.dischargeDate = summary.dischargeDate ? new Date(summary.dischargeDate).toISOString() : new Date().toISOString();
-      const res = await saveDischargeSummaryAction(admissionId, payload);
-      if (res.ok) toast("Discharge summary saved", "success");
-      else toast(res.error ?? "Failed to save", "error");
-    } else {
-      payload.deathDate = summary.deathDate ? new Date(summary.deathDate).toISOString() : new Date().toISOString();
-      const res = await saveDeathSummaryAction(admissionId, payload);
-      if (res.ok) toast("Death summary saved", "success");
-      else toast(res.error ?? "Failed to save", "error");
+    try {
+      const payload = {
+        ...summary,
+        admissionDate: toISOStringSafe(summary.admissionDate),
+        preparedAt: new Date().toISOString(),
+      } as any;
+      if (mode === "discharge") {
+        payload.dischargeDate = toISOStringSafe(summary.dischargeDate);
+        const res = await saveDischargeSummaryAction(admissionId, payload);
+        if (res.ok) toast("Discharge summary saved", "success");
+        else toast(res.error ?? "Failed to save", "error");
+      } else {
+        payload.deathDate = toISOStringSafe(summary.deathDate);
+        const res = await saveDeathSummaryAction(admissionId, payload);
+        if (res.ok) toast("Death summary saved", "success");
+        else toast(res.error ?? "Failed to save", "error");
+      }
+      await refreshAdmission();
+      onSaved?.();
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    await refreshAdmission();
-    onSaved?.();
   };
 
   const markReady = async () => {

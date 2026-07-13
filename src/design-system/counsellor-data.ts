@@ -148,9 +148,9 @@ export function computeQuote(
   packages: Array<{ id: string; label: string; amount: number }> = CARE_PACKAGES,
   gstPercent = 0,
 ): Omit<CounselQuote, "visitId" | "patientId" | "approvalStatus" | "consentCaptured" | "whatsappSent"> {
-  const pkg = packageById(packageId, packages) ?? packages[0] ?? { id: packageId, label: packageId, amount: 0 };
+  const pkg = packageById(packageId, packages);
   const lineItems: QuoteLineItem[] = [
-    { id: "pkg", label: pkg.label, amount: pkg.amount, quantity: 1, gstPercent: 0, type: "package" },
+    ...(pkg ? [{ id: "pkg", label: pkg.label, amount: pkg.amount, quantity: 1, gstPercent: 0, type: "package" as const }] : []),
     ...addonIds
       .map((id) => PACKAGE_ADDONS.find((a) => a.id === id))
       .filter(Boolean)
@@ -163,8 +163,8 @@ export function computeQuote(
   const gstAmount = Math.round((taxableAfterDiscount * gstPercent) / 100);
   const netAmount = taxableAfterDiscount + gstAmount;
   return {
-    packageId: pkg.id,
-    packageLabel: pkg.label,
+    packageId: pkg?.id ?? packageId,
+    packageLabel: pkg?.label ?? (packageId ? packageId : ""),
     tier: "better",
     lineItems,
     grossAmount,
