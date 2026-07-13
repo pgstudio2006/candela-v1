@@ -17,14 +17,11 @@ import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
 import { createVisitInvoice, getVisitReceipt } from "@/server/invoicing";
 import {
-  billingCollectedTotal,
   billingSubtotal,
   parseOpdBillingPayload,
   primaryPaymentMode,
-  type PaymentSplit,
 } from "@/lib/opd-billing";
 import { buildPatientRegistrationPayload } from "@/lib/registration-meta";
-import { computeGstInvoice, parseBranchGstSettings } from "@/lib/gst-invoicing";
 import { isDemoSeedEnabled } from "@/lib/demo-seed";
 import {
   billingSchema,
@@ -46,6 +43,17 @@ import { createId } from "@/lib/id";
 import type { ClinicalRoster } from "@/lib/clinical-roster";
 import { notifyAppointmentReminder } from "@/server/notifications";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
+import {
+  allocateCollection,
+  buildInvoicePaymentSplits,
+  computeBillingLedger,
+  computeGstForLines,
+  createBalanceInvoice,
+  createPharmacyInvoice,
+  createServiceInvoice,
+  sendBillingInvoiceWhatsApp,
+  updateVisitBillingState,
+} from "@/server/billing/kernel";
 
 type PrimitiveRecord = Record<string, string | number | boolean>;
 
@@ -808,7 +816,6 @@ export async function processBilling(
     validateFrontdeskInput(billingSchema, data);
   }
 
-  const subtotal = billingSubtotal(payload.packageLines);
   const paymentScope = payload.skipBilling ? "defer" : payload.paymentScope;
   const mode = primaryPaymentMode(payload);
 
@@ -817,79 +824,56 @@ export async function processBilling(
 
   const scope = branchScope(ctx);
   const branch = await prisma.branch.findUnique({ where: { id: scope.branchId } });
-  const gstSettings = {
-    ...parseBranchGstSettings(branch?.meta),
-    gstRatePercent: payload.gstRatePercent,
-    taxMode: gstTaxMode,
-  };
 
-  const gstInvoice = computeGstInvoice({
-    settings: gstSettings,
-    lines: payload.packageLines.map((line) => ({
+  const serviceGstInvoice = computeGstForLines(
+    branch?.meta,
+    payload.packageLines.map((line) => ({
       label: line.label,
       quantity: line.quantity,
       taxableAmount: line.amount * line.quantity,
     })),
-    discount: payload.discount,
-  });
+    payload.discount,
+    { gstRatePercent: payload.gstRatePercent, taxMode: gstTaxMode },
+  );
+  const net = serviceGstInvoice.grandTotal;
 
-  const net = gstInvoice.grandTotal;
-
-  const previousBillAmount = visit.billAmount ?? 0;
-  const previousAmountPaid = visit.amountPaid ?? 0;
-  const previousBalance = visit.balanceDue ?? 0;
-  const splitsTotal = payload.paymentSplits.reduce((s, p) => s + p.amount, 0);
   const isIpd = visit.treatmentPath === "ipd" || Boolean(visit.ipdAdmissionId);
-  const ipdPharmacy = isIpd ? await getIpdPharmacyCharges(ctx, visitId) : { lines: [] as IpdPharmacyChargeLine[], subtotal: 0, totalProfit: 0 };
-  const pharmacyGstSettings = {
-    ...parseBranchGstSettings(branch?.meta),
-    taxMode: "cgst_sgst" as const,
-    gstRatePercent: 0,
-  };
-  const pharmacyGstInvoice =
-    ipdPharmacy.lines.length > 0
-      ? computeGstInvoice({
-          settings: pharmacyGstSettings,
-          lines: ipdPharmacy.lines.map((l) => ({
-            label: l.label,
-            quantity: l.quantity,
-            taxableAmount: l.taxableAmount,
-            gstRatePercent: l.gstPercent,
-          })),
-          discount: 0,
-        })
-      : null;
-  const pharmacyNet = pharmacyGstInvoice?.grandTotal ?? 0;
+  const ipdPharmacy = isIpd
+    ? await getIpdPharmacyCharges(ctx, visitId)
+    : { lines: [] as IpdPharmacyChargeLine[], subtotal: 0, totalProfit: 0 };
+
+  const pharmacyGstInvoice = computeGstForLines(
+    branch?.meta,
+    ipdPharmacy.lines.map((l) => ({
+      label: l.label,
+      quantity: l.quantity,
+      taxableAmount: l.taxableAmount,
+      gstRatePercent: l.gstPercent,
+    })),
+    0,
+    { taxMode: "cgst_sgst", gstRatePercent: 0 },
+  );
+  const pharmacyNet = pharmacyGstInvoice.grandTotal;
   const combinedNet = net + pharmacyNet;
 
-  const currentCollected =
-    payload.skipBilling || paymentScope === "defer"
-      ? 0
-      : Math.min(splitsTotal, previousBalance + combinedNet);
-  const newBillAmount = previousBillAmount + combinedNet;
-  const newAmountPaid = previousAmountPaid + currentCollected;
-  const newBalance = Math.max(0, newBillAmount - newAmountPaid);
-  const isFinal = newBalance === 0 && newAmountPaid > 0;
-  const isCurrentBillPaid = !payload.skipBilling && paymentScope !== "defer" && currentCollected >= combinedNet && combinedNet > 0;
+  const splitsTotal = payload.paymentSplits.reduce((s, p) => s + p.amount, 0);
+  const ledger = computeBillingLedger({
+    previousBillAmount: visit.billAmount ?? 0,
+    previousAmountPaid: visit.amountPaid ?? 0,
+    previousBalance: visit.balanceDue ?? 0,
+    currentNet: combinedNet,
+    splitsTotal,
+    paymentScope,
+    skipBilling: payload.skipBilling ?? false,
+  });
 
-  const serviceCollected = combinedNet > 0 && !payload.skipBilling && paymentScope !== "defer" ? Math.round((currentCollected * net) / combinedNet) : currentCollected;
-  const pharmacyCollected = combinedNet > 0 && !payload.skipBilling && paymentScope !== "defer" ? currentCollected - serviceCollected : 0;
-
-  const route = isIpd
-    ? {
-        billing: isFinal ? "paid" : (paymentScope === "defer" ? "deferred" : "partial"),
-        stage: "ipd_admitted" as Visit["stage"],
-        routingLabel: isFinal ? "IPD bill paid" : "IPD bill updated",
-        routeHref: "/app/frontdesk/ipd",
-        routingNote: isFinal
-          ? "IPD bill paid in full — returned to ward."
-          : `IPD billing updated — ₹${newAmountPaid.toLocaleString("en-IN")} collected · ₹${newBalance.toLocaleString("en-IN")} outstanding.`,
-      }
-    : paymentScope === "defer" || payload.skipBilling
-      ? resolveOpdFirstRoute({ paymentScope: "defer", mode: "defer", visitId, netAmount: newBillAmount, collected: 0 })
-      : resolveOpdFirstRoute({ paymentScope: newBalance > 0 ? "partial" : "full", mode, visitId, netAmount: newBillAmount, collected: newAmountPaid });
-
-  const invoicePaymentScope = payload.skipBilling || paymentScope === "defer" ? "defer" : isCurrentBillPaid ? "full" : "partial";
+  const allocation = allocateCollection({
+    currentCollected: ledger.currentCollected,
+    serviceNet: net,
+    pharmacyNet,
+    skipBilling: payload.skipBilling ?? false,
+    paymentScope,
+  });
 
   const maxToken = await prisma.opdVisit.aggregate({
     where: branchScope(ctx),
@@ -899,107 +883,112 @@ export async function processBilling(
   const assignedToken = visit.token ?? nextToken;
   const lineLabel =
     payload.packageLines.map((l) => l.label).join(" · ") || String(data.customLine ?? "OPD consultation");
-
-  // Assign a doctor if the visit doesn't have one and the billing form specifies one
   const assignedDoctorId = data.doctorId ? String(data.doctorId) : undefined;
   const assignedDoctorName = data.doctorName ? String(data.doctorName) : undefined;
 
-  const invoiceSubtotal = subtotal;
-  const invoiceDiscount = payload.discount;
-  const invoiceGstOverride = { gstRatePercent: payload.gstRatePercent, taxMode: gstTaxMode };
-  const invoiceLabel = lineLabel;
-  const invoiceLines = payload.packageLines.map((line) => ({
-    label: line.label,
-    quantity: line.quantity,
-    taxableAmount: line.amount * line.quantity,
-  }));
+  const route = isIpd
+    ? {
+        billing: ledger.isFinal ? "paid" : paymentScope === "defer" ? "deferred" : "partial",
+        stage: "ipd_admitted" as Visit["stage"],
+        routingLabel: ledger.isFinal ? "IPD bill paid" : "IPD bill updated",
+        routeHref: "/app/frontdesk/ipd",
+        routingNote: ledger.isFinal
+          ? "IPD bill paid in full — returned to ward."
+          : `IPD billing updated — ₹${ledger.newAmountPaid.toLocaleString("en-IN")} collected · ₹${ledger.newBalance.toLocaleString("en-IN")} outstanding.`,
+      }
+    : paymentScope === "defer" || payload.skipBilling
+      ? resolveOpdFirstRoute({ paymentScope: "defer", mode: "defer", visitId, netAmount: ledger.newBillAmount, collected: 0 })
+      : resolveOpdFirstRoute({ paymentScope: ledger.newBalance > 0 ? "partial" : "full", mode, visitId, netAmount: ledger.newBillAmount, collected: ledger.newAmountPaid });
+
+  const invoicePaymentScope = payload.skipBilling || paymentScope === "defer" ? "defer" : ledger.isCurrentBillPaid ? "full" : "partial";
 
   await prisma.$transaction(async (tx) => {
-    // Adjust patient balance by the change in outstanding balance, not the whole balance.
-    const balanceDelta = newBalance - previousBalance;
-    await tx.patient.update({
-      where: { id: visit.patientId },
-      data: { balance: { increment: balanceDelta } },
-    });
-    await tx.opdVisit.update({
-      where: { id: visitId },
-      data: {
-        stage: route.stage,
-        billing: isFinal ? "paid" : paymentScope === "defer" || payload.skipBilling ? "deferred" : "partial",
-        token: assignedToken,
-        billAmount: newBillAmount,
-        amountPaid: newAmountPaid,
-        balanceDue: newBalance > 0 ? newBalance : null,
-        treatmentPath: isIpd ? visit.treatmentPath : "opd",
-        routingNote: route.routingNote,
-        deferredReason:
-          route.billing === "deferred"
-            ? String(payload.deferReason ?? data.deferReason ?? "Billing skipped / deferred for this patient")
-            : null,
-        waitMin: computeWaitMinutes(visit.checkInAt),
-        tenantId: ctx.tenantId,
-        branchId: ctx.branchId,
-        ...(assignedDoctorId ? { doctorId: assignedDoctorId, doctorName: assignedDoctorName } : {}),
-      },
+    await updateVisitBillingState({
+      ctx,
+      tx,
+      visitId,
+      patientId: visit.patientId,
+      ledger,
+      route,
+      treatmentPath: isIpd ? (visit.treatmentPath ?? "ipd") : "opd",
+      token: assignedToken,
+      deferredReason: String(payload.deferReason ?? data.deferReason ?? ""),
+      doctorId: assignedDoctorId,
+      doctorName: assignedDoctorName,
+      clearIpdCartForAdmissionId: isIpd ? visit.ipdAdmissionId : null,
     });
 
-    if (isIpd && visit.ipdAdmissionId) {
-      await tx.ipdAdmission.update({
-        where: { id: visit.ipdAdmissionId },
-        data: { cart: [] as unknown as object },
+    let invoiceCreated = false;
+
+    if ((payload.packageLines.length > 0 || allocation.serviceCollected > 0) && net > 0 && ledger.isCurrentBillPaid) {
+      const serviceInvoiceAmount = Math.min(allocation.serviceCollected, net);
+      await createServiceInvoice({
+        ctx,
+        tx,
+        visitId,
+        patientId: visit.patientId,
+        label: lineLabel,
+        subtotal: billingSubtotal(payload.packageLines),
+        discount: payload.discount,
+        discountMode: payload.discountMode,
+        discountPercent: payload.discountPercent,
+        collected: serviceInvoiceAmount,
+        mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
+        paymentScope: invoicePaymentScope,
+        lines: payload.packageLines.map((line) => ({
+          packageId: line.packageId,
+          label: line.label,
+          amount: line.amount,
+          quantity: line.quantity,
+        })),
+        paymentSplits: buildInvoicePaymentSplits(
+          serviceInvoiceAmount,
+          allocation.serviceCollected,
+          payload.paymentSplits,
+        ),
+        gstOverride: { gstRatePercent: payload.gstRatePercent, taxMode: gstTaxMode },
+        packageLines: payload.packageLines,
       });
-    }
-    if ((payload.packageLines.length > 0 || serviceCollected > 0) && isCurrentBillPaid) {
-      const serviceInvoiceAmount = Math.min(serviceCollected, net);
-      await createVisitInvoice(
-        ctx,
-        {
-          visitId,
-          patientId: visit.patientId,
-          label: invoiceLabel,
-          subtotal: invoiceSubtotal,
-          discount: invoiceDiscount,
-          discountMode: payload.discountMode,
-          discountPercent: payload.discountPercent,
-          collected: serviceInvoiceAmount,
-          mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
-          paymentScope: invoicePaymentScope,
-          lines: invoiceLines,
-          paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: serviceCollected > 0 ? Math.round((s.amount * serviceInvoiceAmount) / serviceCollected) : 0 })).filter((s) => s.amount > 0),
-          gstOverride: invoiceGstOverride,
-          packageLines: payload.packageLines,
-        },
-        tx,
-      );
+      invoiceCreated = true;
     }
 
-    if (ipdPharmacy.lines.length > 0 && isCurrentBillPaid) {
-      const pharmacyInvoiceAmount = Math.min(pharmacyCollected, pharmacyNet);
-      await createVisitInvoice(
+    if (ipdPharmacy.lines.length > 0 && pharmacyNet > 0 && ledger.isCurrentBillPaid) {
+      const pharmacyInvoiceAmount = Math.min(allocation.pharmacyCollected, pharmacyNet);
+      await createPharmacyInvoice({
         ctx,
-        {
-          visitId,
-          patientId: visit.patientId,
-          label: "IPD pharmacy supplies",
-          subtotal: pharmacyGstInvoice!.taxableSubtotal,
-          discount: 0,
-          collected: pharmacyInvoiceAmount,
-          mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
-          paymentScope: "full",
-          lines: ipdPharmacy.lines.map((l) => ({
-            label: `${l.label} (${l.quantity})`,
-            quantity: l.quantity,
-            taxableAmount: l.taxableAmount,
-            category: "pharmacy" as const,
-            gstRatePercent: l.gstPercent,
-            prescriptionLineId: l.prescriptionLineId,
-            prescriptionLineQty: l.quantity,
-          })),
-          paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: pharmacyCollected > 0 ? Math.round((s.amount * pharmacyInvoiceAmount) / pharmacyCollected) : 0 })).filter((s) => s.amount > 0),
-          gstOverride: { taxMode: "cgst_sgst", gstRatePercent: 0 },
-        },
         tx,
-      );
+        visitId,
+        patientId: visit.patientId,
+        subtotal: pharmacyGstInvoice.taxableSubtotal,
+        collected: pharmacyInvoiceAmount,
+        mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
+        lines: ipdPharmacy.lines.map((l) => ({
+          label: l.label,
+          amount: l.rate,
+          quantity: l.quantity,
+          gstRatePercent: l.gstPercent,
+          prescriptionLineId: l.prescriptionLineId,
+        })),
+        paymentSplits: buildInvoicePaymentSplits(
+          pharmacyInvoiceAmount,
+          allocation.pharmacyCollected,
+          payload.paymentSplits,
+        ),
+      });
+      invoiceCreated = true;
+    }
+
+    if (!invoiceCreated && ledger.isCurrentBillPaid && ledger.currentCollected > 0) {
+      await createBalanceInvoice({
+        ctx,
+        tx,
+        visitId,
+        patientId: visit.patientId,
+        outstandingBalance: ledger.previousBalance,
+        collected: ledger.currentCollected,
+        mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
+        paymentSplits: payload.paymentSplits,
+      });
     }
   });
 
@@ -1020,19 +1009,15 @@ export async function processBilling(
     orderBy: { createdAt: "desc" },
   });
 
-  // WhatsApp: only send invoice confirmation once the bill is fully paid.
-  if (isFinal) {
+  if (ledger.isFinal) {
     try {
-      const patient = await prisma.patient.findUnique({ where: { id: visit.patientId } });
-      if (patient?.phone) {
-        await sendWhatsAppAsync(ctx, "billing_invoice", patient.phone, {
-          patientName: patient.name ?? patient.fullName ?? "Patient",
-          invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
-          amount: net,
-          paymentStatus: "Paid",
-          balanceDue: 0,
-        });
-      }
+      await sendBillingInvoiceWhatsApp(
+        ctx,
+        visitId,
+        visit.patientId,
+        net,
+        invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
+      );
     } catch (e) {
       console.error("[whatsapp] billing trigger failed:", e);
     }
@@ -1046,7 +1031,7 @@ export async function processBilling(
     invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
     paymentMode: mode,
     token: assignedToken,
-    finalized: isFinal,
+    finalized: ledger.isFinal,
   };
 }
 

@@ -106,7 +106,7 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
       toast("Add services to the cart before billing", "error");
       return;
     }
-    router.push(`/app/frontdesk/billing?visit=${admission.visitId}`);
+    router.push(`/app/frontdesk/ipd-billing?visit=${admission.visitId}`);
   };
 
   const filteredServices = services.filter(

@@ -159,6 +159,10 @@ export function OpdBillingForm({
   });
   const previousBalance = Number(visit?.balanceDue ?? 0);
   const net = gstBreakdown.grandTotal;
+  const totalDue = net + previousBalance;
+  const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const payingNow = skipBilling || paymentScope === "defer" ? 0 : splitTotal;
+  const remainingAfterPay = Math.max(0, totalDue - payingNow);
 
   const updateSplit = (index: number, patch: Partial<PaymentSplit>) => {
     setPaymentSplits((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -172,8 +176,6 @@ export function OpdBillingForm({
     setPaymentSplits((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   };
 
-  const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const previousPaid = isBalancePayment ? Number(visit?.amountPaid ?? 0) : previousPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const balanceAfterPay = Math.max(0, net - splitTotal);
 
   // Keep full-payment amount in sync with the bill total so submission works.
@@ -649,6 +651,42 @@ export function OpdBillingForm({
                 </Panel>
               )}
 
+              <Panel title="Outstanding summary">
+                <div className="space-y-1 text-[13px]">
+                  <div className="flex justify-between">
+                    <span className="text-[var(--attio-text-secondary)]">Current bill</span>
+                    <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
+                  </div>
+                  {previousBalance > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-[var(--attio-text-secondary)]">Previous balance</span>
+                      <span className="tabular-nums text-amber-600">₹{previousBalance.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-[var(--attio-border)] pt-2 text-[15px] font-semibold">
+                    <span>Total due</span>
+                    <span className="tabular-nums">₹{totalDue.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="flex justify-between text-[var(--attio-text-secondary)]">
+                    <span>Paying now</span>
+                    <span className="tabular-nums">
+                      {skipBilling || paymentScope === "defer" ? "—" : `₹${payingNow.toLocaleString("en-IN")}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t border-[var(--attio-border)] pt-2 font-semibold">
+                    <span>Remaining after payment</span>
+                    <span className="tabular-nums text-amber-600">
+                      {skipBilling || paymentScope === "defer" ? "Deferred" : `₹${remainingAfterPay.toLocaleString("en-IN")}`}
+                    </span>
+                  </div>
+                </div>
+                {paymentScope === "partial" && (
+                  <p className="mt-3 text-[11px] text-[var(--attio-text-tertiary)]">
+                    Invoice is generated only when the current bill is fully paid.
+                  </p>
+                )}
+              </Panel>
+
               <Panel title="Payment">
                 <div className="mb-4 flex flex-wrap gap-2">
                   {!existingInvoice && (
@@ -673,21 +711,6 @@ export function OpdBillingForm({
                     </button>
                   ))}
                 </div>
-
-                {existingInvoice && (
-                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-900">
-                    <p className="font-medium">
-                      {previousPaid > 0 ? "Partial payment already recorded" : "Outstanding balance exists"}
-                    </p>
-                    <p className="mt-1">
-                      {previousPaid > 0 && <>Paid so far: ₹{previousPaid.toLocaleString("en-IN")} · </>}
-                      Previous balance: ₹{previousBalance.toLocaleString("en-IN")}
-                    </p>
-                    <p className="mt-1 text-[11px]">
-                      Totals below are for the current bill only. Previous balance can be collected separately or by leaving lines empty and submitting a balance payment.
-                    </p>
-                  </div>
-                )}
 
                 {paymentScope === "defer" && (
                   <div className="space-y-1.5">
@@ -750,9 +773,9 @@ export function OpdBillingForm({
                       Add payment mode
                     </AttioButton>
                     <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                      Collecting ₹{splitTotal.toLocaleString("en-IN")} of total due ₹
+                      Collecting ₹{splitTotal.toLocaleString("en-IN")} of current bill ₹
                       {net.toLocaleString("en-IN")}
-                      {balanceAfterPay > 0 && ` · Balance after this payment ₹${balanceAfterPay.toLocaleString("en-IN")}`}
+                      {balanceAfterPay > 0 && ` · Current bill remaining ₹${balanceAfterPay.toLocaleString("en-IN")}`}
                     </p>
                   </div>
                 )}

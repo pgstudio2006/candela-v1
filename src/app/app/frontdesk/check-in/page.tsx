@@ -77,7 +77,7 @@ function CheckInContent() {
               }
               await saveSubmission("checkin", data, { visitId: result.visitId, patientId: result.patientId });
               toast("Check-in complete", "success");
-              router.push(`/app/frontdesk/billing?visit=${result.visitId}`);
+              router.push(`/app/frontdesk/opd-billing?visit=${result.visitId}`);
             }}
           />
         </Panel>

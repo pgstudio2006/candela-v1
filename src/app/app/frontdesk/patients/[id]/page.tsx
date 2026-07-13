@@ -330,7 +330,7 @@ export default function PatientRecordPage() {
                       <p className="mt-1 text-[11px] text-[var(--attio-text-tertiary)]">Discharge summary on file</p>
                     )}
                     {a.visitId && (
-                      <Link href={`/app/frontdesk/billing?visit=${a.visitId}`} className="mt-2 inline-block text-[12px] text-[var(--attio-accent)] hover:underline">
+                      <Link href={`/app/frontdesk/ipd-billing?visit=${a.visitId}`} className="mt-2 inline-block text-[12px] text-[var(--attio-accent)] hover:underline">
                         View billing →
                       </Link>
                     )}
