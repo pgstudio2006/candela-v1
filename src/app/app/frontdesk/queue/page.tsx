@@ -6,20 +6,40 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useFrontdeskPoll } from "@/hooks/use-frontdesk-poll";
 import { isAwaitingConsultant, isAwaitingJuniorExam, isRedFlagVisit, patientDisplayName, sortQueueVisits } from "@/lib/frontdesk-workflow";
 import { cn } from "@/lib/utils";
-import { Clock } from "lucide-react";
+import { Clock, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function QueuePage() {
   useFrontdeskPoll();
   const router = useRouter();
-  const { getQueueVisits, getPatient, visits, roster } = useFrontdeskStore();
+  const { getQueueVisits, getPatient, visits, roster, refresh, clearQueue } = useFrontdeskStore();
+  const [refreshing, setRefreshing] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const doctors = roster.allDoctors;
 
   const callNext = () => {
     const next = sortQueueVisits(visits.filter(isAwaitingJuniorExam))[0];
     if (next) router.push(`/app/frontdesk/junior-exam/${next.id}`);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refresh({ silent: false });
+    setRefreshing(false);
+  };
+
+  const handleClear = async () => {
+    const confirmed = window.confirm("Clear all active patients from today's queue? This will mark them as completed.");
+    if (!confirmed) return;
+    setClearing(true);
+    const result = await clearQueue();
+    setClearing(false);
+    if (!result.ok) {
+      alert(result.error ?? "Failed to clear queue.");
+    }
   };
 
   return (
@@ -30,7 +50,29 @@ export default function QueuePage() {
       ]}
       title="Reception queue"
       meta="Grouped by doctor · FIFO by token · through consultant handoff"
-      actions={<AttioButton variant="secondary" onClick={callNext}>Call next</AttioButton>}
+      actions={
+        <div className="flex items-center gap-2">
+          <AttioButton
+            variant="secondary"
+            className="gap-1.5"
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+          >
+            <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </AttioButton>
+          <AttioButton
+            variant="secondary"
+            className="gap-1.5"
+            onClick={() => void handleClear()}
+            disabled={clearing}
+          >
+            <Trash2 className="size-3.5" />
+            {clearing ? "Clearing…" : "Clear queue"}
+          </AttioButton>
+          <AttioButton variant="secondary" onClick={callNext}>Call next</AttioButton>
+        </div>
+      }
     >
       <div className="grid gap-4 lg:grid-cols-3">
         {doctors.map((doc) => {

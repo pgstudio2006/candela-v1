@@ -120,6 +120,7 @@ type FrontdeskStoreValue = FrontdeskState & {
   getJuniorExamVisits: () => Visit[];
   getDashboardKpis: () => ReturnType<typeof computeKpis>;
   getActionItems: () => ReturnType<typeof buildActionItems>;
+  clearQueue: () => Promise<{ ok: boolean; cleared?: number; error?: string }>;
   resetStore: () => void;
 };
 
@@ -511,6 +512,18 @@ export function FrontdeskStoreProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const clearQueue = useCallback(async () => {
+    try {
+      const res = await clinicalMutate({ op: "clearQueue" });
+      if (!res.ok) return { ok: false as const, error: res.error ?? "Could not clear queue." };
+      await refresh({ silent: true });
+      return { ok: true as const, cleared: Number(res.data?.cleared ?? 0) };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      return { ok: false as const, error: msg };
+    }
+  }, [refresh]);
+
   const value = useMemo<FrontdeskStoreValue>(() => {
     const getPatient = (id: string) => state.patients.find((p) => p.id === id);
     const getVisit = (id: string) => state.visits.find((v) => v.id === id);
@@ -532,6 +545,7 @@ export function FrontdeskStoreProvider({ children }: { children: ReactNode }) {
       rescheduleAppointment,
       updatePatientAsync,
       saveSubmission,
+      clearQueue,
       getSubmission: (formId, visitId) =>
         state.submissions.find((s) => s.formId === formId && s.visitId === visitId),
       searchPatients: (q) => {
@@ -586,7 +600,7 @@ export function FrontdeskStoreProvider({ children }: { children: ReactNode }) {
         void refresh();
       },
     };
-  }, [state, ready, error, refresh, registerPatientAsync, checkInVisit, processBilling, processCounselBilling, completeJuniorExam, bookAppointment, cancelAppointment, rescheduleAppointment, updatePatientAsync, saveSubmission]);
+  }, [state, ready, error, refresh, registerPatientAsync, checkInVisit, processBilling, processCounselBilling, completeJuniorExam, bookAppointment, cancelAppointment, rescheduleAppointment, updatePatientAsync, saveSubmission, clearQueue]);
 
   return <FrontdeskContext.Provider value={value}>{children}</FrontdeskContext.Provider>;
 }

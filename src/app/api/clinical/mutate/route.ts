@@ -8,6 +8,7 @@ import {
   bookAppointment,
   cancelAppointment,
   checkInVisit,
+  clearQueue,
   completeJuniorExam,
   processBilling,
   processCounselBilling,
@@ -132,6 +133,11 @@ export async function POST(request: Request) {
       case "saveSubmission": {
         const ctx = await requireModule("frontdesk");
         result = await saveSubmission(ctx, body.formId!, body.data!, body.ctx);
+        break;
+      }
+      case "clearQueue": {
+        const ctx = await requireModule("frontdesk");
+        result = await clearQueue(ctx);
         break;
       }
       default:

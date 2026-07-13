@@ -7,19 +7,26 @@ import { useDoctorPoll } from "@/hooks/use-doctor-poll";
 import { isRedFlagVisit, patientDisplayName } from "@/lib/frontdesk-workflow";
 import { isJuniorHandoffReady } from "@/lib/doctor-queue";
 import { cn } from "@/lib/utils";
-import { Clock, Stethoscope, Users } from "lucide-react";
+import { Clock, RefreshCw, Stethoscope, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function DoctorQueuePage() {
   useDoctorPoll();
   const router = useRouter();
-  const { getOpdQueue, getPatient, getConsultation, startConsultation, skipConsultation, activeDoctorId, profile } = useDoctorStore();
+  const { getOpdQueue, getPatient, getConsultation, startConsultation, skipConsultation, activeDoctorId, profile, refresh } = useDoctorStore();
   const [deptView, setDeptView] = useState(false);
   const [skippingId, setSkippingId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const queue = deptView ? getOpdQueue(undefined, true) : getOpdQueue();
 
   console.log("[DoctorQueue] doctorId:", activeDoctorId, "doctorName:", profile.name, "deptIds:", profile.departmentIds, "queue length:", queue.length);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refresh({ silent: false });
+    setRefreshing(false);
+  };
 
   const callNext = async () => {
     const next = queue[0];
@@ -39,6 +46,15 @@ export default function DoctorQueuePage() {
       meta="Red flags & appointments first · live sync"
       actions={
         <div className="flex items-center gap-2">
+          <AttioButton
+            variant="secondary"
+            className="gap-1.5"
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+          >
+            <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </AttioButton>
           <AttioButton
             variant={deptView ? "primary" : "secondary"}
             className="gap-1.5"

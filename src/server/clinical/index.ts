@@ -1905,3 +1905,37 @@ export async function getReferralDoctorWithPatients(ctx: ServerContext, referral
     totalCommission,
   };
 }
+
+export async function clearQueue(ctx: ServerContext) {
+  const scope = branchScope(ctx);
+  const note = `Cleared by frontdesk at ${nowTime()}`;
+
+  const { count } = await prisma.opdVisit.updateMany({
+    where: {
+      ...scope,
+      stage: { in: ["queued", "junior_exam", "with_doctor"] },
+    },
+    data: {
+      stage: "completed",
+      routingNote: note,
+    },
+  });
+
+  // Keep the legacy Visit mirror in sync for any consumers reading from it.
+  const cleared = await prisma.opdVisit.findMany({
+    where: { ...scope, stage: "completed", routingNote: note },
+  });
+  await Promise.all(cleared.map((v) => syncVisitFromOpdVisit(ctx, v)));
+
+  await writePlatformAudit({
+    ctx,
+    module: "frontdesk",
+    action: "queue_cleared",
+    entityType: "branch",
+    entityId: ctx.branchId,
+    summary: `Frontdesk cleared ${count} active visit(s) from the queue`,
+    payload: { cleared: count },
+  });
+
+  return { cleared: count };
+}
