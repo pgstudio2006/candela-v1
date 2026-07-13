@@ -23,7 +23,7 @@ type BillLine = { key: string; drugId: string; qty: string };
 
 export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: string) => void }) {
   const { drugs, createPharmacyBill, markBillPaid } = usePharmacyStore();
-  const { patients } = useFrontdeskStore();
+  const { patients, ready: frontdeskReady, error: frontdeskError } = useFrontdeskStore();
 
   const [patientType, setPatientType] = useState<"registered" | "walk_in">("registered");
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -210,10 +210,16 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
                   if (selected) setPatient(selected);
                 }}
               />
-              {patients.length === 0 && (
+              {!frontdeskReady && (
                 <p className="flex items-center gap-2 text-[12px] text-[var(--attio-text-tertiary)]">
                   <Loader2 className="size-3.5 animate-spin" /> Loading patients…
                 </p>
+              )}
+              {frontdeskReady && frontdeskError && (
+                <p className="text-[12px] text-red-600">Could not load patients: {frontdeskError}</p>
+              )}
+              {frontdeskReady && !frontdeskError && patients.length === 0 && (
+                <p className="text-[12px] text-[var(--attio-text-tertiary)]">No registered patients found.</p>
               )}
               {patient && (
                 <div className="flex items-start justify-between gap-3 rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] p-3">
