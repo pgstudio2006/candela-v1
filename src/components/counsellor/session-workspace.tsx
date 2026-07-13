@@ -26,7 +26,7 @@ import {
 import { ArrowLeft, MessageCircle, Plus, Printer, Send, Trash2, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type SessionWorkspaceProps = { visitId: string };
 
@@ -79,6 +79,7 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
   const [claiming, setClaiming] = useState(false);
   const [savingIntake, setSavingIntake] = useState(false);
   const [gstRatePercent, setGstRatePercent] = useState(18);
+  const initializedRef = useRef(false);
   const intakeSchema = usePublishedFormSchema("counsellor-intake");
 
   useEffect(() => {
@@ -97,7 +98,8 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
   }, [session?.branchId]);
 
   useEffect(() => {
-    if (!item) return;
+    if (!item || initializedRef.current) return;
+    initializedRef.current = true;
     setClaiming(true);
     void claimSession(visitId)
       .catch((err) => toast(String(err), "error"))
