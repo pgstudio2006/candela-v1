@@ -61,7 +61,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 /** Keeps clinical forms readable without stretching inputs across the full viewport. */
 const CONSULT_FORM_SPLIT = "grid gap-6 lg:grid-cols-[minmax(0,28rem)_minmax(280px,1fr)]";
-const CONSULT_SIDEBAR_SPLIT = "grid gap-6 lg:grid-cols-[minmax(0,28rem)_minmax(240px,18rem)]";
+const CONSULT_SIDEBAR_SPLIT = "grid gap-6 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]";
 
 type ConsultationWorkspaceProps = {
   visitId: string;
@@ -830,7 +830,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
               {loadingData ? (
                 <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading...</p>
               ) : (
-                <div className="grid gap-4 lg:grid-cols-2">
+                <div className="grid gap-4 xl:grid-cols-2">
                   <div className="space-y-4">
                     <div className="flex border-b">
                     {[
@@ -902,11 +902,11 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                                     </p>
                                   </div>
                                   {inCart ? (
-                                    <button type="button" onClick={() => removeCartItem(svc.id)} className="rounded p-1.5 text-red-600 hover:bg-red-50">
+                                    <button type="button" onClick={() => removeCartItem(svc.id)} className="shrink-0 rounded p-1.5 text-red-600 hover:bg-red-50">
                                       <Trash2 className="size-4" />
                                     </button>
                                   ) : (
-                                    <button type="button" onClick={() => addServiceToCart(svc)} className="rounded p-1.5 text-[var(--attio-accent)] hover:bg-[var(--attio-surface)]">
+                                    <button type="button" onClick={() => addServiceToCart(svc)} className="shrink-0 rounded p-1.5 text-[var(--attio-accent)] hover:bg-[var(--attio-surface)]">
                                       <Plus className="size-4" />
                                     </button>
                                   )}
@@ -945,11 +945,11 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                                     </p>
                                   </div>
                                   {inCart ? (
-                                    <button type="button" onClick={() => removeCartItem(pkg.id)} className="rounded p-1.5 text-red-600 hover:bg-red-50">
+                                    <button type="button" onClick={() => removeCartItem(pkg.id)} className="shrink-0 rounded p-1.5 text-red-600 hover:bg-red-50">
                                       <Trash2 className="size-4" />
                                     </button>
                                   ) : (
-                                    <button type="button" onClick={() => addPackageToCart(pkg)} className="rounded p-1.5 text-[var(--attio-accent)] hover:bg-[var(--attio-surface)]">
+                                    <button type="button" onClick={() => addPackageToCart(pkg)} className="shrink-0 rounded p-1.5 text-[var(--attio-accent)] hover:bg-[var(--attio-surface)]">
                                       <Plus className="size-4" />
                                     </button>
                                   )}
