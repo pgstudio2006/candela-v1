@@ -45,7 +45,8 @@ export const FRONTDESK_NAV: FrontdeskNavItem[] = [
   { id: "display", label: "Display board", href: "/app/frontdesk/display", icon: Monitor, color: "#EC4899" },
   { id: "handover", label: "Shift handover", href: "/app/frontdesk/handover", icon: ClipboardList, color: "#64748B" },
   { id: "audit", label: "Audit log", href: "/app/frontdesk/audit", icon: FileText, color: "#475569" },
-  { id: "billing", label: "Billing", href: "/app/frontdesk/billing", icon: CreditCard, color: "#22C55E" },
+  { id: "opd-billing", label: "OPD Billing", href: "/app/frontdesk/opd-billing", icon: CreditCard, color: "#22C55E" },
+  { id: "ipd-billing", label: "IPD Billing", href: "/app/frontdesk/ipd-billing", icon: CreditCard, color: "#10B981" },
   { id: "junior-exam", label: "Junior exam", href: "/app/frontdesk/junior-exam", icon: Stethoscope, color: "#8B5CF6" },
 ];
 
@@ -54,7 +55,8 @@ export const FRONTDESK_LISTS: FrontdeskListItem[] = [
   { id: "emergency", label: "Emergency", href: "/app/frontdesk/emergency", icon: Siren, color: "#DC2626" },
   { id: "ipd", label: "IPD ward", href: "/app/frontdesk/ipd", icon: BedDouble, color: "#E11D48" },
   { id: "today-queue", label: "Today's queue", href: "/app/frontdesk/queue", icon: ListOrdered, color: "#F97316" },
-  { id: "pending-billing", label: "Pending billing", href: "/app/frontdesk/billing", icon: CreditCard, color: "#10B981" },
+  { id: "pending-opd-billing", label: "OPD Billing", href: "/app/frontdesk/opd-billing", icon: CreditCard, color: "#10B981" },
+  { id: "pending-ipd-billing", label: "IPD Billing", href: "/app/frontdesk/ipd-billing", icon: CreditCard, color: "#059669" },
   { id: "junior-intake", label: "Junior intake", href: "/app/frontdesk/junior-exam", icon: Stethoscope, color: "#A855F7" },
 ];
 
