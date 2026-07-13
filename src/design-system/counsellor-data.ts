@@ -155,10 +155,10 @@ export function computeQuote(
       .map((a) => ({ id: a!.id, label: a!.label, amount: a!.amount, quantity: 1, gstPercent: 0, type: "addon" as const })),
     ...customLines,
   ];
-  const grossAmount = lineItems.reduce((s, l) => s + l.amount, 0);
-  const gstAmount = Math.round((grossAmount * 0) / 100);
+  const grossAmount = lineItems.reduce((s, l) => s + l.amount * l.quantity, 0);
+  const gstAmount = 0;
   const discountAmount = Math.round((grossAmount * discountPercent) / 100);
-  const netAmount = grossAmount + gstAmount - discountAmount;
+  const netAmount = grossAmount - discountAmount;
   return {
     packageId: pkg.id,
     packageLabel: pkg.label,

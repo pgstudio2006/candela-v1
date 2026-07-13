@@ -13,7 +13,7 @@ export function computeQuoteGstBreakdown(quote: CounselQuote, branchMeta?: unkno
     lines: quote.lineItems.map((line) => ({
       label: line.label,
       quantity: line.quantity,
-      taxableAmount: line.amount,
+      taxableAmount: line.amount * line.quantity,
     })),
     discount: quote.discountAmount,
   });

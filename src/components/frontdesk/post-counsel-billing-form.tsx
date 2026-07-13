@@ -91,8 +91,11 @@ export function PostCounselBillingForm({ handoff, onSubmit }: PostCounselBilling
         <ul className="mt-3 space-y-1 border-t border-[var(--attio-border-subtle)] pt-3">
           {handoff.quote.lineItems.map((line) => (
             <li key={line.id} className="flex justify-between text-[12px] text-[var(--attio-text-secondary)]">
-              <span>{line.label}</span>
-              <span className="tabular-nums">₹{line.amount.toLocaleString("en-IN")}</span>
+              <span>
+                {line.label}
+                {line.quantity > 1 && <span className="ml-1 text-[11px] text-[var(--attio-text-tertiary)]">×{line.quantity}</span>}
+              </span>
+              <span className="tabular-nums">₹{(line.amount * line.quantity).toLocaleString("en-IN")}</span>
             </li>
           ))}
         </ul>

@@ -13,6 +13,7 @@ export type BillingPackage = {
   priceLabel?: string;
   sessions?: number;
   dept?: string;
+  gstPercent?: number;
   services?: Array<{ serviceId: string; label: string; quantity: number; rate: number }>;
 };
 
@@ -23,14 +24,15 @@ export async function fetchBillingPackagesFromAPI(branchId?: string): Promise<Bi
     const res = await fetch(`/api/admin/packages${query}`);
     const data = await res.json();
     if (data.ok) {
-      return data.data.map((pkg: any) => ({
+      return data.data.map((pkg: { id: string; label: string; description?: string; amount: number; sessions?: number; dept?: string; gstPercent?: number; services?: unknown }) => ({
         id: pkg.id,
         label: pkg.label,
         description: pkg.description,
-        category: "opd", // Default, can be enhanced
+        category: "opd" as const,
         amount: Number(pkg.amount),
         sessions: pkg.sessions,
         dept: pkg.dept,
+        gstPercent: Number(pkg.gstPercent ?? 0),
         services: pkg.services,
       }));
     }
@@ -47,11 +49,11 @@ export async function fetchServiceChargesFromAPI(branchId?: string): Promise<Bil
     const res = await fetch(`/api/admin/service-charges${query}`);
     const data = await res.json();
     if (data.ok) {
-      return data.data.map((charge: any) => ({
+      return data.data.map((charge: { id: string; label: string; description?: string; category?: string; rate: number; gstPercent?: number }) => ({
         id: charge.id,
         label: charge.label,
         description: charge.description,
-        category: charge.category as any,
+        category: (charge.category as BillingPackage["category"]) ?? "opd",
         amount: Number(charge.rate),
         gstPercent: Number(charge.gstPercent ?? 0),
       }));

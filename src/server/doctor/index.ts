@@ -14,6 +14,7 @@ import { validateCompleteConsultation } from "@/lib/doctor-validation";
 import { visitVisibleInDoctorWorkspace } from "@/lib/doctor-queue";
 import { isInReceptionQueue, isRedFlagVisit, patientDisplayName } from "@/lib/frontdesk-workflow";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getClinicalSnapshot } from "@/server/clinical";
 import { resolveDoctorIdForContext, resolveDoctorProfile } from "@/server/clinical/roster";
 import type { ServerContext } from "@/server/context";
@@ -89,6 +90,9 @@ function mapConsultation(row: {
   templateId: string | null;
   handoff: unknown;
 }): ConsultationRecord {
+  const handoff = row.handoff ? asRecord(row.handoff) : undefined;
+  const rawCart = handoff && "cart" in handoff ? handoff.cart : undefined;
+  const cart = Array.isArray(rawCart) ? (rawCart as unknown as ConsultationRecord["cart"]) : undefined;
   return {
     visitId: row.visitId,
     patientId: row.patientId,
@@ -112,7 +116,8 @@ function mapConsultation(row: {
     scribeLanguage: row.scribeLanguage ?? undefined,
     scribeAppliedAt: row.scribeAppliedAt ?? undefined,
     templateId: row.templateId ?? undefined,
-    handoff: row.handoff ? asRecord(row.handoff) : undefined,
+    handoff,
+    cart,
   };
 }
 
@@ -486,7 +491,17 @@ export async function updateConsultation(
   if (patch.scribeLanguage !== undefined) data.scribeLanguage = patch.scribeLanguage;
   if (patch.scribeAppliedAt !== undefined) data.scribeAppliedAt = patch.scribeAppliedAt;
   if (patch.templateId !== undefined) data.templateId = patch.templateId;
-  if (patch.handoff !== undefined) data.handoff = patch.handoff;
+
+  if (patch.handoff !== undefined || patch.cart !== undefined) {
+    const existing = await prisma.consultation.findUnique({ where: { visitId } });
+    const currentHandoff = (existing?.handoff ?? {}) as Record<string, unknown>;
+    if (patch.cart !== undefined) {
+      data.handoff = { ...currentHandoff, cart: patch.cart } as unknown as Prisma.InputJsonValue;
+    }
+    if (patch.handoff !== undefined) {
+      data.handoff = { ...(data.handoff ?? currentHandoff), ...patch.handoff } as unknown as Prisma.InputJsonValue;
+    }
+  }
 
   if (Object.keys(data).length === 0) return { ok: true };
 
@@ -581,6 +596,7 @@ export async function completeConsultation(
   const packageId = String(opts.handoff.packageId ?? "");
   const pkg = await prisma.package.findUnique({ where: { id: packageId } });
   const completedAt = new Date().toISOString();
+  const handoffWithCart = { ...opts.handoff, cart: consult.cart ?? [] } as Record<string, unknown>;
   const updatedConsult: ConsultationRecord = {
     ...consult,
     status: "completed",
@@ -591,7 +607,7 @@ export async function completeConsultation(
     packageId: packageId || undefined,
     counsellorNotes: String(opts.handoff.counsellorNotes ?? ""),
     doctorAdvice: String(opts.handoff.doctorAdvice ?? ""),
-    handoff: opts.handoff,
+    handoff: handoffWithCart as ConsultationRecord["handoff"],
     whatsappRxSent: opts.sendWhatsapp,
   };
 
@@ -624,7 +640,7 @@ export async function completeConsultation(
         packageId: updatedConsult.packageId,
         counsellorNotes: updatedConsult.counsellorNotes,
         doctorAdvice: updatedConsult.doctorAdvice,
-        handoff: opts.handoff,
+        handoff: handoffWithCart as unknown as Prisma.InputJsonValue,
         whatsappRxSent: opts.sendWhatsapp,
       },
     });
@@ -680,14 +696,14 @@ export async function completeConsultation(
           id: `nh_${visitId}`,
           visitId,
           patientId: visit.patientId,
-          patientName: (visit as any).patientName ?? "",
-          uhid: (visit as any).uhid ?? "",
+          patientName: String((visit as unknown as Record<string, unknown>).patientName ?? ""),
+          uhid: String((visit as unknown as Record<string, unknown>).uhid ?? ""),
           doctorId,
           doctorName: visit.doctorName ?? "",
           treatmentPath: "ipd",
           packageId: packageId || "",
           packageLabel: pkg?.label ?? "",
-          billingStatus: (visit as any).billingStatus ?? "pending",
+          billingStatus: String((visit as unknown as Record<string, unknown>).billingStatus ?? "pending"),
           amountPaid: visit.amountPaid ?? 0,
           balanceDue: visit.balanceDue ?? 0,
           netAmount: (visit.amountPaid ?? 0) + (visit.balanceDue ?? 0),
@@ -715,7 +731,7 @@ export async function completeConsultation(
             packageId: packageId || "",
             doctorName: visit.doctorName ?? "",
             doctorId,
-            billingStatus: (visit as any).billingStatus ?? "pending",
+            billingStatus: String((visit as unknown as Record<string, unknown>).billingStatus ?? "pending"),
             balanceDue: visit.balanceDue ?? 0,
             status: "queued",
             priority: "high",

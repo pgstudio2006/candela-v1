@@ -102,7 +102,13 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
     void claimSession(visitId)
       .catch((err) => toast(String(err), "error"))
       .finally(() => setClaiming(false));
-    setPackageId(String(item.packageId ?? item.payload.handoff?.packageId ?? ""));
+    const doctorCart = item.payload.cart ?? [];
+    const doctorPackage = doctorCart.find((i) => i.type === "package");
+    const doctorServices = doctorCart.filter((i) => i.type === "service");
+    setPackageId(String(doctorPackage?.id ?? item.packageId ?? item.payload.handoff?.packageId ?? ""));
+    setSelectedServices(
+      doctorServices.map((s) => ({ id: s.id, label: s.label, amount: s.amount, quantity: s.quantity, gstPercent: s.gstPercent })),
+    );
   }, [item, visitId, claimSession, toast]);
 
   const quote = useMemo(
@@ -137,7 +143,7 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
       label: service.label,
       amount: service.amount,
       quantity: 1,
-      gstPercent: (service as any).gstPercent ?? 0,
+      gstPercent: service.gstPercent ?? 0,
     }]);
   };
 

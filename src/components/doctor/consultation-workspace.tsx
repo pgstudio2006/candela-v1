@@ -8,7 +8,7 @@ import { useDoctorFormSchema } from "@/components/doctor/use-doctor-form-schema"
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useSession } from "@/components/candela/session-provider";
-import type { TreatmentMode } from "@/design-system/doctor-data";
+import type { ConsultationCartItem, TreatmentMode } from "@/design-system/doctor-data";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
 import { isRedFlagVisit } from "@/lib/frontdesk-workflow";
 import {
@@ -36,9 +36,12 @@ import {
   CheckCircle2,
   FileText,
   MessageCircle,
+  Plus,
   Printer,
+  Search,
   Send,
   SkipForward,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -122,9 +125,10 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [handoffSaved, setHandoffSaved] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [selectedHandoffServiceIds, setSelectedHandoffServiceIds] = useState<string[]>([]);
-  const [selectedHandoffPackageId, setSelectedHandoffPackageId] = useState<string>("");
-  const [handoffServiceSearch, setHandoffServiceSearch] = useState("");
+  const [cart, setCart] = useState<ConsultationCartItem[]>([]);
+  const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.amount * i.quantity, 0), [cart]);
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [packageSearch, setPackageSearch] = useState("");
   const [scoreEntries, setScoreEntries] = useState<{ id: string; submittedAt: string; data: Record<string, string | number | boolean> }[]>([]);
   type IpdWardOption = { id: string; label: string; active: boolean; beds: Array<{ id: string; label: string; active: boolean; occupied: boolean }> };
   const [ipdWards, setIpdWards] = useState<IpdWardOption[]>([]);
@@ -222,9 +226,18 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       setSkipCounsellor(consult.skipCounsellor);
       setNotes(consult.notes);
       setCompleted(consult.status === "completed");
-      const savedServiceIds = String(consult.handoff?.serviceIds ?? "");
-      setSelectedHandoffServiceIds(savedServiceIds ? savedServiceIds.split(",") : []);
-      setSelectedHandoffPackageId(String(consult.handoff?.packageId ?? consult.packageId ?? ""));
+      const savedCart = consult.cart ?? [];
+      setCart(savedCart);
+      const savedServiceIds = savedCart.filter((i) => i.type === "service").map((i) => i.id).join(",");
+      const savedServiceLabels = savedCart.filter((i) => i.type === "service").map((i) => i.label).join(", ");
+      const savedPackage = savedCart.find((i) => i.type === "package");
+      setHandoffValues({
+        ...(consult.handoff ?? {}),
+        serviceIds: savedServiceIds,
+        serviceLabels: savedServiceLabels,
+        packageId: savedPackage?.id ?? consult.packageId ?? "",
+        packageLabel: savedPackage?.label ?? "",
+      });
     }
   }, [consult]);
 
@@ -303,30 +316,52 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     updateConsultation(visitId, { handoff: next });
   };
 
-  const toggleHandoffService = (svc: BillingPackage) => {
-    const next = selectedHandoffServiceIds.includes(svc.id)
-      ? selectedHandoffServiceIds.filter((id) => id !== svc.id)
-      : [...selectedHandoffServiceIds, svc.id];
-    setSelectedHandoffServiceIds(next);
-    const labels = apiServices.filter((s) => next.includes(s.id)).map((s) => s.label);
-    updateHandoffSelection({
-      serviceIds: next.join(","),
-      serviceLabels: labels.join(", "),
-    });
+  const deriveHandoffFromCart = (nextCart: ConsultationCartItem[]) => {
+    const serviceIds = nextCart.filter((i) => i.type === "service").map((i) => i.id).join(",");
+    const serviceLabels = nextCart.filter((i) => i.type === "service").map((i) => i.label).join(", ");
+    const pkg = nextCart.find((i) => i.type === "package");
+    return { ...handoffValues, serviceIds, serviceLabels, packageId: pkg?.id ?? "", packageLabel: pkg?.label ?? "" };
   };
 
-  const handleSelectHandoffPackage = (pkg: BillingPackage) => {
-    const selected = selectedHandoffPackageId === pkg.id ? "" : pkg.id;
-    setSelectedHandoffPackageId(selected);
-    updateHandoffSelection({
-      packageId: selected,
-      packageLabel: selected ? pkg.label : "",
+  const persistCart = (nextCart: ConsultationCartItem[]) => {
+    const nextHandoff = deriveHandoffFromCart(nextCart);
+    const pkg = nextCart.find((i) => i.type === "package");
+    setHandoffValues(nextHandoff);
+    setCart(nextCart);
+    updateConsultation(visitId, { cart: nextCart, packageId: pkg?.id ?? undefined, handoff: nextHandoff });
+  };
+
+  const addServiceToCart = (svc: BillingPackage) => {
+    if (cart.some((i) => i.id === svc.id && i.type === "service")) return;
+    const next = [
+      ...cart,
+      { id: svc.id, type: "service" as const, label: svc.label, amount: svc.amount, quantity: 1, gstPercent: svc.gstPercent ?? 0 },
+    ];
+    persistCart(next);
+  };
+
+  const addPackageToCart = (pkg: BillingPackage) => {
+    const next = cart.filter((i) => i.type !== "package").concat({
+      id: pkg.id,
+      type: "package" as const,
+      label: pkg.label,
+      amount: pkg.amount,
+      quantity: 1,
+      gstPercent: pkg.gstPercent ?? 0,
     });
-    if (selected) {
-      updateConsultation(visitId, { packageId: selected });
-    } else {
-      updateConsultation(visitId, { packageId: undefined });
+    persistCart(next);
+  };
+
+  const removeCartItem = (id: string) => {
+    persistCart(cart.filter((i) => i.id !== id));
+  };
+
+  const updateCartQuantity = (id: string, quantity: number) => {
+    if (quantity < 1) {
+      removeCartItem(id);
+      return;
     }
+    persistCart(cart.map((i) => (i.id === id ? { ...i, quantity } : i)));
   };
 
   return (
@@ -788,89 +823,133 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
             )}
           </Panel>
           <div className="space-y-6">
-            <Panel title="Services & packages">
+            <Panel title="Services & packages cart">
               {loadingData ? (
                 <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading...</p>
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">
-                      Services ({selectedHandoffServiceIds.length})
-                    </p>
-                    <input
-                      type="text"
-                      placeholder="Search services…"
-                      value={handoffServiceSearch}
-                      onChange={(e) => setHandoffServiceSearch(e.target.value)}
-                      className="mb-2 w-full rounded-md border border-[var(--attio-border)] px-2 py-1.5 text-[12px] outline-none"
-                    />
-                    <ul className="max-h-48 space-y-1 overflow-y-auto">
+                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Add services</p>
+                    <div className="relative mb-2">
+                      <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--attio-text-tertiary)]" />
+                      <input
+                        type="text"
+                        placeholder="Search services…"
+                        value={serviceSearch}
+                        onChange={(e) => setServiceSearch(e.target.value)}
+                        className="w-full rounded-md border border-[var(--attio-border)] py-1.5 pl-9 pr-3 text-[12px] outline-none"
+                      />
+                    </div>
+                    <ul className="max-h-40 space-y-1 overflow-y-auto">
                       {apiServices
                         .filter(
                           (svc) =>
-                            svc.label.toLowerCase().includes(handoffServiceSearch.toLowerCase()) ||
-                            (svc.description && svc.description.toLowerCase().includes(handoffServiceSearch.toLowerCase())),
+                            svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+                            (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase())),
                         )
                         .map((svc) => (
                           <li key={svc.id}>
-                            <label className="flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-[13px] hover:bg-[var(--attio-hover)]">
-                              <input
-                                type="checkbox"
-                                className="mt-0.5"
-                                checked={selectedHandoffServiceIds.includes(svc.id)}
-                                onChange={() => toggleHandoffService(svc)}
-                              />
-                              <div className="flex-1">
+                            <div className="flex items-center justify-between rounded-lg border px-3 py-2 text-[13px]">
+                              <div className="min-w-0">
                                 <p className="font-medium">{svc.label}</p>
                                 <p className="text-[12px] text-[var(--attio-text-tertiary)]">
                                   ₹{svc.amount.toLocaleString("en-IN")}
                                 </p>
                               </div>
-                            </label>
+                              {cart.some((i) => i.id === svc.id && i.type === "service") ? (
+                                <button type="button" onClick={() => removeCartItem(svc.id)} className="text-red-600">
+                                  <Trash2 className="size-4" />
+                                </button>
+                              ) : (
+                                <button type="button" onClick={() => addServiceToCart(svc)} className="text-[var(--attio-accent)]">
+                                  <Plus className="size-4" />
+                                </button>
+                              )}
+                            </div>
                           </li>
                         ))}
                       {apiServices.filter(
                         (svc) =>
-                          svc.label.toLowerCase().includes(handoffServiceSearch.toLowerCase()) ||
-                          (svc.description && svc.description.toLowerCase().includes(handoffServiceSearch.toLowerCase())),
+                          svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+                          (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase())),
                       ).length === 0 && (
                         <p className="text-[12px] text-[var(--attio-text-tertiary)]">No services match.</p>
                       )}
                     </ul>
                   </div>
+
                   <div>
-                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Package</p>
-                    <Select
-                      value={selectedHandoffPackageId || "none"}
-                      onValueChange={(value) => {
-                        const pkg = apiPackages.find((p) => p.id === value);
-                        if (pkg) {
-                          handleSelectHandoffPackage(pkg);
-                        } else {
-                          setSelectedHandoffPackageId("");
-                          updateHandoffSelection({ packageId: "", packageLabel: "" });
-                          updateConsultation(visitId, { packageId: undefined });
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="h-9 text-[13px]">
-                        <SelectValue placeholder="Select package…" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60 min-w-[260px]">
-                        <SelectItem value="none">None</SelectItem>
-                        {apiPackages.map((pkg) => (
-                          <SelectItem key={pkg.id} value={pkg.id}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{pkg.label}</span>
-                              <span className="text-[11px] text-[var(--attio-text-tertiary)]">
-                                ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
-                              </span>
+                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Add package</p>
+                    <div className="relative mb-2">
+                      <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--attio-text-tertiary)]" />
+                      <input
+                        type="text"
+                        placeholder="Search packages…"
+                        value={packageSearch}
+                        onChange={(e) => setPackageSearch(e.target.value)}
+                        className="w-full rounded-md border border-[var(--attio-border)] py-1.5 pl-9 pr-3 text-[12px] outline-none"
+                      />
+                    </div>
+                    <ul className="max-h-40 space-y-1 overflow-y-auto">
+                      {apiPackages
+                        .filter(
+                          (pkg) =>
+                            pkg.label.toLowerCase().includes(packageSearch.toLowerCase()) ||
+                            (pkg.description && pkg.description.toLowerCase().includes(packageSearch.toLowerCase())),
+                        )
+                        .map((pkg) => (
+                          <li key={pkg.id}>
+                            <div className="flex items-center justify-between rounded-lg border px-3 py-2 text-[13px]">
+                              <div className="min-w-0">
+                                <p className="font-medium">{pkg.label}</p>
+                                <p className="text-[12px] text-[var(--attio-text-tertiary)]">
+                                  ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
+                                </p>
+                              </div>
+                              {cart.some((i) => i.id === pkg.id && i.type === "package") ? (
+                                <button type="button" onClick={() => removeCartItem(pkg.id)} className="text-red-600">
+                                  <Trash2 className="size-4" />
+                                </button>
+                              ) : (
+                                <button type="button" onClick={() => addPackageToCart(pkg)} className="text-[var(--attio-accent)]">
+                                  <Plus className="size-4" />
+                                </button>
+                              )}
                             </div>
-                          </SelectItem>
+                          </li>
                         ))}
-                      </SelectContent>
-                    </Select>
+                    </ul>
                   </div>
+
+                  {cart.length > 0 && (
+                    <div className="rounded-lg border border-[var(--attio-border)] bg-[var(--attio-surface)] p-3">
+                      <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Cart</p>
+                      <ul className="space-y-2">
+                        {cart.map((item) => (
+                          <li key={item.id} className="flex items-center gap-2 text-[12px]">
+                            <span className="flex-1 truncate">{item.label}</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={item.quantity}
+                              onChange={(e) => updateCartQuantity(item.id, Number(e.target.value))}
+                              className="h-8 w-14 rounded-md border border-[var(--attio-border)] px-2 text-center"
+                            />
+                            <span className="w-20 text-right tabular-nums">
+                              ₹{(item.amount * item.quantity).toLocaleString("en-IN")}
+                            </span>
+                            <button type="button" onClick={() => removeCartItem(item.id)} className="text-red-600">
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-2 flex items-center justify-between border-t border-[var(--attio-border-subtle)] pt-2 text-[13px] font-semibold">
+                        <span>Total</span>
+                        <span className="tabular-nums">₹{cartTotal.toLocaleString("en-IN")}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </Panel>

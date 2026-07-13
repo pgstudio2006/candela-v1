@@ -28,6 +28,15 @@ export type PrescriptionLine = {
   instructions?: string;
 };
 
+export type ConsultationCartItem = {
+  id: string;
+  type: "service" | "package";
+  label: string;
+  amount: number;
+  quantity: number;
+  gstPercent: number;
+};
+
 export type ConsultationRecord = {
   visitId: string;
   patientId: string;
@@ -52,6 +61,7 @@ export type ConsultationRecord = {
   scribeAppliedAt?: string;
   templateId?: string;
   handoff?: Record<string, string | number | boolean>;
+  cart?: ConsultationCartItem[];
 };
 
 export type DoctorProfile = {
