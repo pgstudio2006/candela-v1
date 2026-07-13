@@ -63,7 +63,15 @@ export async function createVisitInvoice(
     collected: number;
     mode: string;
     paymentScope: string;
-    lines?: { label: string; quantity: number; taxableAmount: number; category?: string; gstRatePercent?: number }[];
+    lines?: {
+      label: string;
+      quantity: number;
+      taxableAmount: number;
+      category?: string;
+      gstRatePercent?: number;
+      prescriptionLineId?: string;
+      prescriptionLineQty?: number;
+    }[];
     paymentSplits?: { mode: string; amount: number }[];
     gstOverride?: Partial<Pick<GstSettings, "gstRatePercent" | "taxMode">>;
     packageLines?: { packageId: string; label: string; amount: number; quantity: number }[];
@@ -142,6 +150,8 @@ export async function createVisitInvoice(
           igst: line.igst,
           taxableAmount: line.taxableAmount,
           grossTaxable: invoiceLines[i]?.taxableAmount ?? line.taxableAmount,
+          prescriptionLineId: invoiceLines[i]?.prescriptionLineId,
+          prescriptionLineQty: invoiceLines[i]?.prescriptionLineQty,
         },
       },
     });

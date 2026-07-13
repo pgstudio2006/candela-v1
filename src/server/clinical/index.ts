@@ -41,7 +41,7 @@ import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 import { loadClinicalRoster } from "@/server/clinical/roster";
 import { withPrismaError } from "@/server/prisma-errors";
 import { doctorIdVariants, resolveDoctorName, staffIdFromDoctorId } from "@/lib/clinical-roster";
-import { ensureIpdWardBed, getIpdPharmacyCharges } from "@/server/ipd";
+import { ensureIpdWardBed, getIpdPharmacyCharges, type IpdPharmacyChargeLine } from "@/server/ipd";
 import { createId } from "@/lib/id";
 import type { ClinicalRoster } from "@/lib/clinical-roster";
 import { notifyAppointmentReminder } from "@/server/notifications";
@@ -840,7 +840,7 @@ export async function processBilling(
   const previousBalance = visit.balanceDue ?? 0;
   const splitsTotal = payload.paymentSplits.reduce((s, p) => s + p.amount, 0);
   const isIpd = visit.treatmentPath === "ipd" || Boolean(visit.ipdAdmissionId);
-  const ipdPharmacy = isIpd ? await getIpdPharmacyCharges(ctx, visitId) : { lines: [] as { drugId: string; label: string; quantity: number; rate: number; purchaseRate: number; gstPercent: number; taxableAmount: number }[], subtotal: 0, totalProfit: 0 };
+  const ipdPharmacy = isIpd ? await getIpdPharmacyCharges(ctx, visitId) : { lines: [] as IpdPharmacyChargeLine[], subtotal: 0, totalProfit: 0 };
   const pharmacyGstSettings = {
     ...parseBranchGstSettings(branch?.meta),
     taxMode: "cgst_sgst" as const,
@@ -997,6 +997,8 @@ export async function processBilling(
             taxableAmount: l.taxableAmount,
             category: "pharmacy" as const,
             gstRatePercent: l.gstPercent,
+            prescriptionLineId: l.prescriptionLineId,
+            prescriptionLineQty: l.quantity,
           })),
           paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: pharmacyCollected > 0 ? Math.round((s.amount * pharmacyCollected) / currentCollected) : 0 })).filter((s) => s.amount > 0),
           gstOverride: { taxMode: "cgst_sgst", gstRatePercent: 0 },

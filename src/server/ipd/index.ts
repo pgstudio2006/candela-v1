@@ -617,6 +617,28 @@ function parseCart(raw: unknown): IpdCartItem[] {
   );
 }
 
+type IpdPharmacyInvoiceLinePayload = {
+  prescriptionLineId?: string;
+  prescriptionLineQty?: number;
+};
+
+function billedQtyByPrescriptionLineId(
+  invoices: { lines: { category?: string | null; payload?: Prisma.JsonValue | null }[] }[],
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const invoice of invoices) {
+    for (const line of invoice.lines) {
+      if (line.category !== "pharmacy") continue;
+      const payload = (line.payload ?? {}) as IpdPharmacyInvoiceLinePayload;
+      if (!payload.prescriptionLineId) continue;
+      const id = payload.prescriptionLineId;
+      const qty = payload.prescriptionLineQty ?? 0;
+      map.set(id, (map.get(id) ?? 0) + qty);
+    }
+  }
+  return map;
+}
+
 export type IpdPharmacyChargeLine = {
   drugId: string;
   label: string;
@@ -625,6 +647,7 @@ export type IpdPharmacyChargeLine = {
   purchaseRate: number;
   gstPercent: number;
   taxableAmount: number;
+  prescriptionLineId: string;
 };
 
 export async function getIpdPharmacyCharges(
@@ -633,6 +656,11 @@ export async function getIpdPharmacyCharges(
 ): Promise<{ lines: IpdPharmacyChargeLine[]; subtotal: number; totalProfit: number }> {
   try {
     const state = await readPharmacyWorkspace(ctx, () => defaultPharmacyState({}));
+    const invoices = await prisma.invoice.findMany({
+      where: { visitId, ...branchScope(ctx) },
+      include: { lines: true },
+    });
+    const billedQty = billedQtyByPrescriptionLineId(invoices);
     const lines: IpdPharmacyChargeLine[] = [];
     let subtotal = 0;
     let totalProfit = 0;
@@ -642,22 +670,26 @@ export async function getIpdPharmacyCharges(
       if (!["dispensed", "partially_dispensed"].includes(rx.status)) continue;
       for (const line of rx.lines) {
         if (line.qtyDispensed <= 0) continue;
+        const alreadyBilled = billedQty.get(line.id) ?? 0;
+        const unbilledQty = line.qtyDispensed - alreadyBilled;
+        if (unbilledQty <= 0) continue;
         const drug = state.drugs.find((d) => d.id === line.drugId);
         const batch = state.stock.find((s) => s.id === line.batchId);
         const rate = line.dispenseRate ?? drug?.defaultMrp ?? 0;
         const purchaseRate = batch?.purchaseRate ?? 0;
         const gstPercent = drug?.gstPercent ?? 12;
-        const taxableAmount = line.qtyDispensed * rate;
+        const taxableAmount = unbilledQty * rate;
         subtotal += taxableAmount;
-        totalProfit += line.qtyDispensed * (rate - purchaseRate);
+        totalProfit += unbilledQty * (rate - purchaseRate);
         lines.push({
           drugId: line.drugId,
           label: drug?.brandName ?? line.drugName ?? line.drugId,
-          quantity: line.qtyDispensed,
+          quantity: unbilledQty,
           rate,
           purchaseRate,
           gstPercent,
           taxableAmount,
+          prescriptionLineId: line.id,
         });
       }
     }
