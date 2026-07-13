@@ -495,11 +495,11 @@ export async function updateConsultation(
   if (patch.handoff !== undefined || patch.cart !== undefined) {
     const existing = await prisma.consultation.findUnique({ where: { visitId } });
     const currentHandoff = (existing?.handoff ?? {}) as Record<string, unknown>;
-    if (patch.cart !== undefined) {
-      data.handoff = { ...currentHandoff, cart: patch.cart } as unknown as Prisma.InputJsonValue;
-    }
     if (patch.handoff !== undefined) {
-      data.handoff = { ...(data.handoff ?? currentHandoff), ...patch.handoff } as unknown as Prisma.InputJsonValue;
+      data.handoff = { ...currentHandoff, ...patch.handoff } as unknown as Prisma.InputJsonValue;
+    }
+    if (patch.cart !== undefined) {
+      data.handoff = { ...(data.handoff ?? currentHandoff), cart: patch.cart } as unknown as Prisma.InputJsonValue;
     }
   }
 

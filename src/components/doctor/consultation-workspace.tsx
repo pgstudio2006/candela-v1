@@ -317,10 +317,11 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   };
 
   const deriveHandoffFromCart = (nextCart: ConsultationCartItem[]) => {
+    const { cart: _, ...rest } = handoffValues;
     const serviceIds = nextCart.filter((i) => i.type === "service").map((i) => i.id).join(",");
     const serviceLabels = nextCart.filter((i) => i.type === "service").map((i) => i.label).join(", ");
     const pkg = nextCart.find((i) => i.type === "package");
-    return { ...handoffValues, serviceIds, serviceLabels, packageId: pkg?.id ?? "", packageLabel: pkg?.label ?? "" };
+    return { ...rest, serviceIds, serviceLabels, packageId: pkg?.id ?? "", packageLabel: pkg?.label ?? "" };
   };
 
   const persistCart = (nextCart: ConsultationCartItem[]) => {
