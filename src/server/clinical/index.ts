@@ -10,7 +10,7 @@ import {
   type Visit,
 } from "@/design-system/frontdesk-data";
 import type { Appointment, FormSubmission, FrontdeskCounters } from "@/lib/frontdesk-workflow";
-import { ageFromDob, computeWaitMinutes, deptLabel, doctorName, mapPrismaPatientRow, matchPatientByQuery, nextUhid, patientDisplayName, templateAmount } from "@/lib/frontdesk-workflow";
+import { ageFromDob, computeWaitMinutes, deptLabel, doctorName, mapPrismaPatientRow, matchPatientByQuery, nextUhid, nowTime, patientDisplayName, templateAmount } from "@/lib/frontdesk-workflow";
 import { billingFromPayment, resolveOpdFirstRoute, resolvePostCounselRoute, treatmentPathFromConvert, type PaymentScope } from "@/lib/billing-routing";
 import { prisma } from "@/lib/prisma";
 import type { ServerContext } from "@/server/context";
