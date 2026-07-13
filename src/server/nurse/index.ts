@@ -41,6 +41,14 @@ import { updateLeadStatusWhenVisitCompleted } from "@/server/crm/visit-bridge";
 
 const NURSING_STAGES = ["nursing_queue", "nursing_active", "ipd_admitted"] as const;
 
+function isPrismaNull(value: unknown): boolean {
+  return value === Prisma.JsonNull || value === Prisma.DbNull || value === Prisma.AnyNull;
+}
+
+function isValidJsonObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && !isPrismaNull(value);
+}
+
 function asNursingHandoff(value: {
   visitId: string;
   patientId: string;
@@ -77,10 +85,10 @@ function asNursingHandoff(value: {
     balanceDue: value.balanceDue ?? undefined,
     netAmount: value.netAmount,
     commercialConsent: value.commercialConsent,
-    billingHandoff: value.billingHandoff
+    billingHandoff: isValidJsonObject(value.billingHandoff)
       ? (value.billingHandoff as NursingHandoffPayload["billingHandoff"])
       : undefined,
-    consultation: value.consultation
+    consultation: isValidJsonObject(value.consultation)
       ? (value.consultation as NursingHandoffPayload["consultation"])
       : undefined,
     ipdWard: value.ipdWard ?? undefined,

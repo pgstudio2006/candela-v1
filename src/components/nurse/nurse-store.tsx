@@ -54,7 +54,7 @@ type NurseStoreValue = {
   getQueue: () => NursingHandoffPayload[];
   getFilteredQueue: () => NursingHandoffPayload[];
   getAllConsents: () => Array<ConsentRecord & { patientName: string; nurseName: string }>;
-  claimEpisode: (visitId: string) => Promise<NursingEpisode>;
+  claimEpisode: (visitId: string) => Promise<NursingEpisode | undefined>;
   saveVitals: (
     visitId: string,
     vitals: Omit<VitalsRecord, "visitId" | "recordedAt" | "recordedBy">,
@@ -219,6 +219,12 @@ export function NurseStoreProvider({ children }: { children: ReactNode }) {
     };
   }, [authReady, session?.branchId]);
 
+  const claimEpisode = useCallback(async (visitId: string): Promise<NursingEpisode | undefined> => {
+    const res = await nurseMutate({ op: "claimEpisode", visitId });
+    await refresh({ silent: true });
+    return res.ok ? res.data : undefined;
+  }, [refresh]);
+
   const value = useMemo<NurseStoreValue>(() => {
     const data = state ?? {
       patients: [],
@@ -282,11 +288,7 @@ export function NurseStoreProvider({ children }: { children: ReactNode }) {
       getQueue,
       getFilteredQueue,
       getAllConsents,
-      claimEpisode: async (visitId) => {
-        const res = await nurseMutate({ op: "claimEpisode", visitId });
-        await refresh({ silent: true });
-        return res.ok ? res.data : undefined;
-      },
+      claimEpisode,
       saveVitals: async (visitId, vitals) => {
         try {
           const res = await nurseMutate({ op: "saveVitals", visitId, vitals });
@@ -478,7 +480,7 @@ export function NurseStoreProvider({ children }: { children: ReactNode }) {
         );
       },
     };
-  }, [state, ready, error, refresh]);
+  }, [state, ready, error, refresh, claimEpisode]);
 
   return <NurseContext.Provider value={value}>{children}</NurseContext.Provider>;
 }

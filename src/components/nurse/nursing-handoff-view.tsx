@@ -3,6 +3,8 @@
 import { StatusBadge } from "@/components/frontdesk/ui";
 import type { NursingHandoffPayload } from "@/design-system/nurse-data";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
+import type { ConsultationRecord, PrescriptionLine } from "@/design-system/doctor-data";
+import type { BillingHandoffPayload } from "@/design-system/counsellor-data";
 import { CONSENT_TEMPLATES } from "@/design-system/nurse-data";
 
 type NursingHandoffViewProps = {
@@ -11,8 +13,16 @@ type NursingHandoffViewProps = {
   visit?: Visit;
 };
 
+const isHandoffObject = (v: unknown): v is object =>
+  v !== null && typeof v === "object" && !Array.isArray(v);
+
 export function NursingHandoffView({ handoff, patient, visit }: NursingHandoffViewProps) {
-  const consult = handoff.consultation;
+  const consult = isHandoffObject(handoff.consultation)
+    ? (handoff.consultation as ConsultationRecord)
+    : undefined;
+  const billingHandoff = isHandoffObject(handoff.billingHandoff)
+    ? (handoff.billingHandoff as BillingHandoffPayload)
+    : undefined;
   const netAmount = visit?.billAmount ?? handoff.netAmount ?? 0;
   const amountPaid = visit?.amountPaid ?? handoff.amountPaid ?? 0;
   const balanceDue = visit?.balanceDue ?? handoff.balanceDue ?? 0;
@@ -85,7 +95,7 @@ export function NursingHandoffView({ handoff, patient, visit }: NursingHandoffVi
               <div>
                 <dt className="text-[var(--attio-text-tertiary)]">Rx ({consult.prescription.length} lines)</dt>
                 <dd className="mt-1 text-[11px] text-[var(--attio-text-secondary)]">
-                  {consult.prescription.map((r) => r.drug).join(" · ")}
+                  {consult.prescription.map((r: PrescriptionLine) => r.drug).join(" · ")}
                 </dd>
               </div>
             )}
@@ -93,11 +103,11 @@ export function NursingHandoffView({ handoff, patient, visit }: NursingHandoffVi
         </div>
       )}
 
-      {handoff.billingHandoff?.quote?.lineItems && (
+      {billingHandoff?.quote?.lineItems && (
         <div className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
           <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--attio-text-tertiary)]">Counsellor quote lines</p>
           <ul className="mt-2 space-y-1">
-            {handoff.billingHandoff.quote.lineItems.map((l) => (
+            {billingHandoff.quote.lineItems.map((l) => (
               <li key={l.id} className="flex justify-between text-[12px]">
                 <span>{l.label}</span>
                 <span className="tabular-nums">₹{l.amount.toLocaleString("en-IN")}</span>

@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft, CheckCircle2, Play, Shield } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ExecutionWorkspaceProps = { visitId: string };
 
@@ -77,13 +77,21 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
   });
   const [sessionNoteValues, setSessionNoteValues] = useState<Record<string, string | number | boolean>>({});
   const vitalsSchema = usePublishedFormSchema("nurse-vitals");
+  const claimedRef = useRef(false);
 
   useEffect(() => {
-    if (!handoff) return;
-    void claimEpisode(visitId).catch((err) => {
-      setClaimError(err instanceof Error ? err.message : "Could not claim episode");
-    });
-  }, [handoff, visitId, claimEpisode]);
+    if (!handoff || episode || claimedRef.current) return;
+    claimedRef.current = true;
+    claimEpisode(visitId)
+      .then((result) => {
+        if (!result) {
+          setClaimError("Episode is already claimed by another nurse or cannot be claimed.");
+        }
+      })
+      .catch((err) => {
+        setClaimError(err instanceof Error ? err.message : "Could not claim episode");
+      });
+  }, [handoff, visitId, episode, claimEpisode]);
 
   useEffect(() => {
     if (episode?.vitals) {
