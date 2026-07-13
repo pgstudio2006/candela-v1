@@ -689,10 +689,12 @@ export function OpdBillingForm({
 
                 {existingInvoice && (
                   <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-900">
-                    <p className="font-medium">Partial payment already recorded</p>
+                    <p className="font-medium">
+                      {previousPaid > 0 ? "Partial payment already recorded" : "Outstanding balance exists"}
+                    </p>
                     <p className="mt-1">
-                      Paid so far: ₹{previousPaid.toLocaleString("en-IN")} · Previous balance: ₹
-                      {previousBalance.toLocaleString("en-IN")} · Current bill: ₹
+                      {previousPaid > 0 && <>Paid so far: ₹{previousPaid.toLocaleString("en-IN")} · </>}
+                      Previous balance: ₹{previousBalance.toLocaleString("en-IN")} · Current bill: ₹
                       {gstBreakdown.grandTotal.toLocaleString("en-IN")} · Total due: ₹
                       {net.toLocaleString("en-IN")}
                     </p>
