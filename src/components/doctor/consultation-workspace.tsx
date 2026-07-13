@@ -276,11 +276,12 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       return;
     }
 
+    const { cart: _, ...handoffPayload } = handoffValues;
     const result = await completeConsultation(visitId, {
       treatmentMode,
       recommendCounsellor: isPataudi ? false : recommendCounsellor,
       skipCounsellor: isPataudi ? true : skipCounsellor,
-      handoff: handoffValues,
+      handoff: handoffPayload,
       sendWhatsapp,
     });
     if (!result.ok) {
