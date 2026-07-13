@@ -102,6 +102,7 @@ type CounsellorStoreValue = {
     discountReason?: string,
     tier?: CounselQuote["tier"],
     customLines?: CounselQuote["lineItems"],
+    gstPercent?: number,
   ) => CounselQuote;
   requestDiscountApproval: (visitId: string, quote: CounselQuote, reason: string) => Promise<void>;
   resolveApproval: (approvalId: string, approved: boolean) => Promise<void>;
@@ -260,9 +261,10 @@ export function CounsellorStoreProvider({ children }: { children: ReactNode }) {
       discountReason?: string,
       tier: CounselQuote["tier"] = "better",
       customLines: CounselQuote["lineItems"] = [],
+      gstPercent = 0,
     ): CounselQuote => {
       const item = getQueueItem(visitId);
-      const base = computeQuote(packageId, addonIds, discountPercent, customLines, data.packages);
+      const base = computeQuote(packageId, addonIds, discountPercent, customLines, data.packages, gstPercent);
       const limit = maxDiscountPercent();
       let approvalStatus: CounselQuote["approvalStatus"] = "none";
       if (discountPercent > data.discountPolicy.managerApprovalAbove) approvalStatus = "pending";

@@ -19,6 +19,7 @@ export const counselQuoteSchema = z.object({
     }),
   ),
   grossAmount: z.number(),
+  gstPercent: z.number().default(0),
   gstAmount: z.number().default(0),
   discountPercent: z.number().min(0).max(100),
   discountAmount: z.number(),

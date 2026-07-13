@@ -24,6 +24,7 @@ export type CounselQuote = {
   tier: "good" | "better" | "best";
   lineItems: QuoteLineItem[];
   grossAmount: number;
+  gstPercent: number;
   gstAmount: number;
   discountPercent: number;
   discountAmount: number;
@@ -145,6 +146,7 @@ export function computeQuote(
   discountPercent: number,
   customLines: QuoteLineItem[] = [],
   packages: Array<{ id: string; label: string; amount: number }> = CARE_PACKAGES,
+  gstPercent = 0,
 ): Omit<CounselQuote, "visitId" | "patientId" | "approvalStatus" | "consentCaptured" | "whatsappSent"> {
   const pkg = packageById(packageId, packages) ?? packages[0] ?? { id: packageId, label: packageId, amount: 0 };
   const lineItems: QuoteLineItem[] = [
@@ -156,15 +158,17 @@ export function computeQuote(
     ...customLines,
   ];
   const grossAmount = lineItems.reduce((s, l) => s + l.amount * l.quantity, 0);
-  const gstAmount = 0;
   const discountAmount = Math.round((grossAmount * discountPercent) / 100);
-  const netAmount = grossAmount - discountAmount;
+  const taxableAfterDiscount = grossAmount - discountAmount;
+  const gstAmount = Math.round((taxableAfterDiscount * gstPercent) / 100);
+  const netAmount = taxableAfterDiscount + gstAmount;
   return {
     packageId: pkg.id,
     packageLabel: pkg.label,
     tier: "better",
     lineItems,
     grossAmount,
+    gstPercent,
     gstAmount,
     discountPercent,
     discountAmount,

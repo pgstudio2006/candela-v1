@@ -114,8 +114,8 @@ export function SessionWorkspace({ visitId }: SessionWorkspaceProps) {
   }, [item, visitId, claimSession, toast]);
 
   const quote = useMemo(
-    () => buildQuote(visitId, packageId, [], discountPercent, discountReason, "better", selectedServices.map(s => ({ id: s.id, label: s.label, amount: s.amount, quantity: s.quantity, gstPercent: s.gstPercent, type: "service" as const }))),
-    [visitId, packageId, discountPercent, discountReason, selectedServices, buildQuote],
+    () => buildQuote(visitId, packageId, [], discountPercent, discountReason, "better", selectedServices.map(s => ({ id: s.id, label: s.label, amount: s.amount, quantity: s.quantity, gstPercent: s.gstPercent, type: "service" as const })), gstRatePercent),
+    [visitId, packageId, discountPercent, discountReason, selectedServices, gstRatePercent, buildQuote],
   );
 
   const limit = maxDiscountPercent();
