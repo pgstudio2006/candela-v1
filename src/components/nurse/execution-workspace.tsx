@@ -82,15 +82,9 @@ export function ExecutionWorkspace({ visitId }: ExecutionWorkspaceProps) {
   useEffect(() => {
     if (!handoff || episode || claimedRef.current) return;
     claimedRef.current = true;
-    claimEpisode(visitId)
-      .then((result) => {
-        if (!result) {
-          setClaimError("Episode is already claimed by another nurse or cannot be claimed.");
-        }
-      })
-      .catch((err) => {
-        setClaimError(err instanceof Error ? err.message : "Could not claim episode");
-      });
+    void claimEpisode(visitId).catch((err) => {
+      setClaimError(err instanceof Error ? err.message : "Could not claim episode");
+    });
   }, [handoff, visitId, episode, claimEpisode]);
 
   useEffect(() => {

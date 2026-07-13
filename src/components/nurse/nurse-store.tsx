@@ -54,7 +54,7 @@ type NurseStoreValue = {
   getQueue: () => NursingHandoffPayload[];
   getFilteredQueue: () => NursingHandoffPayload[];
   getAllConsents: () => Array<ConsentRecord & { patientName: string; nurseName: string }>;
-  claimEpisode: (visitId: string) => Promise<NursingEpisode | undefined>;
+  claimEpisode: (visitId: string) => Promise<NursingEpisode>;
   saveVitals: (
     visitId: string,
     vitals: Omit<VitalsRecord, "visitId" | "recordedAt" | "recordedBy">,
@@ -219,10 +219,11 @@ export function NurseStoreProvider({ children }: { children: ReactNode }) {
     };
   }, [authReady, session?.branchId]);
 
-  const claimEpisode = useCallback(async (visitId: string): Promise<NursingEpisode | undefined> => {
+  const claimEpisode = useCallback(async (visitId: string): Promise<NursingEpisode> => {
     const res = await nurseMutate({ op: "claimEpisode", visitId });
     await refresh({ silent: true });
-    return res.ok ? res.data : undefined;
+    if (!res.ok) throw new Error(res.error ?? "Could not claim episode");
+    return res.data as NursingEpisode;
   }, [refresh]);
 
   const value = useMemo<NurseStoreValue>(() => {
