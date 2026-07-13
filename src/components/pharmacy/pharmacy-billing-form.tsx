@@ -8,7 +8,8 @@ import { AttioButton, Panel } from "@/components/frontdesk/ui";
 import { addIpdCartItemAction, getIpdAdmissionsByPatientAction } from "@/app/actions/ipd-actions";
 import type { Patient } from "@/design-system/frontdesk-data";
 import type { PaymentMode } from "@/design-system/pharmacy-data";
-import { Plus, Trash2, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Loader2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
@@ -24,7 +25,10 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
   const { drugs, createPharmacyBill, markBillPaid } = usePharmacyStore();
   const { patients } = useFrontdeskStore();
 
+  const [patientType, setPatientType] = useState<"registered" | "walk_in">("registered");
   const [patient, setPatient] = useState<Patient | null>(null);
+  const [walkInName, setWalkInName] = useState("");
+  const [walkInPhone, setWalkInPhone] = useState("");
   const [ipdAdmissionId, setIpdAdmissionId] = useState<string | null>(null);
   const [lines, setLines] = useState<BillLine[]>([{ key: "0", drugId: "", qty: "1" }]);
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
@@ -78,7 +82,10 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
   const removeLine = (key: string) => setLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l.key !== key)));
 
   const reset = () => {
+    setPatientType("registered");
     setPatient(null);
+    setWalkInName("");
+    setWalkInPhone("");
     setIpdAdmissionId(null);
     setLines([{ key: "0", drugId: "", qty: "1" }]);
     setDiscount(0);
@@ -88,8 +95,11 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
     setError("");
   };
 
+  const patientName = patientType === "registered" ? patient?.name : walkInName.trim();
+  const patientUhid = patientType === "registered" ? patient?.uhid : undefined;
+
   const validate = () => {
-    if (!patient) return "Select a patient.";
+    if (!patientName) return patientType === "registered" ? "Select a patient." : "Enter patient name.";
     if (enrichedLines.some((l) => !l.drugId || l.qty <= 0)) return "Each line needs a medicine and a valid quantity.";
     if (discount < 0 || (discountMode === "percent" && discountPercent > 100)) return "Invalid discount.";
     return "";
@@ -104,8 +114,8 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
     setSubmitting(true);
     setError("");
     const res = await createPharmacyBill({
-      patientName: patient!.name,
-      uhid: patient!.uhid,
+      patientName: patientName!,
+      uhid: patientUhid,
       lines: enrichedLines.map((l) => ({ drugId: l.drugId, qty: l.qty })),
       discount: discountAmount,
       discountReason: "",
@@ -148,8 +158,8 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
       if (!res.ok) cartOk = false;
     }
     const res = await createPharmacyBill({
-      patientName: patient!.name,
-      uhid: patient!.uhid,
+      patientName: patientName!,
+      uhid: patientUhid,
       lines: enrichedLines.map((l) => ({ drugId: l.drugId, qty: l.qty })),
       discount: discountAmount,
       discountReason: "IPD cart",
@@ -167,34 +177,83 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
 
   return (
     <div className="space-y-4">
-      <Panel title="Find patient">
+      <Panel title="Patient">
         <div className="space-y-3">
-          <PatientSearchField
-            value={patient?.uhid ?? ""}
-            patients={patients}
-            placeholder="Search by UHID, name, or mobile…"
-            onChange={(_, selected) => {
-              if (selected) setPatient(selected);
-            }}
-          />
-          {patient && (
-            <div className="flex items-start justify-between gap-3 rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] p-3">
-              <div>
-                <p className="text-[14px] font-semibold">{patient.name}</p>
-                <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                  {patient.uhid} · {patient.phone}
-                  {ipdAdmissionId && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">IPD</span>}
-                </p>
-              </div>
-              <button type="button" onClick={reset} className="rounded-md p-1 text-[var(--attio-text-tertiary)] hover:bg-white">
-                <X className="size-4" />
+          <div className="flex gap-2">
+            {[
+              { id: "registered" as const, label: "Registered patient" },
+              { id: "walk_in" as const, label: "Walk-in patient" },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setPatientType(opt.id)}
+                className={cn(
+                  "h-8 rounded-md border px-3 text-[12px] font-medium",
+                  patientType === opt.id
+                    ? "border-zinc-900 bg-zinc-900 text-white"
+                    : "border-[var(--attio-border)] bg-white",
+                )}
+              >
+                {opt.label}
               </button>
+            ))}
+          </div>
+
+          {patientType === "registered" ? (
+            <>
+              <PatientSearchField
+                value={patient?.uhid ?? ""}
+                patients={patients}
+                placeholder="Search by UHID, name, or mobile…"
+                onChange={(_, selected) => {
+                  if (selected) setPatient(selected);
+                }}
+              />
+              {patients.length === 0 && (
+                <p className="flex items-center gap-2 text-[12px] text-[var(--attio-text-tertiary)]">
+                  <Loader2 className="size-3.5 animate-spin" /> Loading patients…
+                </p>
+              )}
+              {patient && (
+                <div className="flex items-start justify-between gap-3 rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] p-3">
+                  <div>
+                    <p className="text-[14px] font-semibold">{patient.name}</p>
+                    <p className="text-[12px] text-[var(--attio-text-tertiary)]">
+                      {patient.uhid} · {patient.phone}
+                      {ipdAdmissionId && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">IPD</span>}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setPatient(null)} className="rounded-md p-1 text-[var(--attio-text-tertiary)] hover:bg-white">
+                    <X className="size-4" />
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-[var(--attio-text-secondary)]">Patient name</label>
+                <PharmacyInput
+                  value={walkInName}
+                  onChange={(e) => setWalkInName(e.target.value)}
+                  placeholder="Enter patient name"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-[var(--attio-text-secondary)]">Mobile</label>
+                <PharmacyInput
+                  value={walkInPhone}
+                  onChange={(e) => setWalkInPhone(e.target.value)}
+                  placeholder="Mobile number"
+                />
+              </div>
             </div>
           )}
         </div>
       </Panel>
 
-      {patient && (
+      {(patientType === "registered" && !patient) ? null : patientName ? (
         <>
           <Panel title="Bill items">
             <div className="space-y-3">
@@ -313,7 +372,7 @@ export function PharmacyBillingForm({ onSuccess }: { onSuccess?: (billId?: strin
             )}
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }

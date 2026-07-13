@@ -129,6 +129,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.amount * i.quantity, 0), [cart]);
   const [serviceSearch, setServiceSearch] = useState("");
   const [packageSearch, setPackageSearch] = useState("");
+  const [cartTab, setCartTab] = useState<"services" | "packages">("services");
   const [scoreEntries, setScoreEntries] = useState<{ id: string; submittedAt: string; data: Record<string, string | number | boolean> }[]>([]);
   type IpdWardOption = { id: string; label: string; active: boolean; beds: Array<{ id: string; label: string; active: boolean; occupied: boolean }> };
   const [ipdWards, setIpdWards] = useState<IpdWardOption[]>([]);
@@ -830,123 +831,155 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading...</p>
               ) : (
                 <div className="space-y-4">
-                  <div>
-                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Add services</p>
-                    <div className="relative mb-2">
-                      <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--attio-text-tertiary)]" />
-                      <input
-                        type="text"
-                        placeholder="Search services…"
-                        value={serviceSearch}
-                        onChange={(e) => setServiceSearch(e.target.value)}
-                        className="w-full rounded-md border border-[var(--attio-border)] py-1.5 pl-9 pr-3 text-[12px] outline-none"
-                      />
-                    </div>
-                    <ul className="max-h-40 space-y-1 overflow-y-auto">
-                      {apiServices
-                        .filter(
-                          (svc) =>
-                            svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
-                            (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase())),
-                        )
-                        .map((svc) => (
-                          <li key={svc.id}>
-                            <div className="flex items-center justify-between rounded-lg border px-3 py-2 text-[13px]">
-                              <div className="min-w-0">
-                                <p className="font-medium">{svc.label}</p>
-                                <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                                  ₹{svc.amount.toLocaleString("en-IN")}
-                                </p>
-                              </div>
-                              {cart.some((i) => i.id === svc.id && i.type === "service") ? (
-                                <button type="button" onClick={() => removeCartItem(svc.id)} className="text-red-600">
-                                  <Trash2 className="size-4" />
-                                </button>
-                              ) : (
-                                <button type="button" onClick={() => addServiceToCart(svc)} className="text-[var(--attio-accent)]">
-                                  <Plus className="size-4" />
-                                </button>
-                              )}
-                            </div>
-                          </li>
-                        ))}
-                      {apiServices.filter(
+                  <div className="flex border-b">
+                    {[
+                      { id: "services" as const, label: "Services" },
+                      { id: "packages" as const, label: "Packages" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setCartTab(tab.id)}
+                        className={cn(
+                          "border-b-2 px-3 py-2 text-[12px] font-medium",
+                          cartTab === tab.id
+                            ? "border-[var(--attio-text)] text-[var(--attio-text)]"
+                            : "border-transparent text-[var(--attio-text-tertiary)]",
+                        )}
+                      >
+                        {tab.label}
+                        <span className="ml-1.5 rounded-full bg-[var(--attio-surface)] px-1.5 py-0.5 text-[10px] text-[var(--attio-text-secondary)]">
+                          {tab.id === "services" ? apiServices.length : apiPackages.length}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--attio-text-tertiary)]" />
+                    <input
+                      type="text"
+                      placeholder={cartTab === "services" ? "Search services…" : "Search packages…"}
+                      value={cartTab === "services" ? serviceSearch : packageSearch}
+                      onChange={(e) =>
+                        cartTab === "services" ? setServiceSearch(e.target.value) : setPackageSearch(e.target.value)
+                      }
+                      className="h-9 w-full rounded-md border border-[var(--attio-border)] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none focus:border-[var(--attio-text)]"
+                    />
+                  </div>
+
+                  <ul className="max-h-52 space-y-2 overflow-y-auto">
+                    {cartTab === "services"
+                      ? apiServices
+                          .filter(
+                            (svc) =>
+                              svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+                              (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase())),
+                          )
+                          .map((svc) => {
+                            const inCart = cart.some((i) => i.id === svc.id && i.type === "service");
+                            return (
+                              <li key={svc.id}>
+                                <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--attio-border)] bg-white px-3 py-2 transition-colors hover:border-[var(--attio-accent)]">
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-[13px]">{svc.label}</p>
+                                    <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                                      ₹{svc.amount.toLocaleString("en-IN")}
+                                      {svc.gstPercent ? ` · GST ${svc.gstPercent}%` : ""}
+                                    </p>
+                                  </div>
+                                  {inCart ? (
+                                    <button type="button" onClick={() => removeCartItem(svc.id)} className="rounded p-1.5 text-red-600 hover:bg-red-50">
+                                      <Trash2 className="size-4" />
+                                    </button>
+                                  ) : (
+                                    <button type="button" onClick={() => addServiceToCart(svc)} className="rounded p-1.5 text-[var(--attio-accent)] hover:bg-[var(--attio-surface)]">
+                                      <Plus className="size-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })
+                      : apiPackages
+                          .filter(
+                            (pkg) =>
+                              pkg.label.toLowerCase().includes(packageSearch.toLowerCase()) ||
+                              (pkg.description && pkg.description.toLowerCase().includes(packageSearch.toLowerCase())),
+                          )
+                          .map((pkg) => {
+                            const inCart = cart.some((i) => i.id === pkg.id && i.type === "package");
+                            return (
+                              <li key={pkg.id}>
+                                <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--attio-border)] bg-white px-3 py-2 transition-colors hover:border-[var(--attio-accent)]">
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-[13px]">{pkg.label}</p>
+                                    <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                                      ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
+                                      {pkg.gstPercent ? ` · GST ${pkg.gstPercent}%` : ""}
+                                    </p>
+                                  </div>
+                                  {inCart ? (
+                                    <button type="button" onClick={() => removeCartItem(pkg.id)} className="rounded p-1.5 text-red-600 hover:bg-red-50">
+                                      <Trash2 className="size-4" />
+                                    </button>
+                                  ) : (
+                                    <button type="button" onClick={() => addPackageToCart(pkg)} className="rounded p-1.5 text-[var(--attio-accent)] hover:bg-[var(--attio-surface)]">
+                                      <Plus className="size-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })}
+                    {cartTab === "services" &&
+                      apiServices.filter(
                         (svc) =>
                           svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
                           (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase())),
                       ).length === 0 && (
                         <p className="text-[12px] text-[var(--attio-text-tertiary)]">No services match.</p>
                       )}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Add package</p>
-                    <div className="relative mb-2">
-                      <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--attio-text-tertiary)]" />
-                      <input
-                        type="text"
-                        placeholder="Search packages…"
-                        value={packageSearch}
-                        onChange={(e) => setPackageSearch(e.target.value)}
-                        className="w-full rounded-md border border-[var(--attio-border)] py-1.5 pl-9 pr-3 text-[12px] outline-none"
-                      />
-                    </div>
-                    <ul className="max-h-40 space-y-1 overflow-y-auto">
-                      {apiPackages
-                        .filter(
-                          (pkg) =>
-                            pkg.label.toLowerCase().includes(packageSearch.toLowerCase()) ||
-                            (pkg.description && pkg.description.toLowerCase().includes(packageSearch.toLowerCase())),
-                        )
-                        .map((pkg) => (
-                          <li key={pkg.id}>
-                            <div className="flex items-center justify-between rounded-lg border px-3 py-2 text-[13px]">
-                              <div className="min-w-0">
-                                <p className="font-medium">{pkg.label}</p>
-                                <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                                  ₹{pkg.amount.toLocaleString("en-IN")} · {pkg.sessions ?? "—"} sessions
-                                </p>
-                              </div>
-                              {cart.some((i) => i.id === pkg.id && i.type === "package") ? (
-                                <button type="button" onClick={() => removeCartItem(pkg.id)} className="text-red-600">
-                                  <Trash2 className="size-4" />
-                                </button>
-                              ) : (
-                                <button type="button" onClick={() => addPackageToCart(pkg)} className="text-[var(--attio-accent)]">
-                                  <Plus className="size-4" />
-                                </button>
-                              )}
-                            </div>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
+                    {cartTab === "packages" &&
+                      apiPackages.filter(
+                        (pkg) =>
+                          pkg.label.toLowerCase().includes(packageSearch.toLowerCase()) ||
+                          (pkg.description && pkg.description.toLowerCase().includes(packageSearch.toLowerCase())),
+                      ).length === 0 && (
+                        <p className="text-[12px] text-[var(--attio-text-tertiary)]">No packages match.</p>
+                      )}
+                  </ul>
 
                   {cart.length > 0 && (
                     <div className="rounded-lg border border-[var(--attio-border)] bg-[var(--attio-surface)] p-3">
                       <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Cart</p>
                       <ul className="space-y-2">
                         {cart.map((item) => (
-                          <li key={item.id} className="flex items-center gap-2 text-[12px]">
+                          <li key={item.id} className="flex items-center gap-3 text-[13px]">
+                            <span className={cn(
+                              "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase",
+                              item.type === "package" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700",
+                            )}>
+                              {item.type === "package" ? "Pkg" : "Svc"}
+                            </span>
                             <span className="flex-1 truncate">{item.label}</span>
                             <input
                               type="number"
                               min={1}
                               value={item.quantity}
                               onChange={(e) => updateCartQuantity(item.id, Number(e.target.value))}
-                              className="h-8 w-14 rounded-md border border-[var(--attio-border)] px-2 text-center"
+                              className="h-8 w-14 rounded-md border border-[var(--attio-border)] bg-white px-2 text-center text-[12px]"
                             />
                             <span className="w-20 text-right tabular-nums">
                               ₹{(item.amount * item.quantity).toLocaleString("en-IN")}
                             </span>
-                            <button type="button" onClick={() => removeCartItem(item.id)} className="text-red-600">
+                            <button type="button" onClick={() => removeCartItem(item.id)} className="rounded p-1 text-red-600 hover:bg-red-50">
                               <Trash2 className="size-3.5" />
                             </button>
                           </li>
                         ))}
                       </ul>
-                      <div className="mt-2 flex items-center justify-between border-t border-[var(--attio-border-subtle)] pt-2 text-[13px] font-semibold">
+                      <div className="mt-3 flex items-center justify-between border-t border-[var(--attio-border-subtle)] pt-2 text-[13px] font-semibold">
                         <span>Total</span>
                         <span className="tabular-nums">₹{cartTotal.toLocaleString("en-IN")}</span>
                       </div>

@@ -1,16 +1,19 @@
 "use client";
 
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
+import { useFrontdeskPoll } from "@/hooks/use-frontdesk-poll";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, DataTable, StatusBadge, Panel } from "@/components/frontdesk/ui";
 import { PharmacyDialog, PharmacyInput, PharmacySelect, FormRow } from "@/components/pharmacy/ui";
 import { PharmacyBillingForm } from "@/components/pharmacy/pharmacy-billing-form";
+import { PharmacyInvoiceModal } from "@/components/pharmacy/pharmacy-invoice-modal";
 import type { PharmacyBill } from "@/design-system/pharmacy-data";
 import type { PaymentMode } from "@/design-system/pharmacy-data";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Printer } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export default function PharmacyBillingPage() {
+  useFrontdeskPoll();
   const { bills, getDrug, markBillPaid, applyBillDiscount } = usePharmacyStore();
   const [selected, setSelected] = useState<PharmacyBill | null>(null);
   const [payMode, setPayMode] = useState<PaymentMode>("cash");
@@ -20,6 +23,7 @@ export default function PharmacyBillingPage() {
   const [whatsappSending, setWhatsappSending] = useState(false);
   const [cartUhid, setCartUhid] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [invoiceBill, setInvoiceBill] = useState<PharmacyBill | null>(null);
 
   const cartBills = useMemo(() => {
     if (!cartUhid) return [];
@@ -100,25 +104,36 @@ export default function PharmacyBillingPage() {
           total: `₹${b.total.toLocaleString("en-IN")}`,
           gst: `₹${b.gstTotal.toFixed(0)}`,
           status: <StatusBadge label={b.paid ? "Paid" : "Pending"} variant={b.paid ? "success" : "danger"} />,
-          actions: !b.paid ? (
-            <div className="flex items-center gap-1">
-              <select
-                value={payMode}
-                onChange={(e) => setPayMode(e.target.value as PaymentMode)}
-                className="h-7 rounded border px-1 text-[11px]"
-                onClick={(e) => e.stopPropagation()}
+          actions: (
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              {!b.paid ? (
+                <>
+                  <select
+                    value={payMode}
+                    onChange={(e) => setPayMode(e.target.value as PaymentMode)}
+                    className="h-7 rounded border px-1 text-[11px]"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="upi">UPI</option>
+                    <option value="card">Card</option>
+                    <option value="credit_ipd">Credit IPD</option>
+                  </select>
+                  <AttioButton variant="primary" className="!h-7 !text-[11px]" onClick={() => void markBillPaid(b.id, payMode)}>
+                    Mark paid
+                  </AttioButton>
+                </>
+              ) : (
+                <span className="text-[12px] capitalize text-[var(--attio-text-secondary)]">{b.paymentMode}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => setInvoiceBill(b)}
+                className="rounded p-1.5 text-[var(--attio-text-tertiary)] hover:bg-[var(--attio-hover)]"
+                title="Print invoice"
               >
-                <option value="cash">Cash</option>
-                <option value="upi">UPI</option>
-                <option value="card">Card</option>
-                <option value="credit_ipd">Credit IPD</option>
-              </select>
-              <AttioButton variant="primary" className="!h-7 !text-[11px]" onClick={() => void markBillPaid(b.id, payMode)}>
-                Mark paid
-              </AttioButton>
+                <Printer className="size-3.5" />
+              </button>
             </div>
-          ) : (
-            b.paymentMode
           ),
         }))}
       />
@@ -263,7 +278,8 @@ export default function PharmacyBillingPage() {
                   View patient cart
                 </AttioButton>
               )}
-              <AttioButton variant="secondary" onClick={() => window.print()}>
+              <AttioButton variant="secondary" onClick={() => setInvoiceBill(selected)}>
+                <Printer className="mr-1 size-4" />
                 Print Bill
               </AttioButton>
               <AttioButton
@@ -346,9 +362,15 @@ export default function PharmacyBillingPage() {
           onClose={() => setCreateOpen(false)}
           width="max-w-2xl"
         >
-          <PharmacyBillingForm onSuccess={() => setCreateOpen(false)} />
+          <PharmacyBillingForm onSuccess={(billId) => { setCreateOpen(false); const created = bills.find((b) => b.id === billId); if (created) setInvoiceBill(created); }} />
         </PharmacyDialog>
       )}
+
+      <PharmacyInvoiceModal
+        open={!!invoiceBill}
+        bill={invoiceBill}
+        onClose={() => setInvoiceBill(null)}
+      />
     </PageChrome>
   );
 }
