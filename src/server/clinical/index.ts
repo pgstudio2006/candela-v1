@@ -870,6 +870,7 @@ export async function processBilling(
   const newAmountPaid = previousAmountPaid + currentCollected;
   const newBalance = Math.max(0, newBillAmount - newAmountPaid);
   const isFinal = newBalance === 0 && newAmountPaid > 0;
+  const isCurrentBillPaid = !payload.skipBilling && paymentScope !== "defer" && currentCollected >= combinedNet && combinedNet > 0;
 
   const serviceCollected = combinedNet > 0 && !payload.skipBilling && paymentScope !== "defer" ? Math.round((currentCollected * net) / combinedNet) : currentCollected;
   const pharmacyCollected = combinedNet > 0 && !payload.skipBilling && paymentScope !== "defer" ? currentCollected - serviceCollected : 0;
@@ -888,7 +889,7 @@ export async function processBilling(
       ? resolveOpdFirstRoute({ paymentScope: "defer", mode: "defer", visitId, netAmount: newBillAmount, collected: 0 })
       : resolveOpdFirstRoute({ paymentScope: newBalance > 0 ? "partial" : "full", mode, visitId, netAmount: newBillAmount, collected: newAmountPaid });
 
-  const invoicePaymentScope = payload.skipBilling || paymentScope === "defer" ? "defer" : isFinal ? "full" : "partial";
+  const invoicePaymentScope = payload.skipBilling || paymentScope === "defer" ? "defer" : isCurrentBillPaid ? "full" : "partial";
 
   const maxToken = await prisma.opdVisit.aggregate({
     where: branchScope(ctx),
@@ -903,22 +904,15 @@ export async function processBilling(
   const assignedDoctorId = data.doctorId ? String(data.doctorId) : undefined;
   const assignedDoctorName = data.doctorName ? String(data.doctorName) : undefined;
 
-  // When there is an outstanding balance from a previous partial payment, generate a
-  // running receipt (Balance payment) instead of a new itemized tax invoice.
-  const hasPreviousBalance = previousBalance > 0;
-  const invoiceSubtotal = hasPreviousBalance ? previousBalance + net : subtotal;
-  const invoiceDiscount = hasPreviousBalance ? 0 : payload.discount;
-  const invoiceGstOverride = hasPreviousBalance
-    ? { gstRatePercent: 0, taxMode: "exempt" as const }
-    : { gstRatePercent: payload.gstRatePercent, taxMode: gstTaxMode };
-  const invoiceLabel = hasPreviousBalance ? "Balance payment" : lineLabel;
-  const invoiceLines = hasPreviousBalance
-    ? []
-    : payload.packageLines.map((line) => ({
-        label: line.label,
-        quantity: line.quantity,
-        taxableAmount: line.amount * line.quantity,
-      }));
+  const invoiceSubtotal = subtotal;
+  const invoiceDiscount = payload.discount;
+  const invoiceGstOverride = { gstRatePercent: payload.gstRatePercent, taxMode: gstTaxMode };
+  const invoiceLabel = lineLabel;
+  const invoiceLines = payload.packageLines.map((line) => ({
+    label: line.label,
+    quantity: line.quantity,
+    taxableAmount: line.amount * line.quantity,
+  }));
 
   await prisma.$transaction(async (tx) => {
     // Adjust patient balance by the change in outstanding balance, not the whole balance.
@@ -955,7 +949,8 @@ export async function processBilling(
         data: { cart: [] as unknown as object },
       });
     }
-    if (payload.packageLines.length > 0 || serviceCollected > 0) {
+    if ((payload.packageLines.length > 0 || serviceCollected > 0) && isCurrentBillPaid) {
+      const serviceInvoiceAmount = Math.min(serviceCollected, net);
       await createVisitInvoice(
         ctx,
         {
@@ -966,11 +961,11 @@ export async function processBilling(
           discount: invoiceDiscount,
           discountMode: payload.discountMode,
           discountPercent: payload.discountPercent,
-          collected: serviceCollected,
+          collected: serviceInvoiceAmount,
           mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
           paymentScope: invoicePaymentScope,
           lines: invoiceLines,
-          paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: serviceCollected > 0 ? Math.round((s.amount * serviceCollected) / currentCollected) : 0 })).filter((s) => s.amount > 0),
+          paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: serviceCollected > 0 ? Math.round((s.amount * serviceInvoiceAmount) / serviceCollected) : 0 })).filter((s) => s.amount > 0),
           gstOverride: invoiceGstOverride,
           packageLines: payload.packageLines,
         },
@@ -978,8 +973,8 @@ export async function processBilling(
       );
     }
 
-    if (ipdPharmacy.lines.length > 0) {
-      const pharmacyPaymentScope = pharmacyCollected >= pharmacyNet ? "full" : pharmacyCollected > 0 ? "partial" : invoicePaymentScope === "defer" ? "defer" : "partial";
+    if (ipdPharmacy.lines.length > 0 && isCurrentBillPaid) {
+      const pharmacyInvoiceAmount = Math.min(pharmacyCollected, pharmacyNet);
       await createVisitInvoice(
         ctx,
         {
@@ -988,9 +983,9 @@ export async function processBilling(
           label: "IPD pharmacy supplies",
           subtotal: pharmacyGstInvoice!.taxableSubtotal,
           discount: 0,
-          collected: pharmacyCollected,
+          collected: pharmacyInvoiceAmount,
           mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
-          paymentScope: pharmacyPaymentScope,
+          paymentScope: "full",
           lines: ipdPharmacy.lines.map((l) => ({
             label: `${l.label} (${l.quantity})`,
             quantity: l.quantity,
@@ -1000,7 +995,7 @@ export async function processBilling(
             prescriptionLineId: l.prescriptionLineId,
             prescriptionLineQty: l.quantity,
           })),
-          paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: pharmacyCollected > 0 ? Math.round((s.amount * pharmacyCollected) / currentCollected) : 0 })).filter((s) => s.amount > 0),
+          paymentSplits: payload.paymentSplits.map((s) => ({ ...s, amount: pharmacyCollected > 0 ? Math.round((s.amount * pharmacyInvoiceAmount) / pharmacyCollected) : 0 })).filter((s) => s.amount > 0),
           gstOverride: { taxMode: "cgst_sgst", gstRatePercent: 0 },
         },
         tx,

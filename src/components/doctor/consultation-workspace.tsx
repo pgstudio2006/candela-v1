@@ -842,7 +842,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                         type="button"
                         onClick={() => setCartTab(tab.id)}
                         className={cn(
-                          "border-b-2 px-3 py-2 text-[12px] font-medium",
+                          "border-b-2 px-3 py-2 text-[12px] font-medium whitespace-nowrap",
                           cartTab === tab.id
                             ? "border-[var(--attio-text)] text-[var(--attio-text)]"
                             : "border-transparent text-[var(--attio-text-tertiary)]",
@@ -977,8 +977,13 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 </div>
 
                 {cart.length > 0 ? (
-                  <div className="rounded-lg border border-[var(--attio-border)] bg-[var(--attio-surface)] p-3">
-                    <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Cart</p>
+                  <div className="max-h-96 overflow-y-auto rounded-lg border border-[var(--attio-border)] bg-[var(--attio-surface)] p-3 lg:sticky lg:top-0 lg:self-start">
+                    <p className="mb-2 flex items-center justify-between text-[12px] font-medium text-[var(--attio-text-secondary)]">
+                      <span>Cart</span>
+                      <span className="rounded-full bg-[var(--attio-surface)] px-1.5 py-0.5 text-[10px]">
+                        {cart.length} item{cart.length !== 1 ? "s" : ""}
+                      </span>
+                    </p>
                     <ul className="space-y-2">
                       {cart.map((item) => (
                         <li key={item.id} className="flex items-center gap-3 text-[13px]">

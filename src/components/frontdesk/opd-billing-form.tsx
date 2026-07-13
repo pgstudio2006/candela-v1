@@ -73,7 +73,7 @@ export function OpdBillingForm({
   onSelectPatient,
   onClearPatient,
   onSubmit,
-  submitLabel = "Collect payment & release to queue",
+  submitLabel = "Collect payment & generate invoice",
 }: OpdBillingFormProps) {
   const [packages, setPackages] = useState<BillingPackage[]>([]);
   const [services, setServices] = useState<BillingPackage[]>([]);
@@ -158,7 +158,7 @@ export function OpdBillingForm({
     discount: discountAmount,
   });
   const previousBalance = Number(visit?.balanceDue ?? 0);
-  const net = isBalancePayment ? previousBalance + gstBreakdown.grandTotal : gstBreakdown.grandTotal;
+  const net = gstBreakdown.grandTotal;
 
   const updateSplit = (index: number, patch: Partial<PaymentSplit>) => {
     setPaymentSplits((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -225,13 +225,6 @@ export function OpdBillingForm({
       setIsBalancePayment(hasBalance);
 
       if (hasBalance) {
-        setPaymentScope("partial");
-        // For OPD visits, clear stale service/package lines so already-billed items
-        // are not added to the outstanding balance again on the next collection screen.
-        // Keep IPD cart lines intact so final IPD billing still includes them.
-        if (!visit?.ipdAdmissionId) setLines([]);
-        // Default collection to the full amount now due (previous balance + new bill).
-        setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: net }]);
         setPreviousPayments([{ mode: "previous", amount: amountPaid }]);
         setExistingInvoice(inv && (inv.status === "partial" || inv.balanceAmount > 0) ? inv : null);
       } else if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
@@ -648,12 +641,6 @@ export function OpdBillingForm({
                         <span className="tabular-nums">₹{gstBreakdown.taxTotal.toLocaleString("en-IN")}</span>
                       </div>
                     )}
-                    {previousBalance > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-[var(--attio-text-secondary)]">Previous balance</span>
-                        <span className="tabular-nums">₹{previousBalance.toLocaleString("en-IN")}</span>
-                      </div>
-                    )}
                     <div className="flex justify-between border-t pt-2 text-[15px] font-semibold">
                       <span>Net payable</span>
                       <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
@@ -694,12 +681,10 @@ export function OpdBillingForm({
                     </p>
                     <p className="mt-1">
                       {previousPaid > 0 && <>Paid so far: ₹{previousPaid.toLocaleString("en-IN")} · </>}
-                      Previous balance: ₹{previousBalance.toLocaleString("en-IN")} · Current bill: ₹
-                      {gstBreakdown.grandTotal.toLocaleString("en-IN")} · Total due: ₹
-                      {net.toLocaleString("en-IN")}
+                      Previous balance: ₹{previousBalance.toLocaleString("en-IN")}
                     </p>
                     <p className="mt-1 text-[11px]">
-                      Collect the remaining balance below. Billing lines are locked to prevent changes.
+                      Totals below are for the current bill only. Previous balance can be collected separately or by leaving lines empty and submitting a balance payment.
                     </p>
                   </div>
                 )}
@@ -824,8 +809,8 @@ export function OpdBillingForm({
           >
             {skipBilling
               ? "Skip billing & release to queue"
-              : existingInvoice
-                ? "Collect balance & generate bill"
+              : isBalancePayment && !lines.length
+                ? "Collect balance"
                 : paymentScope === "partial"
                   ? "Collect partial payment"
                   : paymentScope === "defer"
