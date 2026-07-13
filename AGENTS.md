@@ -339,6 +339,52 @@ A follow-up sprint integrated the doctor module with pharmacy inventory and made
 
 ---
 
+## 6.3 Counsellor error, direct IPD discharge, and billing/consult UI fixes — completed 2026-07-13
+
+### Completed
+
+- **Offline counsellor error fixed**
+  - `BillingHandoff` creation now validates the quote's `packageId` against the `Package` table before writing.
+  - Invalid or missing package IDs are stored as `null`, preventing Prisma foreign-key violations while keeping the full quote JSON intact.
+  - Changed files: `src/server/counsellor/index.ts`.
+
+- **Frontdesk direct IPD discharge**
+  - Frontdesk users can discharge IPD patients directly from the admission update dialog without requiring the patient to be marked `doctor_ready`.
+  - Payment clearance and empty service-cart checks are still enforced; a confirmation prompt is shown before discharge.
+  - Changed files: `src/app/app/frontdesk/ipd/page.tsx`, `src/server/ipd/index.ts`.
+
+- **Doctor consultation services/packages cart UI**
+  - Refactored the selection panel for better readability and usability.
+  - Right-hand sidebar now fills remaining width instead of being capped at 18rem, so the panel is no longer squeezed.
+  - Internal layout uses a single column on laptop screens and only splits into two columns on extra-wide (`xl`) screens.
+  - Cart panel is sticky, shows an item-count badge, and displays an empty state when nothing is selected.
+  - Selected services/packages are highlighted with colored borders and "Added" badges.
+  - Add/remove buttons are `shrink-0` so they stay on the right.
+  - Changed files: `src/components/doctor/consultation-workspace.tsx`.
+
+- **Billing separation of previous balance from new bills**
+  - The OPD/IPD billing form now shows only the **current bill** in "Net payable".
+  - Previous balance is surfaced only in the warning banner and can be collected separately (or by leaving lines empty and submitting a balance payment).
+  - Invoices are generated **only when the current bill is fully paid**; partial payments update the visit balance without creating an invoice.
+  - Removed the "Balance payment" receipt that bundled previous balance + current bill.
+  - Changed files: `src/components/frontdesk/opd-billing-form.tsx`, `src/server/clinical/index.ts`.
+
+### Validation & commit
+
+- `npx tsc --noEmit` passed with 0 errors.
+- Changes committed and pushed to `origin/master` as `857fc7d`.
+
+### Changed files
+
+- `src/server/counsellor/index.ts`
+- `src/server/ipd/index.ts`
+- `src/app/app/frontdesk/ipd/page.tsx`
+- `src/components/doctor/consultation-workspace.tsx`
+- `src/components/frontdesk/opd-billing-form.tsx`
+- `src/server/clinical/index.ts`
+
+---
+
 ## 7. Developer commands
 
 Run everything from repo root (`candela/`):
@@ -422,4 +468,4 @@ Automated end-to-end audits are being executed on the live staging tenant `os.ca
 
 ---
 
-*Last updated: 2026-07-12 — pharmacy-connected prescriptions, IPD pharmacy billing, and profit KPI completed; Gurgaon OPD registration-to-consult path tested end-to-end; pharmacy fulfillment and Pataudi full path pending correct role credentials.*
+*Last updated: 2026-07-13 — counsellor BillingHandoff FK validation, frontdesk direct IPD discharge, doctor consult services/packages cart UI, and billing previous-balance separation completed; TypeScript clean; deploy pending for live verification.*
