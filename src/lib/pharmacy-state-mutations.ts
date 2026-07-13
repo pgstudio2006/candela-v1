@@ -193,9 +193,9 @@ export function mutateDispensePrescription(
     throw new ServerActionError("VALIDATION", "No items to dispense — check stock and quantities.");
   }
 
+  const anyDispensed = updatedLines.some((l) => l.qtyDispensed > 0);
   const allDone = updatedLines.every((l) => l.qtyDispensed >= l.qtyPrescribed);
-  const partial = updatedLines.some((l) => l.qtyDispensed > 0 && l.qtyDispensed < l.qtyPrescribed);
-  const newStatus = allDone ? "dispensed" : partial ? "partially_dispensed" : rx.status;
+  const newStatus = allDone ? "dispensed" : anyDispensed ? "partially_dispensed" : rx.status;
   const now = new Date().toISOString();
   const totals = calcBillTotals(lines);
 
