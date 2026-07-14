@@ -920,7 +920,7 @@ export async function processBilling(
 
     let invoiceCreated = false;
 
-    if ((payload.packageLines.length > 0 || allocation.serviceCollected > 0) && net > 0 && ledger.isCurrentBillPaid) {
+    if ((payload.packageLines.length > 0 || allocation.serviceCollected > 0) && net > 0 && ledger.currentCollected > 0 && !payload.skipBilling && paymentScope !== "defer") {
       const serviceInvoiceAmount = Math.min(allocation.serviceCollected, net);
       await createServiceInvoice({
         ctx,
@@ -952,7 +952,7 @@ export async function processBilling(
       invoiceCreated = true;
     }
 
-    if (ipdPharmacy.lines.length > 0 && pharmacyNet > 0 && ledger.isCurrentBillPaid) {
+    if (ipdPharmacy.lines.length > 0 && pharmacyNet > 0 && ledger.currentCollected > 0 && !payload.skipBilling && paymentScope !== "defer") {
       const pharmacyInvoiceAmount = Math.min(allocation.pharmacyCollected, pharmacyNet);
       await createPharmacyInvoice({
         ctx,
@@ -962,6 +962,7 @@ export async function processBilling(
         subtotal: pharmacyGstInvoice.taxableSubtotal,
         collected: pharmacyInvoiceAmount,
         mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
+        paymentScope: invoicePaymentScope,
         lines: ipdPharmacy.lines.map((l) => ({
           label: l.label,
           amount: l.rate,
@@ -978,7 +979,7 @@ export async function processBilling(
       invoiceCreated = true;
     }
 
-    if (!invoiceCreated && ledger.isCurrentBillPaid && ledger.currentCollected > 0) {
+    if (!invoiceCreated && ledger.currentCollected > 0 && !payload.skipBilling && paymentScope !== "defer") {
       await createBalanceInvoice({
         ctx,
         tx,
@@ -987,6 +988,7 @@ export async function processBilling(
         outstandingBalance: ledger.previousBalance,
         collected: ledger.currentCollected,
         mode: payload.paymentSplits.length === 1 ? payload.paymentSplits[0].mode : payload.paymentSplits.length > 1 ? "split" : mode,
+        paymentScope: invoicePaymentScope,
         paymentSplits: payload.paymentSplits,
       });
     }

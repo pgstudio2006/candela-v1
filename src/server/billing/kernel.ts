@@ -153,6 +153,7 @@ export type PharmacyInvoiceInput = {
   subtotal: number;
   collected: number;
   mode: string;
+  paymentScope: string;
   lines: BillableLine[];
   paymentSplits: { mode: string; amount: number }[];
 };
@@ -168,7 +169,7 @@ export async function createPharmacyInvoice(input: PharmacyInvoiceInput) {
       discount: 0,
       collected: input.collected,
       mode: input.mode,
-      paymentScope: "full",
+      paymentScope: input.paymentScope,
       lines: input.lines.map((line) => ({
         label: `${line.label} (${line.quantity})`,
         quantity: line.quantity,
@@ -247,6 +248,7 @@ export type BalanceInvoiceInput = {
   outstandingBalance: number;
   collected: number;
   mode: string;
+  paymentScope: string;
   paymentSplits: { mode: string; amount: number }[];
 };
 
@@ -261,7 +263,7 @@ export async function createBalanceInvoice(input: BalanceInvoiceInput) {
       discount: 0,
       collected: input.collected,
       mode: input.mode,
-      paymentScope: "full",
+      paymentScope: input.paymentScope,
       gstOverride: { taxMode: "exempt", gstRatePercent: 0 },
       lines: [
         {

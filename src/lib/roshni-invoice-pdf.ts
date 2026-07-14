@@ -101,6 +101,8 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
   drawRight(page, money(receipt.discount), valueX, y - 13, bold, FONT.body);
   drawRight(page, "Total Amount", labelX + 80, y - 26, bold, FONT.body);
   drawRight(page, money(receipt.total), valueX, y - 26, bold, FONT.body);
+  drawRight(page, "Balance Amount", labelX + 80, y - 39, bold, FONT.body);
+  drawRight(page, money(receipt.balanceDue), valueX, y - 39, bold, FONT.body);
   line(page, 15, 575, y - 35, 0.5);
   drawText(page, `Paid Amount - ${money(receipt.amountPaid)}`, 15, y - 57, bold, FONT.body);
   drawRight(page, "GLOBAL HOSPITAL & TRAUMA CENTRE", 575, y - 57, font, FONT.body);
