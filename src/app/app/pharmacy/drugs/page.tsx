@@ -33,6 +33,7 @@ export default function PharmacyDrugsPage() {
     substitutes: [],
     active: true,
     defaultMrp: 100,
+    purchasePrice: 0,
   });
 
   const canEdit = isManager() || isPurchase();
@@ -58,6 +59,7 @@ export default function PharmacyDrugsPage() {
       substitutes: [],
       active: true,
       defaultMrp: 100,
+      purchasePrice: 0,
     });
     setSelected(null);
   };
@@ -108,6 +110,7 @@ export default function PharmacyDrugsPage() {
           { key: "schedule", label: "Schedule" },
           { key: "stock", label: "Stock" },
           { key: "mrp", label: "MRP" },
+          { key: "purchase", label: "Purchase" },
           { key: "reorder", label: "Reorder" },
           { key: "active", label: "Status" },
           { key: "actions", label: "" },
@@ -125,6 +128,7 @@ export default function PharmacyDrugsPage() {
             schedule: d.schedule,
             stock: `${onHand} ${d.unit}`,
             mrp: `₹${d.defaultMrp}`,
+            purchase: `₹${d.purchasePrice ?? 0}`,
             reorder: d.reorderLevel,
             active: <StatusBadge label={d.active ? "Active" : "Inactive"} variant={d.active ? "success" : "neutral"} />,
             actions: (
@@ -224,6 +228,9 @@ export default function PharmacyDrugsPage() {
             </FormRow>
             <FormRow label="Default MRP" required>
               <PharmacyInput type="number" value={form.defaultMrp} onChange={(e) => setForm({ ...form, defaultMrp: Number(e.target.value) })} placeholder="100" />
+            </FormRow>
+            <FormRow label="Purchase price" required>
+              <PharmacyInput type="number" value={form.purchasePrice ?? 0} onChange={(e) => setForm({ ...form, purchasePrice: Number(e.target.value) })} placeholder="80" />
             </FormRow>
             <FormRow label="Reorder level" required>
               <PharmacyInput type="number" value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: Number(e.target.value) })} placeholder="20" />

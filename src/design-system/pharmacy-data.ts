@@ -51,6 +51,7 @@ export type Drug = {
   substitutes: string[];
   active: boolean;
   defaultMrp: number;
+  purchasePrice?: number;
 };
 
 export type StockBatch = {
