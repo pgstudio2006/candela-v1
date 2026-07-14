@@ -76,13 +76,17 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
   const rows = receipt.lines.slice(0, 12);
   let y = 615;
   rows.forEach((item, index) => {
+    const lineTax = (item.cgst ?? 0) + (item.sgst ?? 0) + (item.igst ?? 0);
+    const taxable = Math.max(0, item.lineTotal - lineTax);
+    const gross = item.taxableAmount ?? taxable;
+    const lineDiscount = Math.max(0, gross - taxable);
     drawText(page, String(index + 1), COLUMNS[0], y, font, FONT.body);
     drawText(page, item.label, COLUMNS[1], y, font, FONT.body);
     drawText(page, valueOrDash(item.sacCode), COLUMNS[2], y, font, FONT.body);
     drawText(page, String(item.quantity), COLUMNS[3], y, font, FONT.body);
     drawText(page, "*", COLUMNS[4], y, font, FONT.body);
-    drawRight(page, money(item.lineTotal), COLUMNS[6], y, font, FONT.body);
-    drawRight(page, "0", COLUMNS[7] - 72, y, font, FONT.body);
+    drawRight(page, money(taxable), COLUMNS[6], y, font, FONT.body);
+    drawRight(page, money(lineDiscount), COLUMNS[7] - 72, y, font, FONT.body);
     drawRight(page, money(item.lineTotal), COLUMNS[7], y, font, FONT.body);
     y -= 13;
   });
@@ -94,19 +98,40 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
 function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont) {
   const labelX = 372;
   const valueX = 575;
-  const y = 476;
+  let y = 476;
   drawRight(page, "Sub Amount", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.subtotal), valueX, y, bold, FONT.body);
-  drawRight(page, "Sub Discount", labelX + 80, y - 13, bold, FONT.body);
-  drawRight(page, money(receipt.discount), valueX, y - 13, bold, FONT.body);
-  drawRight(page, "Total Amount", labelX + 80, y - 26, bold, FONT.body);
-  drawRight(page, money(receipt.total), valueX, y - 26, bold, FONT.body);
-  drawRight(page, "Balance Amount", labelX + 80, y - 39, bold, FONT.body);
-  drawRight(page, money(receipt.balanceDue), valueX, y - 39, bold, FONT.body);
-  line(page, 15, 575, y - 35, 0.5);
-  drawText(page, `Paid Amount - ${money(receipt.amountPaid)}`, 15, y - 57, bold, FONT.body);
-  drawRight(page, "GLOBAL HOSPITAL & TRAUMA CENTRE", 575, y - 57, font, FONT.body);
-  drawRight(page, "Authorised Signatory", 575, y - 75, font, FONT.body);
+  y -= 13;
+  drawRight(page, "Sub Discount", labelX + 80, y, bold, FONT.body);
+  drawRight(page, money(receipt.discount), valueX, y, bold, FONT.body);
+  y -= 13;
+  if (receipt.cgstTotal > 0) {
+    drawRight(page, "CGST", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.cgstTotal), valueX, y, bold, FONT.body);
+    y -= 13;
+  }
+  if (receipt.sgstTotal > 0) {
+    drawRight(page, "SGST", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.sgstTotal), valueX, y, bold, FONT.body);
+    y -= 13;
+  }
+  if (receipt.igstTotal > 0) {
+    drawRight(page, "IGST", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.igstTotal), valueX, y, bold, FONT.body);
+    y -= 13;
+  }
+  drawRight(page, "Total Amount", labelX + 80, y, bold, FONT.body);
+  drawRight(page, money(receipt.total), valueX, y, bold, FONT.body);
+  y -= 13;
+  drawRight(page, "Balance Amount", labelX + 80, y, bold, FONT.body);
+  drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
+  y -= 13;
+  line(page, 15, 575, y, 0.5);
+  y -= 13;
+  drawText(page, `Paid Amount - ${money(receipt.amountPaid)}`, 15, y, bold, FONT.body);
+  drawRight(page, "GLOBAL HOSPITAL & TRAUMA CENTRE", 575, y, font, FONT.body);
+  y -= 18;
+  drawRight(page, "Authorised Signatory", 575, y, font, FONT.body);
 }
 
 export async function generateRoshniInvoicePdf(receipt: OpdReceiptPayload): Promise<Uint8Array> {
