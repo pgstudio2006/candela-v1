@@ -14,6 +14,8 @@ import { PHARMACY_NAV } from "@/design-system/pharmacy-nav";
 import { WORKSPACE_SIGN_IN_PATH } from "@/lib/auth-storage";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export function PharmacyShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -74,10 +76,21 @@ export function PharmacyShell({ children }: { children: ReactNode }) {
         }}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="border-b border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] px-6 py-2 text-[12px] text-[var(--attio-text-secondary)]">
-          <span className="font-medium">{session.userName}</span>
-          <span className="mx-2">·</span>
-          <span>{session.userEmail}</span>
+        <div className="flex items-center justify-between border-b border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] px-6 py-2 text-[12px] text-[var(--attio-text-secondary)]">
+          <div>
+            <span className="font-medium">{session.userName}</span>
+            <span className="mx-2">·</span>
+            <span>{session.userEmail}</span>
+          </div>
+          {isAdmin && (
+            <Link
+              href="/app/admin"
+              className="flex items-center gap-1.5 rounded-md bg-[var(--attio-active)] px-2 py-1 text-[12px] font-medium text-[var(--attio-text)] hover:bg-[var(--attio-hover)]"
+            >
+              <ArrowLeft className="size-3.5" />
+              Back to Admin
+            </Link>
+          )}
         </div>
         <main className="scrollbar-none min-h-0 min-w-0 flex-1 overflow-y-auto">
           <StoreGate ready={ready} error={error} onRetry={() => void refresh()}>

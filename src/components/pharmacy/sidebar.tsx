@@ -1,6 +1,7 @@
 "use client";
 
 import { usePharmacyStore } from "@/components/pharmacy/pharmacy-store";
+import { useSession } from "@/components/candela/session-provider";
 import { CandelaBrand, CandelaMark } from "@/components/candela/candela-mark";
 import { CopilotMark } from "@/components/frontdesk/copilot-mark";
 import { SectionLabel } from "@/components/frontdesk/page-chrome";
@@ -8,7 +9,7 @@ import { SidebarIcon } from "@/components/frontdesk/sidebar-icon";
 import { PHARMACY_NAV, PHARMACY_NAV_GROUPS, canAccessPharmacyNav } from "@/design-system/pharmacy-nav";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { LogOut, PanelLeft, Search, Settings } from "lucide-react";
+import { ArrowLeft, LogOut, PanelLeft, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -24,9 +25,11 @@ type Props = {
 
 export function PharmacySidebar({ branchName, userName, copilotOpen, onToggleCopilot, onOpenCommand, onSignOut }: Props) {
   const pathname = usePathname();
+  const { session } = useSession();
   const { getStaffRole, getOperator } = usePharmacyStore();
   const role = getStaffRole();
   const [collapsed, setCollapsed] = useState(false);
+  const isAdmin = session?.role === "admin";
 
   useEffect(() => {
     if (localStorage.getItem("candela-pharmacy-sidebar") === "1") setCollapsed(true);
@@ -58,6 +61,24 @@ export function PharmacySidebar({ branchName, userName, copilotOpen, onToggleCop
             <PanelLeft className="size-4" />
           </button>
         </div>
+        {isAdmin && !collapsed && (
+          <Link
+            href="/app/admin"
+            className="mt-2 flex items-center gap-2 rounded-lg bg-[var(--attio-active)] px-2.5 py-2 text-[12px] font-medium text-[var(--attio-text)] hover:bg-[var(--attio-hover)]"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back to Admin
+          </Link>
+        )}
+        {isAdmin && collapsed && (
+          <Link
+            href="/app/admin"
+            title="Back to Admin"
+            className="mt-2 flex items-center justify-center rounded-lg bg-[var(--attio-active)] p-2 hover:bg-[var(--attio-hover)]"
+          >
+            <ArrowLeft className="size-4" />
+          </Link>
+        )}
         {!collapsed && (
           <button
             type="button"

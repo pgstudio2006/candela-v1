@@ -221,6 +221,7 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
 
     const getOperator = () => data.staff.find((s) => s.id === data.activeOperatorId);
     const getStaffRole = (): "manager" | "opd" | "purchase" => {
+      if (data.activeOperatorId === PHARMACY_MANAGER_ID) return "manager";
       if (data.activeOperatorRole) return data.activeOperatorRole;
       const op = getOperator();
       if (!op) return "opd";
