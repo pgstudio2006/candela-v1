@@ -37,16 +37,49 @@ function valueOrDash(value: string | number | undefined | null): string {
   return value == null || String(value).trim() === "" ? "-" : String(value);
 }
 
+function formatRoshniDateTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const day = pad(d.getDate());
+  const month = pad(d.getMonth() + 1);
+  const year = d.getFullYear();
+  const hours = d.getHours();
+  const minutes = pad(d.getMinutes());
+  const seconds = pad(d.getSeconds());
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const hours12 = pad(hours % 12 || 12);
+  return `${day}-${month}-${year} ${hours12}:${minutes}:${seconds} ${ampm}`;
+}
+
+function genderLabel(gender?: string): string {
+  const map: Record<string, string> = {
+    M: "Male",
+    F: "Female",
+    O: "Other",
+    male: "Male",
+    female: "Female",
+    other: "Other",
+    prefer_not: "Other",
+  };
+  return gender ? map[gender] ?? gender : "-";
+}
+
+function ageSexText(receipt: OpdReceiptPayload): string {
+  const agePart = receipt.patientAge ? `${receipt.patientAge}Yrs.-` : "-";
+  const sexPart = genderLabel(receipt.patientGender);
+  return `${agePart} / ${sexPart}`;
+}
+
 function drawInfo(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont) {
   const left = 15;
   const right = 342;
   const rightValue = 410;
   const rows = [
-    ["UHID No.", receipt.patientUhid, "Date", new Date(receipt.issuedAt).toLocaleString("en-IN")],
+    ["UHID No.", receipt.patientUhid, "Date", formatRoshniDateTime(receipt.issuedAt)],
     ["Name", receipt.patientName, "Receipt No.", receipt.invoiceNumber],
-    ["Age/Sex", "-", "Pay Mode", receipt.paymentMode.toUpperCase()],
+    ["Age/Sex", ageSexText(receipt), "Pay Mode", receipt.paymentMode.toUpperCase()],
     ["Mobile No.", receipt.patientPhone, "Token No.", valueOrDash(receipt.token)],
-    ["Address", receipt.patientCity || "-", "Patient Type", "NEW PATIENT"],
+    ["Address", receipt.patientAddress || receipt.patientCity || "-", "Patient Type", receipt.patientType || "NEW PATIENT"],
     ["Doctor", receipt.doctorName, "", ""],
   ] as const;
 

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { OpdReceiptPayload } from "@/lib/opd-receipt";
 import { receiptFromGstBreakdown } from "@/lib/opd-receipt";
 import { computeGstInvoice, parseBranchGstSettings, type GstSettings } from "@/lib/gst-invoicing";
-import { patientDisplayName } from "@/lib/frontdesk-workflow";
+import { patientDisplayName, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { parsePatientRegistrationMeta } from "@/lib/registration-meta";
 import type { ServerContext } from "@/server/context";
 import { branchScope } from "@/server/tenancy";
@@ -232,6 +232,20 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
   }
 
   const reg = parsePatientRegistrationMeta(patient.meta);
+  const age = resolvePatientAge(patient.age, patient.dateOfBirth ? patient.dateOfBirth.toISOString() : undefined);
+  const genderMap: Record<string, string> = {
+    M: "Male",
+    F: "Female",
+    O: "Other",
+    male: "Male",
+    female: "Female",
+    other: "Other",
+    prefer_not: "Other",
+  };
+  const patientGender = patient.gender ? genderMap[patient.gender] ?? patient.gender : undefined;
+  const patientAddress = reg.address || [reg.city, reg.district].filter(Boolean).join(", ") || undefined;
+  const visitTypeTag = patient.tags.find((t) => ["opd", "followup", "procedure"].includes(t));
+  const patientType = visitTypeTag === "followup" ? "OLD PATIENT" : visitTypeTag === "procedure" ? "PROCEDURE" : "NEW PATIENT";
 
   const branch = await prisma.branch.findUnique({ where: { id: ctx.branchId } });
   const branchGst = parseBranchGstSettings(branch?.meta);
@@ -262,6 +276,10 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     patientPhone: patient.phone,
     patientCity: reg.city,
     patientDistrict: reg.district,
+    patientAddress,
+    patientAge: age > 0 ? age : undefined,
+    patientGender,
+    patientType,
     appointmentCenter: reg.appointmentCentre || branch?.name || undefined,
     doctorName: visit.doctorName || "Consultant",
     token: visit.token ?? undefined,
