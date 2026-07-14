@@ -272,8 +272,8 @@ function drawPrescriptionContent(
   }
 
   // Signature
-  ctx.y -= 18;
-  ensureSpace(ctx, pdfDoc, image, 48);
+  ensureSpace(ctx, pdfDoc, image, 72);
+  ctx.y -= 26;
   const sigX = LAYOUT.marginRight - 180;
   const sigRight = LAYOUT.marginRight - 8;
   drawHLine(ctx.page, sigX, sigRight, ctx.y);

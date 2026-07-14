@@ -117,7 +117,7 @@ export async function generateRoshniInvoicePdf(receipt: OpdReceiptPayload): Prom
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  page.drawRectangle({ x: 10, y: 430, width: PAGE.width - 10, height: 310, color: WHITE });
+  page.drawRectangle({ x: 10, y: 430, width: PAGE.width - 10, height: 325, color: WHITE });
   drawText(page, "OPD RECEIPT", 267, 746, bold, FONT.title);
   line(page, 15, 575, 735, 0.8);
   drawInfo(page, receipt, font, bold);
