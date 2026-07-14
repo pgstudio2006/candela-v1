@@ -161,7 +161,12 @@ export function OpdBillingForm({
   const net = gstBreakdown.grandTotal;
   const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const payingNow = skipBilling || paymentScope === "defer" ? 0 : splitTotal;
-  const totalDue = net + (isBalancePayment ? previousBalance : 0);
+  const totalDue =
+    paymentScope === "full" || paymentScope === "defer"
+      ? net + (isBalancePayment ? previousBalance : 0)
+      : net > 0
+        ? net
+        : previousBalance;
   const remainingAfterPayment = Math.max(0, totalDue - payingNow);
 
   const updateSplit = (index: number, patch: Partial<PaymentSplit>) => {
