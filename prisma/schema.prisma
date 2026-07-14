@@ -2128,11 +2128,14 @@ model WhatsAppLog {
   trigger    String
   recipient  String
   body       String
+  messageId  String?
   status     String   @default("queued")
   error      String?
   createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
   branch     Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId, createdAt])
   @@index([branchId, trigger, status])
+  @@index([messageId])
 }

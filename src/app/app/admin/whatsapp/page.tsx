@@ -314,7 +314,7 @@ export default function WhatsAppTemplatesPage() {
                     <span className="font-medium">{log.trigger}</span>
                     <span
                       className={`rounded px-2 py-0.5 text-[11px] font-medium ${
-                        log.status === "sent"
+                        log.status === "sent" || log.status === "delivered" || log.status === "read"
                           ? "bg-green-100 text-green-700"
                           : log.status === "failed"
                             ? "bg-red-100 text-red-700"

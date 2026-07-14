@@ -1,3 +1,4 @@
+import { prisma } from "@/lib/prisma";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
@@ -62,8 +63,18 @@ export async function POST(request: NextRequest) {
 
       console.info(`[whatsapp:webhook] Status: ${statusValue} for ${recipient} (msg: ${messageId})`);
 
-      // Update WhatsAppLog status if we have the message ID
-      // This would require storing the message_id when sending
+      if (messageId) {
+        const errorText = status.errors?.[0]?.title ?? status.errors?.[0]?.message ?? null;
+        await prisma.whatsAppLog
+          .updateMany({
+            where: { messageId },
+            data: {
+              status: statusValue === "failed" ? "failed" : statusValue,
+              error: statusValue === "failed" && errorText ? errorText : undefined,
+            },
+          })
+          .catch((err) => console.error("[whatsapp:webhook] Failed to update log:", err));
+      }
     }
 
     // Always return 200 quickly — Meta expects fast acknowledgment

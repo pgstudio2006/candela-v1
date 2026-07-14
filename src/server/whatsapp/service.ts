@@ -204,12 +204,15 @@ export async function sendWhatsApp(
   try {
     const result = await deliverWhatsApp(recipient, body);
 
+    const messageId = result.detail?.match(/wamid\S+/)?.[0] ?? null;
+
     if (logId) {
       await prisma.whatsAppLog.update({
         where: { id: logId },
         data: {
           status: result.ok ? "sent" : "failed",
-          error: result.detail ?? null,
+          messageId,
+          error: result.ok ? null : result.detail,
         },
       }).catch(() => undefined);
     }
