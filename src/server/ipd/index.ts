@@ -19,7 +19,7 @@ import { writePlatformAudit } from "@/server/platform-audit";
 import { ensureHospitalBootstrap } from "@/server/hospital-bootstrap";
 import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 import { createId } from "@/lib/id";
-import { patientDisplayName } from "@/lib/frontdesk-workflow";
+import { patientDisplayName, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { resolveDoctorName } from "@/lib/clinical-roster";
 import { backfillBranchScope } from "@/server/branch-scope";
 import { loadClinicalRoster, resolveDoctorProfile } from "@/server/clinical/roster";
@@ -238,7 +238,18 @@ export async function getIpdAdmission(ctx: ServerContext, id: string) {
   const admission = await prisma.ipdAdmission.findFirst({
     where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
     include: {
-      patient: { select: { id: true, name: true, fullName: true, uhid: true, phone: true, age: true, gender: true } },
+      patient: {
+        select: {
+          id: true,
+          name: true,
+          fullName: true,
+          uhid: true,
+          phone: true,
+          age: true,
+          dateOfBirth: true,
+          gender: true,
+        },
+      },
       ward: true,
       bed: true,
     },
@@ -256,7 +267,7 @@ export async function getIpdAdmission(ctx: ServerContext, id: string) {
     patientName: patientDisplayName(admission.patient) ?? admission.patientId,
     uhid: admission.patient.uhid,
     phone: admission.patient.phone,
-    age: admission.patient.age,
+    age: resolvePatientAge(admission.patient.age, admission.patient.dateOfBirth),
     gender: admission.patient.gender,
     ward: admission.ward.label,
     bed: admission.bed.label,
@@ -1076,7 +1087,18 @@ async function loadAdmissionForSummary(ctx: ServerContext, id: string) {
   const admission = await prisma.ipdAdmission.findFirst({
     where: { id, tenantId: scope.tenantId, branchId: scope.branchId },
     include: {
-      patient: { select: { id: true, name: true, fullName: true, uhid: true, phone: true, age: true, gender: true } },
+      patient: {
+        select: {
+          id: true,
+          name: true,
+          fullName: true,
+          uhid: true,
+          phone: true,
+          age: true,
+          dateOfBirth: true,
+          gender: true,
+        },
+      },
       ward: true,
       bed: true,
     },
@@ -1104,7 +1126,7 @@ export async function generateDischargeSummary(ctx: ServerContext, id: string): 
       {
         patientName,
         uhid: admission.patient.uhid,
-        age: admission.patient.age ?? undefined,
+        age: resolvePatientAge(admission.patient.age, admission.patient.dateOfBirth) || undefined,
         gender: admission.patient.gender ?? undefined,
         ward: admission.ward.label,
         bed: admission.bed.label,
@@ -1206,7 +1228,7 @@ export async function generateDeathSummary(ctx: ServerContext, id: string): Prom
       {
         patientName,
         uhid: admission.patient.uhid,
-        age: admission.patient.age ?? undefined,
+        age: resolvePatientAge(admission.patient.age, admission.patient.dateOfBirth) || undefined,
         gender: admission.patient.gender ?? undefined,
         ward: admission.ward.label,
         bed: admission.bed.label,

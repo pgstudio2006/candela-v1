@@ -155,14 +155,17 @@ export function mapPrismaPatientRow(row: PrismaPatientRow): Patient {
     typeof row.meta === "object" && row.meta !== null
       ? (row.meta as Record<string, unknown>)
       : {};
+  const dateOfBirth = formatDateValue(row.dateOfBirth) ?? metaString(meta.dateOfBirth);
+  const storedAge = Number(row.age ?? 0);
+  const age = storedAge > 0 ? storedAge : dateOfBirth ? ageFromDob(dateOfBirth) : 0;
   return {
     id: row.id,
     uhid: row.uhid,
     name: patientDisplayName(row),
     phone: row.phone,
     email: row.email ?? undefined,
-    age: row.age ?? 0,
-    dateOfBirth: formatDateValue(row.dateOfBirth) ?? metaString(meta.dateOfBirth),
+    age,
+    dateOfBirth,
     gender: (row.gender ?? "O") as Patient["gender"],
     department: row.department ?? "",
     departmentId: row.departmentId ?? "",
@@ -260,6 +263,13 @@ export function ageFromDob(dob: string) {
   const m = today.getMonth() - birth.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
   return Math.max(0, age);
+}
+
+export function resolvePatientAge(age: unknown, dateOfBirth?: unknown): number {
+  const storedAge = Number(age ?? 0);
+  if (Number.isFinite(storedAge) && storedAge > 0) return storedAge;
+  const dob = String(dateOfBirth ?? "").trim();
+  return dob ? ageFromDob(dob) : 0;
 }
 
 export type FormSubmission = {

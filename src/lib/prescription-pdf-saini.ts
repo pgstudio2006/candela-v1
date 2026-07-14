@@ -1,6 +1,7 @@
 import { PDFDocument, PDFImage, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
+import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import {
   COLORS,
   FONT as BASE_FONT,
@@ -187,7 +188,7 @@ function drawPrescriptionContent(
   drawText(ctx.page, "Instructions", colX[5], ctx.y, bold, FONT.tableHead);
   ctx.y -= 16;
   drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-  ctx.y -= 6;
+  ctx.y -= 10;
 
   if (!consult.prescription?.length) {
     ensureSpace(ctx, pdfDoc, image, 20);
@@ -328,7 +329,7 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   drawText(page, `Mobile: ${patient.phone || "—"}`, col2, infoY, font, FONT.body);
   infoY -= rowH;
 
-  drawText(page, `Age / Sex: ${patient.age ?? "—"}y / ${patient.gender || "—"}`, col1, infoY, font, FONT.body);
+  drawText(page, `Age / Sex: ${resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y / ${patient.gender || "—"}`, col1, infoY, font, FONT.body);
   drawText(page, `Date: ${date}`, col2, infoY, font, FONT.body);
   infoY -= rowH;
 
