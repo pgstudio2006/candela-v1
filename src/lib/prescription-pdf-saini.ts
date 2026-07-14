@@ -53,6 +53,53 @@ type PageContext = {
   y: number;
 };
 
+function drawCheckbox(page: PDFPage, x: number, y: number, size = 7, checked = false) {
+  page.drawRectangle({
+    x,
+    y: y - 2,
+    width: size,
+    height: size,
+    borderWidth: 0.5,
+    borderColor: COLORS.ink,
+    color: COLORS.white,
+  });
+  if (checked) {
+    page.drawLine({
+      start: { x: x + 1, y: y + 1 },
+      end: { x: x + size - 1, y: y + size - 3 },
+      thickness: 0.5,
+      color: COLORS.ink,
+    });
+    page.drawLine({
+      start: { x: x + 1, y: y + size - 3 },
+      end: { x: x + size - 1, y: y + 1 },
+      thickness: 0.5,
+      color: COLORS.ink,
+    });
+  }
+}
+
+function drawYesNoPair(
+  page: PDFPage,
+  x: number,
+  y: number,
+  font: PDFFont,
+  size: number,
+  yesChecked = false,
+  noChecked = false,
+) {
+  const boxSize = 7;
+  const spacing = 4;
+  let cx = x;
+  drawCheckbox(page, cx, y, boxSize, yesChecked);
+  cx += boxSize + 2;
+  drawText(page, "Yes", cx, y, font, size);
+  cx += font.widthOfTextAtSize("Yes", size) + spacing;
+  drawCheckbox(page, cx, y, boxSize, noChecked);
+  cx += boxSize + 2;
+  drawText(page, "No", cx, y, font, size);
+}
+
 function addSainiPage(pdfDoc: PDFDocument, image: PDFImage): PDFPage {
   const page = pdfDoc.addPage([PAGE.width, PAGE.height]);
   page.drawImage(image, { x: 0, y: 0, width: PAGE.width, height: PAGE.height });
@@ -111,40 +158,83 @@ function drawPrescriptionContent(
   }
 
   // Medications
-  ensureSpace(ctx, pdfDoc, image, 16 + 16);
+  const colX = [
+    LAYOUT.marginLeft,
+    LAYOUT.marginLeft + 18,
+    LAYOUT.marginLeft + 150,
+    LAYOUT.marginLeft + 220,
+    LAYOUT.marginLeft + 300,
+    LAYOUT.marginLeft + 370,
+  ];
+
+  const medWidth = colX[2] - colX[1] - 6;
+  const doseWidth = colX[3] - colX[2] - 6;
+  const freqWidth = colX[4] - colX[3] - 6;
+  const durWidth = colX[5] - colX[4] - 6;
+  const instWidth = LAYOUT.marginRight - colX[5] - 6;
+
+  ensureSpace(ctx, pdfDoc, image, 52);
   drawText(ctx.page, "℞ Medications", LAYOUT.marginLeft, ctx.y, bold, FONT.emphasis);
+  ctx.y -= 14;
+
+  drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
+  ctx.y -= 12;
+  drawText(ctx.page, "#", colX[0], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "Medicine", colX[1], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "Dose", colX[2], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "Frequency", colX[3], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "Duration", colX[4], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "Instructions", colX[5], ctx.y, bold, FONT.tableHead);
   ctx.y -= 16;
+  drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
+  ctx.y -= 6;
 
   if (!consult.prescription?.length) {
+    ensureSpace(ctx, pdfDoc, image, 20);
     drawText(ctx.page, "No medicines prescribed", LAYOUT.marginLeft, ctx.y, font, FONT.body);
-    ctx.y -= 16;
+    ctx.y -= 20;
+    drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
+    ctx.y -= 6;
   } else {
     consult.prescription.forEach((line, i) => {
-      const header = `${line.drug || "—"} — ${line.dose} — ${formatFrequency(line.frequency)} — ${formatDuration(line)}`;
-      const instructions = line.instructions?.trim();
-      const instLines = instructions
-        ? wrapText(`Instructions: ${instructions}`, font, FONT.body, infoWidth - 14)
-        : [];
-      const blockHeight = 14 + instLines.length * LAYOUT.lineLeading + 6;
+      const medicine = line.drug || "—";
+      const dose = line.dose || "—";
+      const frequency = formatFrequency(line.frequency);
+      const duration = formatDuration(line);
+      const instructions = line.instructions?.trim() || "—";
 
-      // Ensure the whole medication block fits; if not, start a new page.
-      ensureSpace(ctx, pdfDoc, image, blockHeight);
+      const medLines = wrapText(medicine, font, FONT.table, medWidth);
+      const doseLines = wrapText(dose, font, FONT.table, doseWidth);
+      const freqLines = wrapText(frequency, font, FONT.table, freqWidth);
+      const durLines = wrapText(duration, font, FONT.table, durWidth);
+      const instLines = wrapText(instructions, font, FONT.table, instWidth);
 
-      drawText(ctx.page, `${i + 1}. ${header}`, LAYOUT.marginLeft, ctx.y, font, FONT.body);
-      ctx.y -= 14;
+      const maxLines = Math.max(
+        medLines.length,
+        doseLines.length,
+        freqLines.length,
+        durLines.length,
+        instLines.length,
+      );
+      const rowHeight = Math.max(LAYOUT.minRowHeight, maxLines * LAYOUT.lineLeading + 4);
 
-      instLines.forEach((instLine) => {
-        // Keep instructions with their header; page-break within long instructions if needed.
-        if (ctx.y - LAYOUT.lineLeading < LAYOUT.footerMinY) {
-          ctx.page = addSainiPage(pdfDoc, image);
-          ctx.y = LAYOUT.contentTop;
-        }
-        drawText(ctx.page, instLine, LAYOUT.marginLeft + 14, ctx.y, font, FONT.body);
-        ctx.y -= LAYOUT.lineLeading;
-      });
+      ensureSpace(ctx, pdfDoc, image, rowHeight + 4);
+
+      const rowTop = ctx.y;
+      for (let idx = 0; idx < maxLines; idx++) {
+        const lineY = rowTop - idx * LAYOUT.lineLeading;
+        if (idx < medLines.length) drawText(ctx.page, medLines[idx], colX[1], lineY, font, FONT.table);
+        if (idx < doseLines.length) drawText(ctx.page, doseLines[idx], colX[2], lineY, font, FONT.table);
+        if (idx < freqLines.length) drawText(ctx.page, freqLines[idx], colX[3], lineY, font, FONT.table);
+        if (idx < durLines.length) drawText(ctx.page, durLines[idx], colX[4], lineY, font, FONT.table);
+        if (idx < instLines.length) drawText(ctx.page, instLines[idx], colX[5], lineY, font, FONT.table);
+      }
+      drawText(ctx.page, String(i + 1), colX[0], rowTop, font, FONT.table);
+
+      ctx.y -= rowHeight;
+      drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
       ctx.y -= 6;
     });
-    ctx.y -= LAYOUT.paragraphGap;
   }
 
   // Advice
@@ -227,6 +317,9 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   const col2 = PATIENT_INFO_RECT.x + 190;
   const rowH = 21;
 
+  const bp = String(consult.examination?.vitalsBp ?? "");
+  const pr = String(consult.examination?.vitalsPulse ?? "");
+
   drawText(page, "Patient Information", col1, infoY, bold, FONT.title);
   infoY -= 18;
 
@@ -239,18 +332,28 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   infoY -= rowH;
 
   drawText(page, `City: ${patient.city || "—"}`, col1, infoY, font, FONT.body);
-  drawText(page, `BP: —`, col2, infoY, font, FONT.body);
+  drawText(page, `BP: ${bp || "—"}`, col2, infoY, font, FONT.body);
   infoY -= rowH;
 
-  drawText(page, `Allergies: —`, col1, infoY, font, FONT.body);
-  drawText(page, `PR: —`, col2, infoY, font, FONT.body);
+  const allergyLabel = "Allergies:";
+  drawText(page, allergyLabel, col1, infoY, bold, FONT.body);
+  drawYesNoPair(page, col1 + bold.widthOfTextAtSize(allergyLabel, FONT.body) + 8, infoY, font, FONT.body);
+  drawText(page, `PR: ${pr || "—"}`, col2, infoY, font, FONT.body);
   infoY -= rowH;
 
-  drawText(page, `Diabetes: —`, col1, infoY, font, FONT.body);
+  const diabetesLabel = "Diabetes:";
+  drawText(page, diabetesLabel, col1, infoY, bold, FONT.body);
+  drawYesNoPair(page, col1 + bold.widthOfTextAtSize(diabetesLabel, FONT.body) + 8, infoY, font, FONT.body);
   infoY -= rowH;
-  drawText(page, `Thyroid disorder: —`, col1, infoY, font, FONT.body);
+
+  const thyroidLabel = "Thyroid disorder:";
+  drawText(page, thyroidLabel, col1, infoY, bold, FONT.body);
+  drawYesNoPair(page, col1 + bold.widthOfTextAtSize(thyroidLabel, FONT.body) + 8, infoY, font, FONT.body);
   infoY -= rowH;
-  drawText(page, `Hypertension: —`, col1, infoY, font, FONT.body);
+
+  const hypertensionLabel = "Hypertension:";
+  drawText(page, hypertensionLabel, col1, infoY, bold, FONT.body);
+  drawYesNoPair(page, col1 + bold.widthOfTextAtSize(hypertensionLabel, FONT.body) + 8, infoY, font, FONT.body);
 
   drawPrescriptionContent(pdfDoc, image, page, props, LAYOUT.contentTop, font, bold);
 
