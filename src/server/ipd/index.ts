@@ -869,10 +869,16 @@ export async function generateIpdFinalBill(
       tx,
     );
 
-    await tx.ipdAdmission.update({
-      where: { id: admissionId },
+    const clearedAdmission = await tx.ipdAdmission.updateMany({
+      where: { id: admissionId, tenantId: scope.tenantId, branchId: scope.branchId },
       data: { cart: [] as unknown as object },
     });
+    if (clearedAdmission.count !== 1) {
+      throw new ServerActionError(
+        "NOT_FOUND",
+        "This IPD admission is no longer available. Refresh the billing page and select the active admission again.",
+      );
+    }
     await tx.opdVisit.update({
       where: { id: visitId },
       data: {
