@@ -1,7 +1,9 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { OpdReceiptPayload } from "@/lib/opd-receipt";
+import { generateRoshniInvoicePdf } from "@/lib/roshni-invoice-pdf";
 
 const TEMPLATE_URL = "/templates/navayu-invoice-template.pdf";
+const PATAUDI_BRANCH_ID = "branch_pataudi";
 
 const COLORS = {
   ink: rgb(0.12, 0.12, 0.14),
@@ -504,6 +506,8 @@ function drawNotes(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, lay
 }
 
 export async function generateInvoicePdf(receipt: OpdReceiptPayload): Promise<Uint8Array> {
+  if (receipt.branchId === PATAUDI_BRANCH_ID) return generateRoshniInvoicePdf(receipt);
+
   const templateBytes = await fetch(TEMPLATE_URL).then((res) => {
     if (!res.ok) throw new Error("Invoice template PDF not found.");
     return res.arrayBuffer();
@@ -564,6 +568,16 @@ export function downloadPdfBytes(bytes: Uint8Array, filename: string) {
 export async function generateCombinedInvoicePdf(receipts: OpdReceiptPayload[]): Promise<Uint8Array> {
   if (receipts.length === 0) throw new Error("No invoices to print.");
   if (receipts.length === 1) return generateInvoicePdf(receipts[0]);
+  if (receipts.some((receipt) => receipt.branchId === PATAUDI_BRANCH_ID)) {
+    const merged = await PDFDocument.create();
+    for (const receipt of receipts) {
+      const bytes = await generateInvoicePdf(receipt);
+      const source = await PDFDocument.load(bytes);
+      const [page] = await merged.copyPages(source, [0]);
+      merged.addPage(page);
+    }
+    return merged.save();
+  }
   const templateBytes = await fetch(TEMPLATE_URL).then((res) => {
     if (!res.ok) throw new Error("Invoice template PDF not found.");
     return res.arrayBuffer();

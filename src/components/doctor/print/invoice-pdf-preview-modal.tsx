@@ -134,7 +134,7 @@ export function InvoicePdfPreviewModal({
           {busy && (
             <div className="flex items-center justify-center gap-2 py-16 text-[13px] text-[var(--attio-text-tertiary)]">
               <Loader2 className="size-4 animate-spin" />
-              Preparing Navayu invoice…
+              Preparing invoice…
             </div>
           )}
           {displayError && !busy && (

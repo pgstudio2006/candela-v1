@@ -272,13 +272,14 @@ function drawPrescriptionContent(
   }
 
   // Signature
-  ensureSpace(ctx, pdfDoc, image, 42);
+  ctx.y -= 18;
+  ensureSpace(ctx, pdfDoc, image, 48);
   const sigX = LAYOUT.marginRight - 180;
   const sigRight = LAYOUT.marginRight - 8;
   drawHLine(ctx.page, sigX, sigRight, ctx.y);
-  ctx.y -= 12;
-  drawRightText(ctx.page, doctorName, sigRight, ctx.y, font, FONT.caption, 0);
   ctx.y -= 14;
+  drawRightText(ctx.page, doctorName, sigRight, ctx.y, font, FONT.caption, 0);
+  ctx.y -= 15;
   drawRightText(ctx.page, "Consultant Signature", sigRight, ctx.y, font, FONT.caption, 0);
 }
 

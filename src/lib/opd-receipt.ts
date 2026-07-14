@@ -15,6 +15,7 @@ export type OpdReceiptLine = {
 };
 
 export type OpdReceiptPayload = {
+  branchId?: string;
   invoiceNumber: string;
   issuedAt: string;
   patientName: string;

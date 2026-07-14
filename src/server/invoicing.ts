@@ -254,6 +254,7 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
   const normalizedPaymentMode = VALID_PAYMENT_MODES.has(rawPaymentMode) ? rawPaymentMode : "cash";
 
   const base = {
+    branchId: ctx.branchId,
     invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
     issuedAt: (invoice?.createdAt ?? visit.updatedAt ?? new Date()).toISOString(),
     patientName: patientDisplayName(patient),
