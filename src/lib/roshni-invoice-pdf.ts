@@ -101,12 +101,14 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
   const labelX = 372;
   const valueX = 575;
   let y = tableBottom - 40;
-  drawRight(page, "Sub Amount", labelX + 80, y, bold, FONT.body);
+  drawRight(page, "Subtotal", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.subtotal), valueX, y, bold, FONT.body);
   y -= 13;
-  drawRight(page, "Sub Discount", labelX + 80, y, bold, FONT.body);
-  drawRight(page, money(receipt.discount), valueX, y, bold, FONT.body);
-  y -= 13;
+  if (receipt.discount > 0) {
+    drawRight(page, "Discount", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.discount), valueX, y, bold, FONT.body);
+    y -= 13;
+  }
   if (receipt.cgstTotal > 0) {
     drawRight(page, "CGST", labelX + 80, y, bold, FONT.body);
     drawRight(page, money(receipt.cgstTotal), valueX, y, bold, FONT.body);
@@ -122,19 +124,19 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
     drawRight(page, money(receipt.igstTotal), valueX, y, bold, FONT.body);
     y -= 13;
   }
-  drawRight(page, "Total Amount", labelX + 80, y, bold, FONT.body);
+  drawRight(page, "Grand total", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.total), valueX, y, bold, FONT.body);
   y -= 13;
-  drawRight(page, "Paid Amount", labelX + 80, y, bold, FONT.body);
+  drawRight(page, "Collected", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.amountPaid), valueX, y, bold, FONT.body);
   y -= 13;
   if (receipt.balanceDue > 0) {
-    drawRight(page, "Balance Amount", labelX + 80, y, bold, FONT.body);
+    drawRight(page, "Balance due", labelX + 80, y, bold, FONT.body);
     drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
     y -= 13;
   }
   if (receipt.paymentMode) {
-    drawRight(page, "Payment Mode", labelX + 80, y, bold, FONT.body);
+    drawRight(page, "Payment mode", labelX + 80, y, bold, FONT.body);
     drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
     y -= 13;
   }
