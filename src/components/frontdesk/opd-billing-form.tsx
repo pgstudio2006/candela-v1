@@ -161,6 +161,8 @@ export function OpdBillingForm({
   const net = gstBreakdown.grandTotal;
   const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const payingNow = skipBilling || paymentScope === "defer" ? 0 : splitTotal;
+  const totalDue = net + (isBalancePayment ? previousBalance : 0);
+  const remainingAfterPayment = Math.max(0, totalDue - payingNow);
 
   const updateSplit = (index: number, patch: Partial<PaymentSplit>) => {
     setPaymentSplits((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -174,17 +176,15 @@ export function OpdBillingForm({
     setPaymentSplits((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   };
 
-  const balanceAfterPay = Math.max(0, net - splitTotal);
-
-  // Keep full-payment amount in sync with the bill total so submission works.
+  // Keep full-payment amount in sync with the total due (current bill + previous balance).
   useEffect(() => {
     if (skipBilling || paymentScope === "defer" || paymentScope !== "full") return;
     setPaymentSplits((prev) => {
       const mode = prev[0]?.mode ?? "cash";
-      if (prev.length === 1 && prev[0].amount === net && prev[0].mode === mode) return prev;
-      return [{ mode, amount: net }];
+      if (prev.length === 1 && prev[0].amount === totalDue && prev[0].mode === mode) return prev;
+      return [{ mode, amount: totalDue }];
     });
-  }, [paymentScope, net, skipBilling]);
+  }, [paymentScope, totalDue, skipBilling]);
 
   useEffect(() => {
     if (!visit?.ipdAdmissionId || lines.length > 0) return;
@@ -227,6 +227,10 @@ export function OpdBillingForm({
       if (hasBalance) {
         setPreviousPayments([{ mode: "previous", amount: amountPaid }]);
         setExistingInvoice(inv && (inv.status === "partial" || inv.balanceAmount > 0) ? inv : null);
+        if (balanceDue > 0 && lines.length === 0) {
+          setPaymentScope("partial");
+          setPaymentSplits([{ mode: inv?.paymentMode || "cash", amount: balanceDue }]);
+        }
       } else if (inv && (inv.status === "partial" || inv.balanceAmount > 0)) {
         setExistingInvoice(inv);
         // Same guard: only drop stale lines for OPD, not IPD cart-based billing.
@@ -277,7 +281,7 @@ export function OpdBillingForm({
           ? []
           : paymentScope === "partial"
             ? paymentSplits.filter((p) => p.amount > 0)
-            : [{ mode: paymentSplits[0]?.mode ?? "cash", amount: net }],
+            : [{ mode: paymentSplits[0]?.mode ?? "cash", amount: splitTotal }],
       ),
       amount: subtotal,
       collectedAmount: splitTotal,
@@ -655,9 +659,15 @@ export function OpdBillingForm({
                     <span className="text-[var(--attio-text-secondary)]">Current bill</span>
                     <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
                   </div>
+                  {isBalancePayment && previousBalance > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-[var(--attio-text-secondary)]">Previous balance</span>
+                      <span className="tabular-nums">₹{previousBalance.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between border-t border-[var(--attio-border)] pt-2 text-[15px] font-semibold">
                     <span>Total due</span>
-                    <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
+                    <span className="tabular-nums">₹{totalDue.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between text-[var(--attio-text-secondary)]">
                     <span>Paying now</span>
@@ -667,8 +677,8 @@ export function OpdBillingForm({
                   </div>
                   <div className="flex justify-between border-t border-[var(--attio-border)] pt-2 font-semibold">
                     <span>Remaining after payment</span>
-                    <span className="tabular-nums text-amber-600">
-                      {skipBilling || paymentScope === "defer" ? "Deferred" : `₹${Math.max(0, net - payingNow).toLocaleString("en-IN")}`}
+                    <span className={cn("tabular-nums", remainingAfterPayment > 0 ? "text-amber-600" : "text-emerald-600")}>
+                      {skipBilling || paymentScope === "defer" ? "Deferred" : `₹${remainingAfterPayment.toLocaleString("en-IN")}`}
                     </span>
                   </div>
                 </div>
@@ -765,9 +775,9 @@ export function OpdBillingForm({
                       Add payment mode
                     </AttioButton>
                     <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                      Collecting ₹{splitTotal.toLocaleString("en-IN")} of current bill ₹
-                      {net.toLocaleString("en-IN")}
-                      {balanceAfterPay > 0 && ` · Current bill remaining ₹${balanceAfterPay.toLocaleString("en-IN")}`}
+                      Collecting ₹{splitTotal.toLocaleString("en-IN")} of total due ₹
+                      {totalDue.toLocaleString("en-IN")}
+                      {remainingAfterPayment > 0 && ` · Remaining after payment ₹${remainingAfterPayment.toLocaleString("en-IN")}`}
                     </p>
                   </div>
                 )}
@@ -794,7 +804,7 @@ export function OpdBillingForm({
                     </div>
                     <div>
                       <Label className="text-[11px]">Amount collected</Label>
-                      <Input value={net} readOnly className="mt-1 h-9 bg-[var(--attio-surface)] text-[13px]" />
+                      <Input value={totalDue} readOnly className="mt-1 h-9 bg-[var(--attio-surface)] text-[13px]" />
                     </div>
                   </div>
                 )}
