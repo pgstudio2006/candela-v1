@@ -81,7 +81,7 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
     drawText(page, valueOrDash(item.sacCode), COLUMNS[2], y, font, FONT.body);
     drawText(page, String(item.quantity), COLUMNS[3], y, font, FONT.body);
     drawText(page, "*", COLUMNS[4], y, font, FONT.body);
-    drawRight(page, money(item.rate ?? item.lineTotal), COLUMNS[6], y, font, FONT.body);
+    drawRight(page, money(item.lineTotal), COLUMNS[6], y, font, FONT.body);
     drawRight(page, "0", COLUMNS[7] - 72, y, font, FONT.body);
     drawRight(page, money(item.lineTotal), COLUMNS[7], y, font, FONT.body);
     y -= 13;

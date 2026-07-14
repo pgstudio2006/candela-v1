@@ -159,10 +159,8 @@ export function OpdBillingForm({
   });
   const previousBalance = Number(visit?.balanceDue ?? 0);
   const net = gstBreakdown.grandTotal;
-  const totalDue = net + previousBalance;
   const splitTotal = paymentSplits.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const payingNow = skipBilling || paymentScope === "defer" ? 0 : splitTotal;
-  const remainingAfterPay = Math.max(0, totalDue - payingNow);
 
   const updateSplit = (index: number, patch: Partial<PaymentSplit>) => {
     setPaymentSplits((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -657,15 +655,9 @@ export function OpdBillingForm({
                     <span className="text-[var(--attio-text-secondary)]">Current bill</span>
                     <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
                   </div>
-                  {previousBalance > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-[var(--attio-text-secondary)]">Previous balance</span>
-                      <span className="tabular-nums text-amber-600">₹{previousBalance.toLocaleString("en-IN")}</span>
-                    </div>
-                  )}
                   <div className="flex justify-between border-t border-[var(--attio-border)] pt-2 text-[15px] font-semibold">
                     <span>Total due</span>
-                    <span className="tabular-nums">₹{totalDue.toLocaleString("en-IN")}</span>
+                    <span className="tabular-nums">₹{net.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between text-[var(--attio-text-secondary)]">
                     <span>Paying now</span>
@@ -676,7 +668,7 @@ export function OpdBillingForm({
                   <div className="flex justify-between border-t border-[var(--attio-border)] pt-2 font-semibold">
                     <span>Remaining after payment</span>
                     <span className="tabular-nums text-amber-600">
-                      {skipBilling || paymentScope === "defer" ? "Deferred" : `₹${remainingAfterPay.toLocaleString("en-IN")}`}
+                      {skipBilling || paymentScope === "defer" ? "Deferred" : `₹${Math.max(0, net - payingNow).toLocaleString("en-IN")}`}
                     </span>
                   </div>
                 </div>
@@ -689,7 +681,7 @@ export function OpdBillingForm({
 
               <Panel title="Payment">
                 <div className="mb-4 flex flex-wrap gap-2">
-                  {!existingInvoice && (
+                  {(
                     [
                       { id: "full" as const, label: "Full payment" },
                       { id: "partial" as const, label: "Partial payment" },
