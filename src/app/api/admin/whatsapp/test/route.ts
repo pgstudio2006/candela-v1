@@ -29,9 +29,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: result.ok,
       data: {
-        provider: "meta-cloud",
+        provider: result.provider ?? "meta-cloud",
         recipient: result.recipient,
         body: result.body,
+        detail: result.detail,
         error: result.error,
       },
     });

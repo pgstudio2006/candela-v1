@@ -160,11 +160,11 @@ function drawPrescriptionContent(
   // Medications
   const colX = [
     LAYOUT.marginLeft,
-    LAYOUT.marginLeft + 18,
+    LAYOUT.marginLeft + 20,
     LAYOUT.marginLeft + 150,
-    LAYOUT.marginLeft + 220,
+    LAYOUT.marginLeft + 190,
+    LAYOUT.marginLeft + 250,
     LAYOUT.marginLeft + 300,
-    LAYOUT.marginLeft + 370,
   ];
 
   const medWidth = colX[2] - colX[1] - 6;
@@ -191,7 +191,7 @@ function drawPrescriptionContent(
 
   if (!consult.prescription?.length) {
     ensureSpace(ctx, pdfDoc, image, 20);
-    drawText(ctx.page, "No medicines prescribed", LAYOUT.marginLeft, ctx.y, font, FONT.body);
+    drawText(ctx.page, "No medicines prescribed", colX[1], ctx.y, font, FONT.table);
     ctx.y -= 20;
     drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
     ctx.y -= 6;

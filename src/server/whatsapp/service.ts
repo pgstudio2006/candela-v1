@@ -157,6 +157,8 @@ export type SendWhatsAppResult = {
   trigger: WhatsAppTrigger;
   recipient: string;
   body: string;
+  provider?: string;
+  detail?: string;
   error?: string;
 };
 
@@ -217,6 +219,8 @@ export async function sendWhatsApp(
       trigger,
       recipient,
       body,
+      provider: result.provider,
+      detail: result.detail,
       error: result.ok ? undefined : result.detail,
     };
   } catch (e) {

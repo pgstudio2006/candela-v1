@@ -123,7 +123,11 @@ export default function WhatsAppTemplatesPage() {
       });
       const json = await res.json();
       if (json.ok) {
-        setTestResult({ ok: true, detail: json.data?.error || "Message sent successfully" });
+        const detail =
+          json.data?.detail ||
+          json.data?.error ||
+          (json.data?.provider === "demo" ? "Demo mode — not actually sent" : "Message sent successfully");
+        setTestResult({ ok: true, detail });
       } else {
         setTestResult({ ok: false, detail: json.error || json.data?.error || "Send failed" });
       }
