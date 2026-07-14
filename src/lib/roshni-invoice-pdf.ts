@@ -62,7 +62,7 @@ function drawInfo(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold
   }
 }
 
-function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont) {
+function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont): number {
   const left = COLUMNS[0];
   const right = COLUMNS[COLUMNS.length - 1];
   line(page, left, right, 648, 0.7);
@@ -92,13 +92,15 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
   });
 
   if (rows.length === 0) drawText(page, "No services billed", COLUMNS[1], y, font, FONT.body);
-  line(page, left, right, Math.max(y + 5, 490), 0.5);
+  const tableBottom = Math.max(y + 5, 490);
+  line(page, left, right, tableBottom, 0.5);
+  return tableBottom;
 }
 
-function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont) {
+function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont, tableBottom: number) {
   const labelX = 372;
   const valueX = 575;
-  let y = 476;
+  let y = tableBottom - 40;
   drawRight(page, "Sub Amount", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.subtotal), valueX, y, bold, FONT.body);
   y -= 13;
@@ -123,12 +125,21 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
   drawRight(page, "Total Amount", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.total), valueX, y, bold, FONT.body);
   y -= 13;
-  drawRight(page, "Balance Amount", labelX + 80, y, bold, FONT.body);
-  drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
+  drawRight(page, "Paid Amount", labelX + 80, y, bold, FONT.body);
+  drawRight(page, money(receipt.amountPaid), valueX, y, bold, FONT.body);
   y -= 13;
+  if (receipt.balanceDue > 0) {
+    drawRight(page, "Balance Amount", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
+    y -= 13;
+  }
+  if (receipt.paymentMode) {
+    drawRight(page, "Payment Mode", labelX + 80, y, bold, FONT.body);
+    drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
+    y -= 13;
+  }
   line(page, 15, 575, y, 0.5);
   y -= 13;
-  drawText(page, `Paid Amount - ${money(receipt.amountPaid)}`, 15, y, bold, FONT.body);
   drawRight(page, "GLOBAL HOSPITAL & TRAUMA CENTRE", 575, y, font, FONT.body);
   y -= 18;
   drawRight(page, "Authorised Signatory", 575, y, font, FONT.body);
@@ -144,12 +155,12 @@ export async function generateRoshniInvoicePdf(receipt: OpdReceiptPayload): Prom
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  page.drawRectangle({ x: 10, y: 430, width: PAGE.width - 10, height: 325, color: WHITE });
+  page.drawRectangle({ x: 10, y: 380, width: PAGE.width - 10, height: 375, color: WHITE });
   drawText(page, "OPD RECEIPT", 267, 746, bold, FONT.title);
   line(page, 15, 575, 735, 0.8);
   drawInfo(page, receipt, font, bold);
-  drawTable(page, receipt, font, bold);
-  drawTotals(page, receipt, font, bold);
+  const tableBottom = drawTable(page, receipt, font, bold);
+  drawTotals(page, receipt, font, bold, tableBottom);
 
   return pdfDoc.save();
 }
