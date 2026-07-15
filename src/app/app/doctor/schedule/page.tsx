@@ -4,10 +4,20 @@ import { useDoctorStore } from "@/components/doctor/doctor-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
-import { formatStageStatus, patientDisplayName } from "@/lib/frontdesk-workflow";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+
+type DoctorAppointment = {
+  id: string;
+  patientId: string | null;
+  patientName: string;
+  time: string | null;
+  durationMin: number;
+  mode?: "offline" | "online";
+  notes?: string;
+  status: string;
+};
 
 const DEFAULT_SLOTS = [
   "09:00", "09:20", "09:40", "10:00", "10:20", "10:40",
@@ -18,9 +28,11 @@ const DEFAULT_SLOTS = [
 
 export default function DoctorSchedulePage() {
   useDoctorPoll();
-  const { activeDoctorId, visits, getPatient } = useDoctorStore();
+  const { activeDoctorId } = useDoctorStore();
   const [adminSlots, setAdminSlots] = useState<any[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const todayDisplay = new Date().toLocaleDateString("en-IN", {
     weekday: "short",
@@ -44,15 +56,27 @@ export default function DoctorSchedulePage() {
     }
   };
 
+  const loadAppointments = async () => {
+    setLoadingAppointments(true);
+    try {
+      const res = await fetch(`/api/doctor/appointments?date=${today}&doctorId=${activeDoctorId}`, { credentials: "include" });
+      const json = await res.json();
+      if (json.ok) {
+        setAppointments(json.data ?? []);
+      }
+    } catch (error) {
+      console.error("Failed to load appointments:", error);
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
+
   useEffect(() => {
     loadAdminSlots();
+    loadAppointments();
   }, [today, activeDoctorId]);
 
-  const appointments = visits
-    .filter((v) => v.doctorId === activeDoctorId && v.appointment)
-    .sort((a, b) => String(a.appointmentTime).localeCompare(String(b.appointmentTime)));
-
-  const booked = new Set(appointments.map((v) => v.appointmentTime).filter(Boolean));
+  const booked = new Set(appointments.map((a) => a.time).filter(Boolean) as string[]);
 
   const slots = adminSlots.length > 0
     ? adminSlots.map((s) => s.startTime).sort()
@@ -65,11 +89,11 @@ export default function DoctorSchedulePage() {
         { label: "Schedule" },
       ]}
       title="Today's schedule"
-      meta={`${todayDisplay} · ${appointments.length} appointment(s)`}
+      meta={`${todayDisplay} · ${appointments.length} appointment(s) · ${loadingAppointments ? "loading…" : "synced"}`}
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="OPD time slots">
-          {loadingSlots ? (
+          {loadingSlots || loadingAppointments ? (
             <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading slots…</p>
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -107,22 +131,18 @@ export default function DoctorSchedulePage() {
             {appointments.length === 0 && (
               <li className="py-6 text-center text-[var(--attio-text-tertiary)]">No appointments booked</li>
             )}
-            {appointments.map((v) => {
-              const p = getPatient(v.patientId);
-              return (
-                <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-[13px]">
-                  <span className="font-medium">{v.appointmentTime}</span>
-                  <Link
-                    href={`/app/doctor/patients/${v.patientId}`}
-                    className="text-[var(--attio-text-secondary)] hover:text-[var(--attio-accent)]"
-                  >
-                    {p ? patientDisplayName(p) : v.patientId}
-                  </Link>
-                  <StatusBadge label={`Token #${v.token}`} variant="info" />
-                  <StatusBadge label={formatStageStatus(v.stage)} variant="neutral" />
-                </li>
-              );
-            })}
+            {appointments.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-[13px]">
+                <span className="font-medium">{a.time}</span>
+                <Link
+                  href={`/app/doctor/patients/${a.patientId ?? ""}`}
+                  className="text-[var(--attio-text-secondary)] hover:text-[var(--attio-accent)]"
+                >
+                  {a.patientName}
+                </Link>
+                <StatusBadge label={a.mode === "online" ? "Online" : "Offline"} variant="info" />
+              </li>
+            ))}
           </ul>
         </Panel>
       </div>

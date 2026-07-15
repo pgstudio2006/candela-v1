@@ -292,6 +292,7 @@ export type Appointment = {
   time: string;
   durationMin: number;
   notes?: string;
+  mode?: "offline" | "online";
   status: "booked" | "checked_in" | "cancelled";
 };
 

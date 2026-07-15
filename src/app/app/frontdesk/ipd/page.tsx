@@ -171,7 +171,10 @@ export default function FrontdeskIpdPage() {
   const handleFinalDischarge = async () => {
     if (!selectedAdmission) return;
     if (!paymentClear) {
-      toast("Final discharge is blocked until payment is cleared and the service cart is empty.", "error");
+      const blockedReason = selectedAdmission.cart.length > 0
+        ? "Final discharge is blocked until the service cart is empty."
+        : "Final discharge is blocked until the IPD bill is cleared.";
+      toast(blockedReason, "error");
       return;
     }
     const confirmed = window.confirm("This will discharge the patient and free the bed. Continue?");
@@ -222,13 +225,15 @@ export default function FrontdeskIpdPage() {
   const invoiceBalance = patientInvoices.reduce((sum, inv) => sum + (inv.balanceAmount ?? 0), 0);
   const invoiceTotal = patientInvoices.reduce((sum, inv) => sum + (inv.totalAmount ?? 0), 0);
   const invoicePaid = patientInvoices.reduce((sum, inv) => sum + (inv.amountPaid ?? 0), 0);
+  const isPostpaidAdmission = selectedAdmission?.billingMode === "postpaid";
   const paymentClear =
     selectedAdmission &&
-    (selectedAdmission.balanceDue ?? 0) <= 0 &&
-    (selectedAdmission.amountPaid ?? 0) >= (selectedAdmission.billAmount ?? 0) &&
     selectedAdmission.cart.length === 0 &&
-    invoiceBalance <= 0 &&
-    invoicePaid >= invoiceTotal;
+    (isPostpaidAdmission ||
+      ((selectedAdmission.balanceDue ?? 0) <= 0 &&
+        (selectedAdmission.amountPaid ?? 0) >= (selectedAdmission.billAmount ?? 0) &&
+        invoiceBalance <= 0 &&
+        invoicePaid >= invoiceTotal));
 
   const selectedWard = snapshot?.wards.find((w) => w.wardId === admitWardId);
   const transferWard = snapshot?.wards.find((w) => w.wardId === transferWardId);
@@ -628,7 +633,7 @@ export default function FrontdeskIpdPage() {
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                       <p className="text-[12px] font-medium text-amber-900">Direct discharge</p>
                       <p className="text-[11px] text-amber-800">
-                        Discharge the patient now and free the bed. Payment and service cart must be cleared.
+                        Discharge the patient now and free the bed. Service cart must be empty; billing must be cleared for prepaid admissions.
                       </p>
                       <AttioButton
                         type="button"
@@ -641,7 +646,9 @@ export default function FrontdeskIpdPage() {
                       </AttioButton>
                       {!paymentClear && (
                         <p className="mt-1 text-[11px] text-amber-600">
-                          Discharge is blocked until payment is cleared and the service cart is empty.
+                          {selectedAdmission?.cart.length > 0
+                            ? "Discharge is blocked until the service cart is empty."
+                            : "Discharge is blocked until the IPD bill is cleared."}
                         </p>
                       )}
                     </div>

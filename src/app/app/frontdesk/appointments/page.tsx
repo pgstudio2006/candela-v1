@@ -32,7 +32,7 @@ export default function AppointmentsPage() {
   } = useFrontdeskStore();
   const appointmentSchema = useFrontdeskFormSchema("appointment", roster);
   const bookingFieldsSchema = useMemo(
-    () => subsetSchema(appointmentSchema, ["duration", "notes"]),
+    () => subsetSchema(appointmentSchema, ["duration", "mode", "notes"]),
     [appointmentSchema],
   );
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -42,6 +42,7 @@ export default function AppointmentsPage() {
   const [selectedPatientUhid, setSelectedPatientUhid] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [duration, setDuration] = useState(20);
+  const [mode, setMode] = useState("offline");
   const [notes, setNotes] = useState("");
   const [rescheduleId, setRescheduleId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
@@ -121,6 +122,7 @@ export default function AppointmentsPage() {
       date,
       time: selectedTime,
       duration: String(duration),
+      mode: String(mode),
       notes,
     });
     if (result.error || !result.visitId) {
@@ -134,6 +136,7 @@ export default function AppointmentsPage() {
       date,
       time: selectedTime,
       duration,
+      mode,
       notes,
     }, { visitId: result.visitId });
     toast("Appointment booked", "success");
@@ -242,17 +245,20 @@ export default function AppointmentsPage() {
                 <div>
                   <p className="mb-1.5 text-[12px] font-medium text-[var(--attio-text-secondary)]">Selected slot</p>
                   <p className="rounded-md bg-[var(--attio-surface)] px-3 py-2 text-[13px]">
-                    {selectedTime ? `${formatDisplayDate(date)} · ${selectedTime}` : "Click a slot on the calendar"}
+                    {selectedTime
+                      ? `${formatDisplayDate(date)} · ${selectedTime} · ${mode === "online" ? "Online" : "Offline"}`
+                      : "Click a slot on the calendar"}
                   </p>
                 </div>
                 <PublishedSchemaForm
                   schema={bookingFieldsSchema}
                   hideSubmit
-                  initialValues={{ duration: String(duration), notes }}
+                  initialValues={{ duration: String(duration), mode, notes }}
                   onValuesChange={(values) => {
                     if (values.duration != null && values.duration !== "") {
                       setDuration(Number(values.duration));
                     }
+                    if (values.mode != null) setMode(String(values.mode));
                     if (values.notes != null) setNotes(String(values.notes));
                   }}
                 />
@@ -289,7 +295,7 @@ export default function AppointmentsPage() {
                           {a.time} · {p ? patientDisplayName(p) : "Unknown"}
                         </p>
                         <p className="text-[12px] text-[var(--attio-text-tertiary)]">
-                          {a.doctorName} · {p?.uhid ?? "—"}
+                          {a.doctorName} · {p?.uhid ?? "—"} · {a.mode === "online" ? "Online" : "Offline"}
                         </p>
                         {a.notes && <p className="mt-1 text-[12px] text-[var(--attio-text-secondary)]">{a.notes}</p>}
                       </div>

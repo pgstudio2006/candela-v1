@@ -313,6 +313,16 @@ export const APPOINTMENT_SCHEMA: FormSchema = {
             { value: "45", label: "45 minutes" },
           ],
         },
+        {
+          id: "mode",
+          type: "select",
+          label: "Consultation mode",
+          defaultValue: "offline",
+          options: [
+            { value: "offline", label: "Offline" },
+            { value: "online", label: "Online" },
+          ],
+        },
         { id: "notes", type: "textarea", label: "Notes", span: 2 },
       ],
     },

@@ -457,19 +457,24 @@ export async function getClinicalSnapshot(ctx: ServerContext): Promise<ClinicalS
 
   const appointments: Appointment[] = appointmentRows
     .filter((row) => row.patientId && row.date && row.time && row.doctorId && row.departmentId)
-    .map((row) => ({
-      id: row.id,
-      patientId: row.patientId!,
-      visitId: row.visitId ?? undefined,
-      departmentId: row.departmentId!,
-      doctorId: row.doctorId!,
-      doctorName: row.doctorName ?? "",
-      date: row.date!,
-      time: row.time!,
-      durationMin: row.durationMin ?? 20,
-      notes: row.notes ?? undefined,
-      status: row.status as Appointment["status"],
-    }));
+    .map((row) => {
+      const meta = asRecord(row.meta);
+      const mode = meta.mode === "online" ? "online" : meta.mode === "offline" ? "offline" : undefined;
+      return {
+        id: row.id,
+        patientId: row.patientId!,
+        visitId: row.visitId ?? undefined,
+        departmentId: row.departmentId!,
+        doctorId: row.doctorId!,
+        doctorName: row.doctorName ?? "",
+        date: row.date!,
+        time: row.time!,
+        durationMin: row.durationMin ?? 20,
+        notes: row.notes ?? undefined,
+        mode: mode as Appointment["mode"],
+        status: row.status as Appointment["status"],
+      };
+    });
 
   const submissions: FormSubmission[] = submissionRows.map((row) => ({
     id: row.id,
@@ -1629,6 +1634,7 @@ export async function bookAppointment(
         time: apptTime,
         durationMin: Number(data.duration ?? 20),
         notes: String(data.notes ?? "") || null,
+        meta: { mode: String(data.mode ?? "offline") } as Prisma.InputJsonValue,
         status: "booked",
       },
       create: {
@@ -1643,6 +1649,7 @@ export async function bookAppointment(
         time: apptTime,
         durationMin: Number(data.duration ?? 20),
         notes: String(data.notes ?? "") || null,
+        meta: { mode: String(data.mode ?? "offline") } as Prisma.InputJsonValue,
         status: "booked",
       },
     }),

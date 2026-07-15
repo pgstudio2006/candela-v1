@@ -590,9 +590,18 @@ export async function updateIpdAdmission(
   return { id };
 }
 
-async function assertIpdDischargeAllowed(ctx: ServerContext, admission: { id: string; visitId: string | null; cart: unknown }) {
+async function assertIpdDischargeAllowed(
+  ctx: ServerContext,
+  admission: { id: string; visitId: string | null; cart: unknown; billingMode?: string | null },
+) {
   if (!admission.visitId) return;
+  const isPostpaid = (admission.billingMode ?? "postpaid") === "postpaid";
   const scope = branchScope(ctx);
+  const cart = parseCart(admission.cart);
+  if (cart.length > 0) {
+    throw new ServerActionError("VALIDATION", "Cannot discharge while services/packages are still in the cart. Clear or bill the cart first.");
+  }
+  if (isPostpaid) return;
   const visit = await prisma.opdVisit.findFirst({
     where: { id: admission.visitId, tenantId: scope.tenantId, branchId: scope.branchId },
     select: { balanceDue: true, amountPaid: true, billAmount: true },
@@ -605,12 +614,8 @@ async function assertIpdDischargeAllowed(ctx: ServerContext, admission: { id: st
   const invoiceTotal = invoices.reduce((sum, inv) => sum + Number(inv.totalAmount ?? 0), 0);
   const invoicePaid = invoices.reduce((sum, inv) => sum + Number(inv.amountPaid ?? 0), 0);
   const balanceDue = (visit?.balanceDue ?? 0) + invoiceBalance;
-  const cart = parseCart(admission.cart);
   if (balanceDue > 0 || (visit && (visit.amountPaid ?? 0) < (visit.billAmount ?? 0)) || invoicePaid < invoiceTotal) {
     throw new ServerActionError("VALIDATION", "Cannot discharge while IPD bill is unpaid. Complete billing first.");
-  }
-  if (cart.length > 0) {
-    throw new ServerActionError("VALIDATION", "Cannot discharge while services/packages are still in the cart. Clear or bill the cart first.");
   }
 }
 
