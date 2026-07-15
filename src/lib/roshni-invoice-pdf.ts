@@ -7,7 +7,7 @@ const INK = rgb(0.08, 0.08, 0.08);
 const BORDER = rgb(0.5, 0.5, 0.5);
 const WHITE = rgb(1, 1, 1);
 const FONT = { body: 8, small: 7, header: 7, title: 10 } as const;
-const COLUMNS = [15, 96, 194, 274, 318, 371, 474, 575] as const;
+const COLUMNS = [15, 96, 274, 318, 371, 474, 575] as const;
 
 function safe(text: string): string {
   return String(text)
@@ -99,9 +99,9 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
   const left = COLUMNS[0];
   const right = COLUMNS[COLUMNS.length - 1];
   line(page, left, right, 648, 0.7);
-  const headers = ["Sr No.", "Item Name", "Item Code", "Qty", "*", "Amount", "Discount", "Net Amount"];
+  const headers = ["Sr No.", "Item Name", "Qty", "*", "Amount", "Discount", "Net Amount"];
   headers.forEach((header, index) => {
-    if (index >= 6) drawRight(page, header, COLUMNS[index], 636, bold, FONT.header);
+    if (index >= 5) drawRight(page, header, COLUMNS[index], 636, bold, FONT.header);
     else drawText(page, header, COLUMNS[index], 636, bold, FONT.header);
   });
   line(page, left, right, 629, 0.7);
@@ -115,12 +115,11 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
     const lineDiscount = Math.max(0, gross - taxable);
     drawText(page, String(index + 1), COLUMNS[0], y, font, FONT.body);
     drawText(page, item.label, COLUMNS[1], y, font, FONT.body);
-    drawText(page, valueOrDash(item.sacCode), COLUMNS[2], y, font, FONT.body);
-    drawText(page, String(item.quantity), COLUMNS[3], y, font, FONT.body);
-    drawText(page, "*", COLUMNS[4], y, font, FONT.body);
-    drawRight(page, money(taxable), COLUMNS[5] + 25, y, font, FONT.body);
-    drawRight(page, money(lineDiscount), COLUMNS[6], y, font, FONT.body);
-    drawRight(page, money(item.lineTotal), COLUMNS[7], y, font, FONT.body);
+    drawText(page, String(item.quantity), COLUMNS[2], y, font, FONT.body);
+    drawText(page, "*", COLUMNS[3], y, font, FONT.body);
+    drawRight(page, money(taxable), COLUMNS[4] + 25, y, font, FONT.body);
+    drawRight(page, money(lineDiscount), COLUMNS[5], y, font, FONT.body);
+    drawRight(page, money(item.lineTotal), COLUMNS[6], y, font, FONT.body);
     y -= 13;
   });
 
