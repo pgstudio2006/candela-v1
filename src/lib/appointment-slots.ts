@@ -5,11 +5,12 @@ export type SlotInfo = {
   available: boolean;
   bookedPatient?: string;
   appointmentId?: string;
+  mode?: "offline" | "online";
 };
 
 export function generateDaySlots(
   deptId: string,
-  booked: { time: string; doctorId: string; patientName?: string }[],
+  booked: { time: string; doctorId: string; patientName?: string; mode?: "offline" | "online" }[],
   doctorId?: string,
 ): SlotInfo[] {
   const config = APPOINTMENT_SLOTS[deptId as keyof typeof APPOINTMENT_SLOTS] ?? APPOINTMENT_SLOTS.dept_spine;
@@ -27,6 +28,7 @@ export function generateDaySlots(
       time,
       available: !hit,
       bookedPatient: hit?.patientName,
+      mode: hit?.mode,
     });
     cursor += step;
   }

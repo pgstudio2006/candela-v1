@@ -77,6 +77,11 @@ export default function DoctorSchedulePage() {
   }, [today, activeDoctorId]);
 
   const booked = new Set(appointments.map((a) => a.time).filter(Boolean) as string[]);
+  const modeByTime = new Map(
+    appointments
+      .filter((a) => a.time)
+      .map((a) => [a.time as string, a.mode] as [string, "offline" | "online"]),
+  );
 
   const slots = adminSlots.length > 0
     ? adminSlots.map((s) => s.startTime).sort()
@@ -103,6 +108,7 @@ export default function DoctorSchedulePage() {
                 const capacity = adminSlot?.capacity ?? 1;
                 const bookedCount = adminSlot?.booked ?? 0;
                 const isFull = adminSlot ? bookedCount >= capacity : taken;
+                const mode = taken ? modeByTime.get(slot) : undefined;
                 return (
                   <div
                     key={slot}
@@ -115,9 +121,12 @@ export default function DoctorSchedulePage() {
                   >
                     <p>{slot}</p>
                     {adminSlot ? (
-                      <p className="mt-0.5 text-[10px]">{bookedCount}/{capacity}</p>
+                      <p className="mt-0.5 text-[10px]">
+                        {bookedCount}/{capacity}
+                        {bookedCount > 0 ? ` · ${mode === "online" ? "Online" : "Offline"}` : ""}
+                      </p>
                     ) : taken ? (
-                      <p className="mt-0.5 text-[10px]">Booked</p>
+                      <p className="mt-0.5 text-[10px]">{mode === "online" ? "Online" : "Offline"}</p>
                     ) : null}
                   </div>
                 );

@@ -8,7 +8,7 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { PatientSearchField } from "@/components/frontdesk/patient-search-field";
 import { useToast } from "@/components/ui/toast-provider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { generateDaySlots, formatDisplayDate } from "@/lib/appointment-slots";
+import { generateDaySlots, formatDisplayDate, type SlotInfo } from "@/lib/appointment-slots";
 import { patientDisplayName } from "@/lib/frontdesk-workflow";
 import { subsetSchema } from "@/lib/schema-registry";
 import { cn } from "@/lib/utils";
@@ -59,6 +59,7 @@ export default function AppointmentsPage() {
           time: a.time,
           doctorId: a.doctorId,
           patientName: getPatient(a.patientId)?.name,
+          mode: a.mode,
         })),
     [appointments, date, getPatient],
   );
@@ -85,14 +86,17 @@ export default function AppointmentsPage() {
     loadAdminSlots();
   }, [date, activeDoctorId]);
 
-  const slots = useMemo(() => {
+  const slots: SlotInfo[] = useMemo(() => {
     if (adminSlots.length > 0) {
-      return adminSlots.map((slot) => ({
-        time: slot.startTime,
-        available: slot.status === "available" && slot.booked < slot.capacity,
-        bookedPatient: slot.booked > 0 ? "Booked" : undefined,
-        slotId: slot.id,
-      }));
+      return adminSlots.map((slot) => {
+        const hit = booked.find((b) => b.time === slot.startTime && b.doctorId === activeDoctorId);
+        return {
+          time: slot.startTime,
+          available: slot.status === "available" && slot.booked < slot.capacity,
+          bookedPatient: slot.booked > 0 ? "Booked" : undefined,
+          mode: hit?.mode,
+        };
+      });
     }
     return generateDaySlots(deptId, booked, activeDoctorId);
   }, [adminSlots, deptId, booked, activeDoctorId]);
@@ -226,7 +230,11 @@ export default function AppointmentsPage() {
                     )}
                   >
                     <p>{slot.time}</p>
-                    {slot.bookedPatient && <p className="mt-0.5 truncate text-[10px]">{slot.bookedPatient.split(" ")[0]}</p>}
+                    {slot.bookedPatient && (
+                      <p className="mt-0.5 truncate text-[10px]">
+                        {slot.bookedPatient.split(" ")[0]} · {slot.mode === "online" ? "Online" : "Offline"}
+                      </p>
+                    )}
                   </button>
                 ))}
               </div>
