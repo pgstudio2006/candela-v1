@@ -10,6 +10,7 @@ import { ServerActionError } from "@/server/errors";
 import { readCrmWorkspace, writeCrmWorkspace } from "@/server/workspace-state";
 import { defaultCrmState } from "@/server/revenue/state-seeds";
 import { syncCrmLeadToPrisma } from "@/server/crm/sync";
+import { PATAUDI_BRANCH_ID } from "@/lib/frontdesk-workflow";
 
 export type LeadToPatientResult = {
   patientId: string;
@@ -164,7 +165,8 @@ async function updateWorkspaceLeadAfterConversion(
 
 async function generateUniqueUhid(branchId: string): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `NV-${year}-`;
+  const isPataudi = branchId === PATAUDI_BRANCH_ID;
+  const prefix = isPataudi ? `Ghtc-${year}-` : `NV-${year}-`;
   const existing = await prisma.patient.findMany({
     where: { branchId, uhid: { startsWith: prefix } },
     select: { uhid: true },

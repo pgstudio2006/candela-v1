@@ -83,6 +83,8 @@ export function isAwaitingConsultant(visit: { stage: string; exam?: string }) {
   return visit.stage === "with_doctor" && visit.exam === "done";
 }
 
+export const PATAUDI_BRANCH_ID = "branch_pataudi";
+
 export function branchCodeFromBranchId(branchId: string | undefined | null): string {
   if (!branchId) return "XX";
   const parts = branchId.split("_");
@@ -92,6 +94,9 @@ export function branchCodeFromBranchId(branchId: string | undefined | null): str
 }
 
 export function nextUhid(counter: number, branchId?: string) {
+  if (branchId === PATAUDI_BRANCH_ID) {
+    return `Ghtc-2026-${String(counter).padStart(4, "0")}`;
+  }
   const code = branchCodeFromBranchId(branchId);
   return `NV-${code}-2026-${String(counter).padStart(4, "0")}`;
 }
