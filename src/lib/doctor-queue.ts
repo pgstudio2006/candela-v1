@@ -49,6 +49,11 @@ export function visitVisibleInDoctorWorkspace(
   if (isVisitInDoctorQueue(visit, doctorId, doctorName, departmentIds)) return true;
   if (visit.doctorId === doctorId) return true;
   if (doctorName && visit.doctorName && visit.doctorName === doctorName) return true;
+  // After frontdesk clears the queue, visits become "completed" but should remain visible to doctors
+  // whose department they were in (including unassigned patients that were in this doctor's queue).
+  if (visit.routingNote?.startsWith("Cleared by frontdesk")) {
+    return visitAssignedToDoctor(visit, doctorId, doctorName, departmentIds);
+  }
   return false;
 }
 
