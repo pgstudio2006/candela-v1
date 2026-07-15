@@ -1,5 +1,6 @@
 import type { Visit } from "@/design-system/frontdesk-data";
 import { isInReceptionQueue, isRedFlagVisit } from "@/lib/frontdesk-workflow";
+import { doctorIdVariants } from "@/lib/clinical-roster";
 
 /** Red-flag and appointment patients first, then FIFO by token. */
 export function sortDoctorOpdQueue(visits: Visit[]): Visit[] {
@@ -11,6 +12,13 @@ export function sortDoctorOpdQueue(visits: Visit[]): Visit[] {
   });
 }
 
+function isSameDoctor(visitDoctorId: string | undefined, doctorId: string): boolean {
+  if (!visitDoctorId) return false;
+  if (visitDoctorId === doctorId) return true;
+  const variants = new Set(doctorIdVariants(doctorId));
+  return variants.has(visitDoctorId);
+}
+
 /** Match visit to logged-in consultant (handles legacy dr_1 vs staff dr_* ids). */
 export function visitAssignedToDoctor(
   visit: Visit,
@@ -18,7 +26,7 @@ export function visitAssignedToDoctor(
   doctorName: string,
   departmentIds: readonly string[],
 ): boolean {
-  if (visit.doctorId === doctorId) return true;
+  if (isSameDoctor(visit.doctorId, doctorId)) return true;
   if (doctorName && visit.doctorName && visit.doctorName === doctorName) return true;
   const deptSet = new Set(departmentIds);
   if (visit.exam === "done" && (deptSet.size === 0 || deptSet.has(visit.departmentId))) return true;
@@ -47,7 +55,7 @@ export function visitVisibleInDoctorWorkspace(
 ): boolean {
   if (consultVisitIds.has(visit.id)) return true;
   if (isVisitInDoctorQueue(visit, doctorId, doctorName, departmentIds)) return true;
-  if (visit.doctorId === doctorId) return true;
+  if (isSameDoctor(visit.doctorId, doctorId)) return true;
   if (doctorName && visit.doctorName && visit.doctorName === doctorName) return true;
   // After frontdesk clears the queue, visits become "completed" but should remain visible to doctors
   // whose department they were in (including unassigned patients that were in this doctor's queue).
