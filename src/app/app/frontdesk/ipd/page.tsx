@@ -171,7 +171,7 @@ export default function FrontdeskIpdPage() {
   const handleFinalDischarge = async () => {
     if (!selectedAdmission) return;
     if (!paymentClear) {
-      const blockedReason = selectedAdmission.cart.length > 0
+      const blockedReason = (selectedAdmission.cart?.length ?? 0) > 0
         ? "Final discharge is blocked until the service cart is empty."
         : "Final discharge is blocked until the IPD bill is cleared.";
       toast(blockedReason, "error");
@@ -228,7 +228,7 @@ export default function FrontdeskIpdPage() {
   const isPostpaidAdmission = selectedAdmission?.billingMode === "postpaid";
   const paymentClear =
     selectedAdmission &&
-    selectedAdmission.cart.length === 0 &&
+    (selectedAdmission.cart?.length ?? 0) === 0 &&
     (isPostpaidAdmission ||
       ((selectedAdmission.balanceDue ?? 0) <= 0 &&
         (selectedAdmission.amountPaid ?? 0) >= (selectedAdmission.billAmount ?? 0) &&
@@ -646,7 +646,7 @@ export default function FrontdeskIpdPage() {
                       </AttioButton>
                       {!paymentClear && (
                         <p className="mt-1 text-[11px] text-amber-600">
-                          {selectedAdmission?.cart.length > 0
+                          {(selectedAdmission?.cart?.length ?? 0) > 0
                             ? "Discharge is blocked until the service cart is empty."
                             : "Discharge is blocked until the IPD bill is cleared."}
                         </p>
