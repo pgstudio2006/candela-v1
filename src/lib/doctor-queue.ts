@@ -46,7 +46,10 @@ export function visitVisibleInDoctorWorkspace(
   doctorName = "",
 ): boolean {
   if (consultVisitIds.has(visit.id)) return true;
-  return isVisitInDoctorQueue(visit, doctorId, doctorName, departmentIds);
+  if (isVisitInDoctorQueue(visit, doctorId, doctorName, departmentIds)) return true;
+  if (visit.doctorId === doctorId) return true;
+  if (doctorName && visit.doctorName && visit.doctorName === doctorName) return true;
+  return false;
 }
 
 export function filterDoctorOpdQueue(
