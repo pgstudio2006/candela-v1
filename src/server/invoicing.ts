@@ -261,15 +261,16 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     }
   }
 
-  // Use the invoice that actually contains the billed services/packages as the
-  // receipt source. Balance-only invoices should not replace the full bill.
+  // Use the latest invoice that actually contains the billed services/packages as
+  // the receipt source. Balance-only invoices should not replace the full bill,
+  // and old paid invoices from prior billing attempts must not be selected.
   const serviceInvoice = (() => {
-    const withPackages = allInvoices.find((inv) => {
+    const withPackages = allInvoices.filter((inv) => {
       const invPayload = (inv.payload as Record<string, unknown> | null) ?? {};
       const packageLines = invPayload.packageLines;
       return Array.isArray(packageLines) && packageLines.length > 0;
     });
-    if (withPackages) return withPackages;
+    if (withPackages.length > 0) return withPackages[withPackages.length - 1];
     if (allInvoices.length === 0) return null;
     return allInvoices.reduce((max, inv) =>
       Number(inv.totalAmount) > Number(max.totalAmount) ? inv : max,
@@ -278,15 +279,21 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
 
   const receiptInvoice = serviceInvoice ?? requestedInvoice;
 
-  const aggregateAmountPaid = allInvoices.reduce(
-    (sum, inv) => sum + Number(inv.amountPaid ?? 0),
-    0,
+  // The visit holds the authoritative billing totals. Use those so the receipt
+  // never double-counts old paid invoices that may exist from prior attempts.
+  const receiptTotal = Number(visit.billAmount ?? receiptInvoice?.totalAmount ?? 0);
+  const aggregateAmountPaid = Math.min(
+    Number(visit.amountPaid ?? 0),
+    receiptTotal,
   );
-  const receiptTotal = Number(receiptInvoice?.totalAmount ?? visit.billAmount ?? 0);
   const computedBalanceDue = Math.max(0, receiptTotal - aggregateAmountPaid);
-  const aggregateBalanceDue = Number(visit.balanceDue ?? computedBalanceDue);
+  const aggregateBalanceDue = Number(
+    visit.balanceDue ?? computedBalanceDue,
+  );
 
-  const latestPayment = receiptInvoice?.payments[0];
+  const latestPayment = allInvoices
+    .flatMap((inv) => inv.payments)
+    .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime())[0];
   const rawPaymentMode = String(latestPayment?.mode ?? "").toLowerCase();
   const normalizedPaymentMode = VALID_PAYMENT_MODES.has(rawPaymentMode) ? rawPaymentMode : "cash";
 
@@ -378,7 +385,7 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
           : undefined,
       discountPercent:
         invPayload.discountPercent != null ? Number(invPayload.discountPercent) : undefined,
-      total: Number(receiptInvoice.totalAmount),
+      total: receiptTotal,
       cgstTotal: Number(invPayload.cgstTotal ?? 0),
       sgstTotal: Number(invPayload.sgstTotal ?? 0),
       igstTotal: Number(invPayload.igstTotal ?? 0),
@@ -386,7 +393,7 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     };
   }
 
-  const visitBillAmount = Number(visit.billAmount ?? 0);
+  const visitBillAmount = receiptTotal;
   const visitDiscount = Number(receiptInvoice?.discount ?? 0);
   const gstRate = branchGst.gstRatePercent;
 
