@@ -2,11 +2,10 @@
 
 import { getPatientConsultationsAction } from "@/app/actions/clinical-actions";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
-import { PrintPreviewModal } from "@/components/doctor/print/print-preview-modal";
-import { PrintablePrescription } from "@/components/doctor/print/printable-prescription";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
 import { formatConsultDate } from "@/lib/doctor-records";
+import { generatePrescriptionPdf, printPdfBytes } from "@/lib/prescription-pdf";
 import { Printer } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -18,7 +17,7 @@ type PatientPrescriptionsPanelProps = {
 export function PatientPrescriptionsPanel({ patient, visits }: PatientPrescriptionsPanelProps) {
   const [consultations, setConsultations] = useState<ConsultationRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<ConsultationRecord | null>(null);
+  const [printingVisitId, setPrintingVisitId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,9 +79,32 @@ export function PatientPrescriptionsPanel({ patient, visits }: PatientPrescripti
                     </div>
                   )}
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <AttioButton variant="secondary" className="h-8 gap-1.5 text-[11px]" onClick={() => setSelected(consult)}>
+                    <AttioButton
+                      variant="secondary"
+                      className="h-8 gap-1.5 text-[11px]"
+                      disabled={printingVisitId === consult.visitId}
+                      onClick={async () => {
+                        const visit = visits.find((item) => item.id === consult.visitId);
+                        if (!visit) return;
+                        setPrintingVisitId(consult.visitId);
+                        try {
+                          const pdfBytes = await generatePrescriptionPdf({
+                            patient,
+                            visit,
+                            consult,
+                            doctorName: visit.doctorName || "Dr. Sunil Saini",
+                            layout: "dr-sunil-saini-letterhead",
+                          });
+                          printPdfBytes(pdfBytes, "Dr. Sunil Saini Prescription");
+                        } catch (error) {
+                          console.error("Could not generate prescription PDF", error);
+                        } finally {
+                          setPrintingVisitId(null);
+                        }
+                      }}
+                    >
                       <Printer className="size-3.5" />
-                      Print / save as PDF
+                      {printingVisitId === consult.visitId ? "Preparing…" : "Print / save PDF"}
                     </AttioButton>
                     {consult.doctorAdvice && <StatusBadge label="Doctor advice included" variant="neutral" />}
                   </div>
@@ -92,33 +114,6 @@ export function PatientPrescriptionsPanel({ patient, visits }: PatientPrescripti
           </ul>
         )}
       </Panel>
-
-      {selected && (
-        <PrintPreviewModal
-          open
-          onClose={() => setSelected(null)}
-          title="Doctor prescription"
-          printId={`frontdesk-rx-${selected.visitId}`}
-        >
-          <PrintablePrescription
-            patient={patient}
-            visit={visits.find((item) => item.id === selected.visitId) ?? {
-              id: selected.visitId,
-              patientId: patient.id,
-              doctorName: "Doctor",
-              doctorId: selected.doctorId,
-              stage: "completed",
-              billing: "pending",
-              exam: "done",
-              departmentId: patient.departmentId,
-              appointment: false,
-              waitMin: 0,
-            }}
-            consult={selected}
-            doctorName={visits.find((item) => item.id === selected.visitId)?.doctorName || "Doctor"}
-          />
-        </PrintPreviewModal>
-      )}
     </>
   );
 }
