@@ -196,7 +196,11 @@ function footerRows(receipt: OpdReceiptPayload): Array<{ label: string; value: s
   if (receipt.balanceDue > 0) {
     rows.push({ label: "Balance due", value: formatInrForPdf(receipt.balanceDue), emphasis: true });
   }
-  if (receipt.paymentMode) {
+  if (receipt.paymentBreakdown && receipt.paymentBreakdown.length > 0) {
+    for (const split of receipt.paymentBreakdown) {
+      rows.push({ label: `Payment - ${split.mode.toUpperCase()}`, value: formatInrForPdf(split.amount) });
+    }
+  } else if (receipt.paymentMode) {
     rows.push({ label: "Payment mode", value: receipt.paymentMode.toUpperCase() });
   }
   return rows;

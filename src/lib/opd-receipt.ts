@@ -22,6 +22,11 @@ export type PackageLineNote = {
   description?: string;
 };
 
+export type PaymentSplit = {
+  mode: string;
+  amount: number;
+};
+
 export type OpdReceiptPayload = {
   branchId?: string;
   invoiceNumber: string;
@@ -41,6 +46,7 @@ export type OpdReceiptPayload = {
   billingStatus: string;
   paymentScope?: string;
   paymentMode: string;
+  paymentBreakdown?: PaymentSplit[];
   lines: OpdReceiptLine[];
   subtotal: number;
   discount: number;

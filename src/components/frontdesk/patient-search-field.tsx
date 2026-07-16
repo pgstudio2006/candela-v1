@@ -33,6 +33,10 @@ export function PatientSearchField<T extends SearchablePatient = SearchablePatie
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const results = useMemo(() => {

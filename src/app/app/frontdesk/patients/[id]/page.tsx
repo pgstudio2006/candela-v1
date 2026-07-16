@@ -9,14 +9,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PatientDocumentsPanel } from "@/components/patient-documents";
 import { PatientConsentsPanel } from "@/components/patient-consents";
 import { formatStageStatus } from "@/lib/frontdesk-workflow";
-import { ArrowLeft, CreditCard, ListOrdered, Pencil, Printer, UserCog } from "lucide-react";
+import { ArrowLeft, CreditCard, Download, ListOrdered, Pencil, Printer, UserCog } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
 import { getPatientInvoicesAction, getPatientInvoiceReceiptsAction } from "@/app/actions/clinical-actions";
 import { getIpdAdmissionsByPatientAction } from "@/app/actions/ipd-actions";
-import { generateCombinedInvoicePdf, printPdfBytes } from "@/lib/invoice-pdf";
+import { downloadPdfBytes } from "@/lib/invoice-pdf";
+import { generatePatientInvoiceSummaryPdf } from "@/lib/patient-invoice-summary-pdf";
 
 export default function PatientRecordPage() {
   const params = useParams();
@@ -367,17 +368,18 @@ export default function PatientRecordPage() {
                       return;
                     }
                     try {
-                      const bytes = await generateCombinedInvoicePdf(result.data);
-                      printPdfBytes(bytes, `${patient.uhid ?? patient.id}_all_invoices.pdf`);
+                      const bytes = await generatePatientInvoiceSummaryPdf(result.data);
+                      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+                      downloadPdfBytes(bytes, `${patient.uhid ?? patient.id}_summary_${timestamp}.pdf`);
                     } catch (err) {
-                      console.error("Print all bills failed", err);
+                      console.error("Download invoice summary failed", err);
                     } finally {
                       setPrintingAll(false);
                     }
                   }}
                 >
-                  <Printer className="size-3.5" />
-                  {printingAll ? "Preparing…" : "Print all bills"}
+                  <Download className="size-3.5" />
+                  {printingAll ? "Preparing…" : "Download summary"}
                 </AttioButton>
               </div>
             }

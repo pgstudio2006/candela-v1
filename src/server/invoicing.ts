@@ -327,6 +327,36 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     });
   })();
 
+  const paymentBreakdown: { mode: string; amount: number }[] = (() => {
+    const totals = new Map<string, number>();
+    for (const inv of sessionInvoices) {
+      const invPayload = (inv.payload as Record<string, unknown> | null) ?? {};
+      const splits = invPayload.paymentSplits;
+      if (Array.isArray(splits)) {
+        for (const split of splits) {
+          if (typeof split !== "object" || split === null) continue;
+          const s = split as Record<string, unknown>;
+          const mode = String(s.mode ?? "").toLowerCase();
+          const amount = Number(s.amount ?? 0);
+          if (mode && amount > 0) {
+            totals.set(mode, (totals.get(mode) ?? 0) + amount);
+          }
+        }
+      }
+      for (const payment of inv.payments) {
+        const mode = String(payment.mode ?? "").toLowerCase();
+        const amount = Number(payment.amount ?? 0);
+        if (mode && amount > 0 && !totals.has(mode)) {
+          totals.set(mode, (totals.get(mode) ?? 0) + amount);
+        }
+      }
+    }
+    if (totals.size === 0) return [];
+    return Array.from(totals.entries())
+      .map(([mode, amount]) => ({ mode, amount }))
+      .sort((a, b) => b.amount - a.amount);
+  })();
+
   const base = {
     branchId: ctx.branchId,
     invoiceNumber: receiptInvoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
@@ -346,6 +376,7 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     billingStatus: visit.billing ?? "pending",
     paymentScope: receiptInvoice?.paymentScope ?? undefined,
     paymentMode: normalizedPaymentMode,
+    paymentBreakdown,
     amountPaid: aggregateAmountPaid,
     balanceDue: aggregateBalanceDue,
     routingNote: visit.routingNote ?? undefined,

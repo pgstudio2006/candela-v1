@@ -167,7 +167,13 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
     drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
     y -= 13;
   }
-  if (receipt.paymentMode) {
+  if (receipt.paymentBreakdown && receipt.paymentBreakdown.length > 0) {
+    for (const split of receipt.paymentBreakdown) {
+      drawRight(page, `Payment - ${split.mode.toUpperCase()}`, labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(split.amount), valueX, y, font, FONT.body);
+      y -= 13;
+    }
+  } else if (receipt.paymentMode) {
     drawRight(page, "Payment mode", labelX + 80, y, bold, FONT.body);
     drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
     y -= 13;
