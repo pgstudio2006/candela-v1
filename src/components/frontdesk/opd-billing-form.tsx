@@ -60,6 +60,7 @@ function lineFromPackage(pkg: BillingPackage): SelectedLine {
     label: pkg.label,
     amount: pkg.amount,
     quantity: 1,
+    description: pkg.description,
   };
 }
 

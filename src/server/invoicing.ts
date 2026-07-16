@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { OpdReceiptPayload } from "@/lib/opd-receipt";
+import type { OpdReceiptPayload, PackageLineNote } from "@/lib/opd-receipt";
 import { receiptFromGstBreakdown } from "@/lib/opd-receipt";
 import { computeGstInvoice, parseBranchGstSettings, type GstSettings } from "@/lib/gst-invoicing";
 import { patientDisplayName, resolvePatientAge } from "@/lib/frontdesk-workflow";
@@ -36,6 +36,7 @@ export async function getVisitInvoiceForBilling(ctx: ServerContext, visitId: str
       label: string;
       amount: number;
       quantity: number;
+      description?: string;
     }[],
     lines: invoice.lines.map((l) => ({
       label: l.label,
@@ -74,7 +75,7 @@ export async function createVisitInvoice(
     }[];
     paymentSplits?: { mode: string; amount: number }[];
     gstOverride?: Partial<Pick<GstSettings, "gstRatePercent" | "taxMode">>;
-    packageLines?: { packageId: string; label: string; amount: number; quantity: number }[];
+    packageLines?: { packageId: string; label: string; amount: number; quantity: number; description?: string }[];
   },
   tx: Prisma.TransactionClient = prisma,
 ) {
@@ -184,22 +185,15 @@ export async function createVisitInvoice(
 const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "cheque", "wallet", "other"]);
 
 export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoiceId?: string): Promise<OpdReceiptPayload> {
-  const include = {
-    lines: { orderBy: { createdAt: "asc" } as const },
-    payments: { orderBy: { paidAt: "desc" } as const, take: 1 },
-  };
-  type InvoiceWithLines = Prisma.InvoiceGetPayload<{ include: typeof include }>;
-  let invoice: InvoiceWithLines | null = null;
-
   if (invoiceId) {
-    invoice = await prisma.invoice.findFirst({
+    const invoiceRef = await prisma.invoice.findFirst({
       where: { id: invoiceId, ...branchScope(ctx) },
-      include,
+      select: { visitId: true },
     });
-    if (!invoice || !invoice.visitId) {
+    if (!invoiceRef || !invoiceRef.visitId) {
       throw new ServerActionError("NOT_FOUND", "Invoice not found in your branch.");
     }
-    visitId = invoice.visitId;
+    visitId = invoiceRef.visitId;
   }
 
   const visit = await prisma.opdVisit.findFirst({
@@ -250,27 +244,72 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
   const branch = await prisma.branch.findUnique({ where: { id: ctx.branchId } });
   const branchGst = parseBranchGstSettings(branch?.meta);
 
-  if (!invoice) {
-    invoice = await prisma.invoice.findFirst({
-      where: { visitId, ...branchScope(ctx) },
-      orderBy: { createdAt: "desc" },
-      include: {
-        lines: { orderBy: { createdAt: "asc" } },
-        payments: { orderBy: { paidAt: "desc" }, take: 1 },
-      },
-    });
+  const allInvoices = await prisma.invoice.findMany({
+    where: { visitId, ...branchScope(ctx) },
+    orderBy: { createdAt: "asc" },
+    include: {
+      lines: { orderBy: { createdAt: "asc" } },
+      payments: { orderBy: { paidAt: "desc" }, take: 1 },
+    },
+  });
+
+  let requestedInvoice: typeof allInvoices[number] | null = null;
+  if (invoiceId) {
+    requestedInvoice = allInvoices.find((inv) => inv.id === invoiceId) ?? null;
+    if (!requestedInvoice) {
+      throw new ServerActionError("NOT_FOUND", "Invoice not found in your branch.");
+    }
   }
 
-  const amountPaid = Number(invoice?.amountPaid ?? visit.amountPaid ?? 0);
-  const balanceDue = Number(invoice?.balanceAmount ?? visit.balanceDue ?? 0);
-  const latestPayment = invoice?.payments[0];
+  // Use the invoice that actually contains the billed services/packages as the
+  // receipt source. Balance-only invoices should not replace the full bill.
+  const serviceInvoice = (() => {
+    const withPackages = allInvoices.find((inv) => {
+      const invPayload = (inv.payload as Record<string, unknown> | null) ?? {};
+      const packageLines = invPayload.packageLines;
+      return Array.isArray(packageLines) && packageLines.length > 0;
+    });
+    if (withPackages) return withPackages;
+    if (allInvoices.length === 0) return null;
+    return allInvoices.reduce((max, inv) =>
+      Number(inv.totalAmount) > Number(max.totalAmount) ? inv : max,
+    );
+  })();
+
+  const receiptInvoice = serviceInvoice ?? requestedInvoice;
+
+  const aggregateAmountPaid = allInvoices.reduce(
+    (sum, inv) => sum + Number(inv.amountPaid ?? 0),
+    0,
+  );
+  const receiptTotal = Number(receiptInvoice?.totalAmount ?? visit.billAmount ?? 0);
+  const computedBalanceDue = Math.max(0, receiptTotal - aggregateAmountPaid);
+  const aggregateBalanceDue = Number(visit.balanceDue ?? computedBalanceDue);
+
+  const latestPayment = receiptInvoice?.payments[0];
   const rawPaymentMode = String(latestPayment?.mode ?? "").toLowerCase();
   const normalizedPaymentMode = VALID_PAYMENT_MODES.has(rawPaymentMode) ? rawPaymentMode : "cash";
 
+  const receiptPackageLines: PackageLineNote[] = (() => {
+    const invPayload = (receiptInvoice?.payload as Record<string, unknown> | null) ?? {};
+    const raw = invPayload.packageLines;
+    if (!Array.isArray(raw)) return [];
+    return raw.map((p: unknown) => {
+      const item = typeof p === "object" && p !== null ? (p as Record<string, unknown>) : {};
+      return {
+        packageId: String(item.packageId ?? ""),
+        label: String(item.label ?? ""),
+        amount: Number(item.amount ?? 0),
+        quantity: Number(item.quantity ?? 1),
+        description: item.description ? String(item.description) : undefined,
+      };
+    });
+  })();
+
   const base = {
     branchId: ctx.branchId,
-    invoiceNumber: invoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
-    issuedAt: (invoice?.createdAt ?? visit.updatedAt ?? new Date()).toISOString(),
+    invoiceNumber: receiptInvoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
+    issuedAt: (receiptInvoice?.createdAt ?? visit.updatedAt ?? new Date()).toISOString(),
     patientName: patientDisplayName(patient),
     patientUhid: patient.uhid,
     patientPhone: patient.phone,
@@ -284,21 +323,21 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     doctorName: visit.doctorName || "Consultant",
     token: visit.token ?? undefined,
     billingStatus: visit.billing ?? "pending",
-    paymentScope: invoice?.paymentScope ?? undefined,
+    paymentScope: receiptInvoice?.paymentScope ?? undefined,
     paymentMode: normalizedPaymentMode,
-    amountPaid,
-    balanceDue,
+    amountPaid: aggregateAmountPaid,
+    balanceDue: aggregateBalanceDue,
     routingNote: visit.routingNote ?? undefined,
   };
 
-  if (invoice?.lines.length) {
-    const invPayload = (invoice.payload as Record<string, unknown> | null) ?? {};
+  if (receiptInvoice?.lines.length) {
+    const invPayload = (receiptInvoice.payload as Record<string, unknown> | null) ?? {};
     const storedGst =
       invPayload.gst && typeof invPayload.gst === "object" && !Array.isArray(invPayload.gst)
         ? ({ ...branchGst, ...(invPayload.gst as Record<string, unknown>) } as typeof branchGst)
         : branchGst;
 
-    const lines = invoice.lines.map((line) => {
+    const lines = receiptInvoice.lines.map((line) => {
       const lp =
         line.payload && typeof line.payload === "object" && !Array.isArray(line.payload)
           ? (line.payload as Record<string, unknown>)
@@ -330,31 +369,32 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
       placeOfSupply: storedGst.placeOfSupply,
       isTaxInvoice: true,
       lines,
-      subtotal: Number(invoice.subtotal),
-      discount: Number(invoice.discount ?? 0),
+      packageLines: receiptPackageLines,
+      subtotal: Number(receiptInvoice.subtotal),
+      discount: Number(receiptInvoice.discount ?? 0),
       discountMode:
         invPayload.discountMode === "percent" || invPayload.discountMode === "amount"
           ? invPayload.discountMode
           : undefined,
       discountPercent:
         invPayload.discountPercent != null ? Number(invPayload.discountPercent) : undefined,
-      total: Number(invoice.totalAmount),
+      total: Number(receiptInvoice.totalAmount),
       cgstTotal: Number(invPayload.cgstTotal ?? 0),
       sgstTotal: Number(invPayload.sgstTotal ?? 0),
       igstTotal: Number(invPayload.igstTotal ?? 0),
-      taxTotal: Number(invoice.taxAmount ?? 0),
+      taxTotal: Number(receiptInvoice.taxAmount ?? 0),
     };
   }
 
   const visitBillAmount = Number(visit.billAmount ?? 0);
-  const visitDiscount = Number(invoice?.discount ?? 0);
+  const visitDiscount = Number(receiptInvoice?.discount ?? 0);
   const gstRate = branchGst.gstRatePercent;
 
   // visit.billAmount is the GST-inclusive grand total, not the taxable amount.
   // Use stored invoice subtotal if available, otherwise reverse-calculate
   // the tax-exclusive amount to avoid double taxation.
-  const fallbackTaxable = invoice?.subtotal
-    ? Number(invoice.subtotal)
+  const fallbackTaxable = receiptInvoice?.subtotal
+    ? Number(receiptInvoice.subtotal)
     : gstRate > 0
       ? Math.round((visitBillAmount / (1 + gstRate / 100)) * 100) / 100
       : visitBillAmount;
@@ -374,6 +414,7 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
   return receiptFromGstBreakdown(
     {
       ...base,
+      packageLines: receiptPackageLines,
       discount: visitDiscount,
     },
     gstInvoice,

@@ -129,7 +129,7 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
   return tableBottom;
 }
 
-function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont, tableBottom: number) {
+function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont, tableBottom: number): number {
   const labelX = 372;
   const valueX = 575;
   let y = tableBottom - 40;
@@ -177,6 +177,39 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
   drawRight(page, "GLOBAL HOSPITAL & TRAUMA CENTRE", 575, y, font, FONT.body);
   y -= 18;
   drawRight(page, "Authorised Signatory", 575, y, font, FONT.body);
+  return y - 10;
+}
+
+function drawNotes(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, startY: number) {
+  const packagesWithNotes = (receipt.packageLines ?? []).filter(
+    (p) => p.description && p.description.trim(),
+  );
+  if (packagesWithNotes.length === 0) return;
+
+  let y = startY;
+  drawText(page, "Package notes:", 15, y, font, FONT.body);
+  y -= 13;
+  for (const pkg of packagesWithNotes) {
+    const text = `${pkg.label}: ${pkg.description}`;
+    const safeText = safe(text);
+    const maxWidth = 560 - 15;
+    const words = safeText.split(" ");
+    let line = "";
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (font.widthOfTextAtSize(test, FONT.body) > maxWidth) {
+        drawText(page, line, 25, y, font, FONT.body);
+        y -= 12;
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) {
+      drawText(page, line, 25, y, font, FONT.body);
+      y -= 12;
+    }
+  }
 }
 
 export async function generateRoshniInvoicePdf(receipt: OpdReceiptPayload): Promise<Uint8Array> {
@@ -194,7 +227,8 @@ export async function generateRoshniInvoicePdf(receipt: OpdReceiptPayload): Prom
   line(page, 15, 575, 735, 0.8);
   drawInfo(page, receipt, font, bold);
   const tableBottom = drawTable(page, receipt, font, bold);
-  drawTotals(page, receipt, font, bold, tableBottom);
+  const totalsBottom = drawTotals(page, receipt, font, bold, tableBottom);
+  drawNotes(page, receipt, font, totalsBottom);
 
   return pdfDoc.save();
 }

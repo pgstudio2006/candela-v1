@@ -14,6 +14,14 @@ export type OpdReceiptLine = {
   igst?: number;
 };
 
+export type PackageLineNote = {
+  packageId: string;
+  label: string;
+  amount: number;
+  quantity: number;
+  description?: string;
+};
+
 export type OpdReceiptPayload = {
   branchId?: string;
   invoiceNumber: string;
@@ -42,6 +50,7 @@ export type OpdReceiptPayload = {
   amountPaid: number;
   balanceDue: number;
   routingNote?: string;
+  packageLines?: PackageLineNote[];
   gst: GstSettings;
   cgstTotal: number;
   sgstTotal: number;
@@ -72,12 +81,22 @@ export function formatInr(amount: number): string {
 export function receiptFromGstBreakdown(
   base: Omit<
     OpdReceiptPayload,
-    "lines" | "subtotal" | "total" | "cgstTotal" | "sgstTotal" | "igstTotal" | "taxTotal" | "gst" | "placeOfSupply" | "isTaxInvoice"
+    | "lines"
+    | "subtotal"
+    | "total"
+    | "cgstTotal"
+    | "sgstTotal"
+    | "igstTotal"
+    | "taxTotal"
+    | "gst"
+    | "placeOfSupply"
+    | "isTaxInvoice"
   >,
   gstInvoice: GstInvoiceBreakdown,
 ): OpdReceiptPayload {
   return {
     ...base,
+    packageLines: base.packageLines ?? [],
     gst: gstInvoice.settings,
     placeOfSupply: gstInvoice.settings.placeOfSupply,
     isTaxInvoice: true,

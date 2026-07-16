@@ -491,16 +491,37 @@ function drawInvoiceTitle(page: PDFPage, font: PDFFont, bold: PDFFont) {
 function drawNotes(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, layout: TableLayout) {
   if (layout.notesY < LAYOUT.footerMinY - 20) return;
 
+  let y = layout.notesY;
   const taxNote =
     receipt.taxTotal === 0
       ? "GST exempt healthcare service"
       : `Total tax ${formatInrForPdf(receipt.taxTotal)}`;
-  drawText(page, taxNote, LAYOUT.tableLeft, layout.notesY, font, FONT.caption);
+  drawText(page, taxNote, LAYOUT.tableLeft, y, font, FONT.caption);
+  y -= 11;
+
+  const packagesWithNotes = (receipt.packageLines ?? []).filter(
+    (p) => p.description && p.description.trim(),
+  );
+  if (packagesWithNotes.length > 0) {
+    y -= 4;
+    drawText(page, "Package notes:", LAYOUT.tableLeft, y, font, FONT.caption);
+    y -= 10;
+    for (const pkg of packagesWithNotes) {
+      const noteText = `${pkg.label}: ${pkg.description}`;
+      const noteLines = wrapText(noteText, font, FONT.caption, LAYOUT.tableRight - LAYOUT.tableLeft - 16);
+      noteLines.forEach((line) => {
+        drawText(page, line, LAYOUT.tableLeft + 8, y, font, FONT.caption);
+        y -= 10;
+      });
+    }
+  }
 
   if (receipt.routingNote) {
+    y -= 4;
     const noteLines = wrapText(receipt.routingNote, font, FONT.caption, LAYOUT.tableRight - LAYOUT.tableLeft - 8);
-    noteLines.forEach((line, index) => {
-      drawText(page, line, LAYOUT.tableLeft, layout.notesY - 11 - index * 10, font, FONT.caption);
+    noteLines.forEach((line) => {
+      drawText(page, line, LAYOUT.tableLeft, y, font, FONT.caption);
+      y -= 10;
     });
   }
 }

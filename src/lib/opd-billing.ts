@@ -6,6 +6,7 @@ export type BillingPackageLine = {
   label: string;
   amount: number;
   quantity: number;
+  description?: string;
 };
 
 export type PaymentSplit = {
