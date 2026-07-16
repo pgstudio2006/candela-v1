@@ -29,10 +29,7 @@ export async function getVisitInvoiceForBilling(ctx: ServerContext, visitId: str
     discount: Number(invoice.discount),
     taxAmount: Number(invoice.taxAmount),
     paymentScope: invoice.paymentScope,
-    paymentMode:
-      invoice.payments.length > 1
-        ? "split"
-        : invoice.payments[0]?.mode ?? "",
+    paymentMode: invoice.payments[0]?.mode ?? "",
     paymentSplits: (payload.paymentSplits ?? []) as { mode: string; amount: number }[],
     packageLines: (payload.packageLines ?? []) as {
       packageId: string;
@@ -190,7 +187,7 @@ const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "chequ
 export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoiceId?: string): Promise<OpdReceiptPayload> {
   const include = {
     lines: { orderBy: { createdAt: "asc" } as const },
-    payments: { orderBy: { paidAt: "desc" } as const },
+    payments: { orderBy: { paidAt: "desc" } as const, take: 1 },
   };
   type InvoiceWithLines = Prisma.InvoiceGetPayload<{ include: typeof include }>;
   let invoice: InvoiceWithLines | null = null;
@@ -264,19 +261,9 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
 
   const amountPaid = Number(invoice?.amountPaid ?? visit.amountPaid ?? 0);
   const balanceDue = Number(invoice?.balanceAmount ?? visit.balanceDue ?? 0);
-
-  // Aggregate all payment modes for this invoice (partial payments may use multiple modes).
-  const paymentModes = Array.from(
-    new Set(
-      (invoice?.payments ?? [])
-        .map((p) => String(p.mode ?? "").toLowerCase())
-        .filter((m) => VALID_PAYMENT_MODES.has(m) || m),
-    ),
-  );
-  const normalizedPaymentMode = paymentModes.length > 1 ? "split" : paymentModes[0] || "cash";
-  const paymentSplits = (invoice?.payments ?? [])
-    .filter((p) => Number(p.amount) > 0)
-    .map((p) => ({ mode: p.mode, amount: Number(p.amount) }));
+  const latestPayment = invoice?.payments[0];
+  const rawPaymentMode = String(latestPayment?.mode ?? "").toLowerCase();
+  const normalizedPaymentMode = VALID_PAYMENT_MODES.has(rawPaymentMode) ? rawPaymentMode : "cash";
 
   // Extract package notes from stored payload.
   const invPayload = (invoice?.payload as Record<string, unknown> | null) ?? {};
@@ -304,7 +291,6 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     billingStatus: visit.billing ?? "pending",
     paymentScope: invoice?.paymentScope ?? undefined,
     paymentMode: normalizedPaymentMode,
-    paymentSplits,
     packageNotes,
     amountPaid,
     balanceDue,

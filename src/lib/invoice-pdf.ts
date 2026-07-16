@@ -197,14 +197,7 @@ function footerRows(receipt: OpdReceiptPayload): Array<{ label: string; value: s
     rows.push({ label: "Balance due", value: formatInrForPdf(receipt.balanceDue), emphasis: true });
   }
   if (receipt.paymentMode) {
-    if (receipt.paymentSplits && receipt.paymentSplits.length > 1) {
-      const splitText = receipt.paymentSplits
-        .map((s) => `${s.mode.toUpperCase()} ${formatInrForPdf(s.amount)}`)
-        .join(" | ");
-      rows.push({ label: "Payment mode", value: splitText });
-    } else {
-      rows.push({ label: "Payment mode", value: receipt.paymentMode.toUpperCase() });
-    }
+    rows.push({ label: "Payment mode", value: receipt.paymentMode.toUpperCase() });
   }
   return rows;
 }

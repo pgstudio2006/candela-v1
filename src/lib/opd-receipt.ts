@@ -33,7 +33,6 @@ export type OpdReceiptPayload = {
   billingStatus: string;
   paymentScope?: string;
   paymentMode: string;
-  paymentSplits?: { mode: string; amount: number }[];
   packageNotes?: string[];
   lines: OpdReceiptLine[];
   subtotal: number;
