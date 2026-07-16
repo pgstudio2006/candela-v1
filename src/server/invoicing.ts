@@ -261,37 +261,51 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     }
   }
 
-  // Use the latest invoice that actually contains the billed services/packages as
-  // the receipt source. Balance-only invoices should not replace the full bill,
-  // and old paid invoices from prior billing attempts must not be selected.
-  const serviceInvoice = (() => {
-    const withPackages = allInvoices.filter((inv) => {
-      const invPayload = (inv.payload as Record<string, unknown> | null) ?? {};
-      const packageLines = invPayload.packageLines;
-      return Array.isArray(packageLines) && packageLines.length > 0;
-    });
-    if (withPackages.length > 0) return withPackages[withPackages.length - 1];
-    if (allInvoices.length === 0) return null;
-    return allInvoices.reduce((max, inv) =>
-      Number(inv.totalAmount) > Number(max.totalAmount) ? inv : max,
-    );
+  // Group invoices into billing sessions. Each service invoice (with packageLines)
+  // starts a new session; following balance-only invoices belong to that session.
+  // The receipt should reflect only the latest session, not cumulative visit totals.
+  type InvoiceSession = {
+    serviceInvoice: typeof allInvoices[number] | null;
+    invoices: typeof allInvoices;
+  };
+  const sessions: InvoiceSession[] = [];
+  let currentSession: InvoiceSession | null = null;
+  for (const inv of allInvoices) {
+    const invPayload = (inv.payload as Record<string, unknown> | null) ?? {};
+    const packageLines = invPayload.packageLines;
+    const isService = Array.isArray(packageLines) && packageLines.length > 0;
+    if (isService) {
+      if (currentSession) sessions.push(currentSession);
+      currentSession = { serviceInvoice: inv, invoices: [inv] };
+    } else if (currentSession) {
+      currentSession.invoices.push(inv);
+    } else {
+      sessions.push({ serviceInvoice: null, invoices: [inv] });
+    }
+  }
+  if (currentSession) sessions.push(currentSession);
+
+  // If a specific invoice was requested, use its session; otherwise the latest session.
+  const targetSession = (() => {
+    if (requestedInvoice) {
+      const requestedSession = sessions.find((s) => s.invoices.some((inv) => inv.id === requestedInvoice!.id));
+      if (requestedSession) return requestedSession;
+    }
+    return sessions[sessions.length - 1] ?? null;
   })();
 
-  const receiptInvoice = serviceInvoice ?? requestedInvoice;
+  const receiptInvoice = targetSession?.serviceInvoice ?? requestedInvoice ?? allInvoices[allInvoices.length - 1] ?? null;
+  const sessionInvoices = targetSession?.invoices ?? (receiptInvoice ? [receiptInvoice] : []);
 
-  // The visit holds the authoritative billing totals. Use those so the receipt
-  // never double-counts old paid invoices that may exist from prior attempts.
-  const receiptTotal = Number(visit.billAmount ?? receiptInvoice?.totalAmount ?? 0);
-  const aggregateAmountPaid = Math.min(
-    Number(visit.amountPaid ?? 0),
-    receiptTotal,
+  // Use the current bill/session totals, not the cumulative visit totals.
+  const receiptTotal = Number(receiptInvoice?.totalAmount ?? visit.billAmount ?? 0);
+  const aggregateAmountPaid = sessionInvoices.reduce(
+    (sum, inv) => sum + Number(inv.amountPaid ?? 0),
+    0,
   );
-  const computedBalanceDue = Math.max(0, receiptTotal - aggregateAmountPaid);
-  const aggregateBalanceDue = Number(
-    visit.balanceDue ?? computedBalanceDue,
-  );
+  const aggregateBalanceDue = Math.max(0, receiptTotal - aggregateAmountPaid);
 
-  const latestPayment = allInvoices
+  const latestPayment = sessionInvoices
     .flatMap((inv) => inv.payments)
     .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime())[0];
   const rawPaymentMode = String(latestPayment?.mode ?? "").toLowerCase();
