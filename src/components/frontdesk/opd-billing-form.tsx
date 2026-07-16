@@ -58,6 +58,7 @@ function lineFromPackage(pkg: BillingPackage): SelectedLine {
     key: `${pkg.id}_${Date.now()}`,
     packageId: pkg.id,
     label: pkg.label,
+    description: pkg.description,
     amount: pkg.amount,
     quantity: 1,
   };

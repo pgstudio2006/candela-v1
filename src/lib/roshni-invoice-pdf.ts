@@ -74,10 +74,13 @@ function drawInfo(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold
   const left = 15;
   const right = 342;
   const rightValue = 410;
+  const payModeText = receipt.paymentSplits && receipt.paymentSplits.length > 1
+    ? receipt.paymentSplits.map((s) => `${s.mode.toUpperCase()} ${money(s.amount)}`).join(" / ")
+    : receipt.paymentMode.toUpperCase();
   const rows = [
     ["UHID No.", receipt.patientUhid, "Date", formatRoshniDateTime(receipt.issuedAt)],
     ["Name", receipt.patientName, "Receipt No.", receipt.invoiceNumber],
-    ["Age/Sex", ageSexText(receipt), "Pay Mode", receipt.paymentMode.toUpperCase()],
+    ["Age/Sex", ageSexText(receipt), "Pay Mode", payModeText],
     ["Mobile No.", receipt.patientPhone, "Token No.", valueOrDash(receipt.token)],
     ["Address", receipt.patientAddress || receipt.patientCity || "-", "Patient Type", receipt.patientType || "NEW PATIENT"],
     ["Doctor", receipt.doctorName, "", ""],
@@ -169,8 +172,24 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
   }
   if (receipt.paymentMode) {
     drawRight(page, "Payment mode", labelX + 80, y, bold, FONT.body);
-    drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
+    if (receipt.paymentSplits && receipt.paymentSplits.length > 1) {
+      const splitText = receipt.paymentSplits
+        .map((s) => `${s.mode.toUpperCase()} ${money(s.amount)}`)
+        .join(" / ");
+      drawRight(page, splitText, valueX, y, font, FONT.body);
+    } else {
+      drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
+    }
     y -= 13;
+  }
+  if (receipt.packageNotes && receipt.packageNotes.length > 0) {
+    y -= 13;
+    drawText(page, "Package notes:", 15, y, bold, FONT.body);
+    y -= 11;
+    for (const note of receipt.packageNotes) {
+      drawText(page, `- ${note}`, 15, y, font, FONT.body);
+      y -= 11;
+    }
   }
   line(page, 15, 575, y, 0.5);
   y -= 13;
