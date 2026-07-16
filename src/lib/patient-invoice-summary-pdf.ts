@@ -107,11 +107,9 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
   const first = receipts[0];
   let y = PAGE.height - PAGE.margin;
 
-  // Title
   drawText(page, "Patient Invoice Summary", PAGE.margin, y, bold, FONT_SIZES.title);
   y -= 20;
 
-  // Generated timestamp
   drawText(
     page,
     `Generated: ${formatDateTime(new Date().toISOString())}`,
@@ -122,7 +120,6 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
   );
   y -= 22;
 
-  // Patient info box
   const infoBoxTop = y;
   page.drawRectangle({
     x: PAGE.margin,
@@ -145,7 +142,6 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
   );
   y -= 62;
 
-  // Table header
   const colX = {
     date: PAGE.margin,
     invoice: PAGE.margin + 70,
@@ -191,7 +187,6 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
     const rowH = rowLines * 12 + 4;
 
     if (y - rowH < PAGE.margin + 80) {
-      // Add a new page if running out of space
       page.drawText(pdfSafeText("Continued..."), {
         x: PAGE.margin,
         y: PAGE.margin,
@@ -230,7 +225,6 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
     drawHLine(page, PAGE.margin, PAGE.width - PAGE.margin, y);
   }
 
-  // Totals
   y -= 16;
   drawText(page, "Summary", PAGE.margin, y, bold, FONT_SIZES.section);
   y -= 18;

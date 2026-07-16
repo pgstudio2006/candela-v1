@@ -1,5 +1,6 @@
 "use server";
 
+import type { ConsultationRecord, PrescriptionLine } from "@/design-system/doctor-data";
 import type { OpdReceiptPayload } from "@/lib/opd-receipt";
 import type { BillingResult, CounselBillingInput } from "@/server/clinical";
 import { getVisitReceipt } from "@/server/invoicing";
@@ -33,10 +34,58 @@ import type { CandelaRole } from "@/design-system/modules";
 import { prisma } from "@/lib/prisma";
 import { branchScope } from "@/server/tenancy";
 
+function jsonRecord(value: unknown): Record<string, string | number | boolean> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, string | number | boolean>;
+}
+
 export async function getClinicalSnapshotAction(): Promise<ActionResult<ClinicalSnapshot>> {
   return runAction(async () => {
     const ctx = await requireModule("frontdesk");
     return getClinicalSnapshot(ctx);
+  });
+}
+
+export async function getPatientConsultationsAction(patientId: string): Promise<ActionResult<ConsultationRecord[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    const visits = await prisma.opdVisit.findMany({
+      where: { patientId, ...branchScope(ctx) },
+      select: { id: true },
+    });
+    const visitIds = visits.map((visit) => visit.id);
+    if (visitIds.length === 0) return [];
+    const rows = await prisma.consultation.findMany({
+      where: { visitId: { in: visitIds }, status: "completed" },
+      orderBy: { completedAt: "desc" },
+    });
+    return rows.map((row) => ({
+      visitId: row.visitId,
+      patientId: row.patientId,
+      doctorId: row.doctorId,
+      startedAt: row.startedAt,
+      completedAt: row.completedAt ?? undefined,
+      status: row.status as ConsultationRecord["status"],
+      treatmentMode: row.treatmentMode as ConsultationRecord["treatmentMode"],
+      recommendCounsellor: row.recommendCounsellor,
+      skipCounsellor: row.skipCounsellor,
+      packageId: row.packageId ?? undefined,
+      counsellorNotes: row.counsellorNotes ?? undefined,
+      doctorAdvice: row.doctorAdvice ?? undefined,
+      whatsappRxSent: row.whatsappRxSent,
+      examination: jsonRecord(row.examination),
+      diagnosis: jsonRecord(row.diagnosis),
+      treatment: jsonRecord(row.treatment),
+      prescription: (Array.isArray(row.prescription) ? row.prescription : []) as PrescriptionLine[],
+      notes: row.notes,
+      scribeTranscript: row.scribeTranscript ?? undefined,
+      scribeLanguage: row.scribeLanguage ?? undefined,
+      scribeAppliedAt: row.scribeAppliedAt ?? undefined,
+      templateId: row.templateId ?? undefined,
+      handoff: row.handoff && typeof row.handoff === "object" && !Array.isArray(row.handoff)
+        ? (row.handoff as Record<string, string | number | boolean>)
+        : undefined,
+    }));
   });
 }
 
