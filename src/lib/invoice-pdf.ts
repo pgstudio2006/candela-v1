@@ -497,24 +497,10 @@ function drawNotes(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, lay
       : `Total tax ${formatInrForPdf(receipt.taxTotal)}`;
   drawText(page, taxNote, LAYOUT.tableLeft, layout.notesY, font, FONT.caption);
 
-  let offsetY = 11;
-  if (receipt.packageNotes && receipt.packageNotes.length > 0) {
-    const noteTitle = "Package notes:";
-    drawText(page, noteTitle, LAYOUT.tableLeft, layout.notesY - offsetY, font, FONT.caption);
-    offsetY += 10;
-    for (const note of receipt.packageNotes) {
-      const noteLines = wrapText(note, font, FONT.caption, LAYOUT.tableRight - LAYOUT.tableLeft - 8);
-      noteLines.forEach((line) => {
-        drawText(page, `- ${line}`, LAYOUT.tableLeft, layout.notesY - offsetY, font, FONT.caption);
-        offsetY += 10;
-      });
-    }
-  }
-
   if (receipt.routingNote) {
     const noteLines = wrapText(receipt.routingNote, font, FONT.caption, LAYOUT.tableRight - LAYOUT.tableLeft - 8);
     noteLines.forEach((line, index) => {
-      drawText(page, line, LAYOUT.tableLeft, layout.notesY - offsetY - index * 10, font, FONT.caption);
+      drawText(page, line, LAYOUT.tableLeft, layout.notesY - 11 - index * 10, font, FONT.caption);
     });
   }
 }

@@ -36,7 +36,6 @@ export async function getVisitInvoiceForBilling(ctx: ServerContext, visitId: str
       label: string;
       amount: number;
       quantity: number;
-      description?: string;
     }[],
     lines: invoice.lines.map((l) => ({
       label: l.label,
@@ -75,7 +74,7 @@ export async function createVisitInvoice(
     }[];
     paymentSplits?: { mode: string; amount: number }[];
     gstOverride?: Partial<Pick<GstSettings, "gstRatePercent" | "taxMode">>;
-    packageLines?: { packageId: string; label: string; amount: number; quantity: number; description?: string }[];
+    packageLines?: { packageId: string; label: string; amount: number; quantity: number }[];
   },
   tx: Prisma.TransactionClient = prisma,
 ) {
@@ -255,7 +254,10 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     invoice = await prisma.invoice.findFirst({
       where: { visitId, ...branchScope(ctx) },
       orderBy: { createdAt: "desc" },
-      include,
+      include: {
+        lines: { orderBy: { createdAt: "asc" } },
+        payments: { orderBy: { paidAt: "desc" }, take: 1 },
+      },
     });
   }
 
@@ -264,13 +266,6 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
   const latestPayment = invoice?.payments[0];
   const rawPaymentMode = String(latestPayment?.mode ?? "").toLowerCase();
   const normalizedPaymentMode = VALID_PAYMENT_MODES.has(rawPaymentMode) ? rawPaymentMode : "cash";
-
-  // Extract package notes from stored payload.
-  const invPayload = (invoice?.payload as Record<string, unknown> | null) ?? {};
-  const storedPackageLines = Array.isArray(invPayload.packageLines) ? invPayload.packageLines : [];
-  const packageNotes = storedPackageLines
-    .map((line: unknown) => (line && typeof line === "object" && (line as Record<string, unknown>).description ? String((line as Record<string, unknown>).description) : ""))
-    .filter(Boolean);
 
   const base = {
     branchId: ctx.branchId,
@@ -291,13 +286,13 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     billingStatus: visit.billing ?? "pending",
     paymentScope: invoice?.paymentScope ?? undefined,
     paymentMode: normalizedPaymentMode,
-    packageNotes,
     amountPaid,
     balanceDue,
     routingNote: visit.routingNote ?? undefined,
   };
 
   if (invoice?.lines.length) {
+    const invPayload = (invoice.payload as Record<string, unknown> | null) ?? {};
     const storedGst =
       invPayload.gst && typeof invPayload.gst === "object" && !Array.isArray(invPayload.gst)
         ? ({ ...branchGst, ...(invPayload.gst as Record<string, unknown>) } as typeof branchGst)

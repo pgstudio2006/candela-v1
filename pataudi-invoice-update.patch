@@ -1,0 +1,117 @@
+diff --git a/src/lib/opd-receipt.ts b/src/lib/opd-receipt.ts
+index 2b9d430..826c1d3 100644
+--- a/src/lib/opd-receipt.ts
++++ b/src/lib/opd-receipt.ts
+@@ -23,6 +23,10 @@ export type OpdReceiptPayload = {
+   patientPhone: string;
+   patientCity?: string;
+   patientDistrict?: string;
++  patientAddress?: string;
++  patientAge?: number;
++  patientGender?: string;
++  patientType?: string;
+   appointmentCenter?: string;
+   doctorName: string;
+   token?: number;
+diff --git a/src/lib/roshni-invoice-pdf.ts b/src/lib/roshni-invoice-pdf.ts
+index 30bc308..6ac8f40 100644
+--- a/src/lib/roshni-invoice-pdf.ts
++++ b/src/lib/roshni-invoice-pdf.ts
+@@ -37,16 +37,49 @@ function valueOrDash(value: string | number | undefined | null): string {
+   return value == null || String(value).trim() === "" ? "-" : String(value);
+ }
+ 
++function formatRoshniDateTime(iso: string): string {
++  const d = new Date(iso);
++  const pad = (n: number) => String(n).padStart(2, "0");
++  const day = pad(d.getDate());
++  const month = pad(d.getMonth() + 1);
++  const year = d.getFullYear();
++  const hours = d.getHours();
++  const minutes = pad(d.getMinutes());
++  const seconds = pad(d.getSeconds());
++  const ampm = hours >= 12 ? "PM" : "AM";
++  const hours12 = pad(hours % 12 || 12);
++  return `${day}-${month}-${year} ${hours12}:${minutes}:${seconds} ${ampm}`;
++}
++
++function genderLabel(gender?: string): string {
++  const map: Record<string, string> = {
++    M: "Male",
++    F: "Female",
++    O: "Other",
++    male: "Male",
++    female: "Female",
++    other: "Other",
++    prefer_not: "Other",
++  };
++  return gender ? map[gender] ?? gender : "-";
++}
++
++function ageSexText(receipt: OpdReceiptPayload): string {
++  const agePart = receipt.patientAge ? `${receipt.patientAge}Yrs.-` : "-";
++  const sexPart = genderLabel(receipt.patientGender);
++  return `${agePart} / ${sexPart}`;
++}
++
+ function drawInfo(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont) {
+   const left = 15;
+   const right = 342;
+   const rightValue = 410;
+   const rows = [
+-    ["UHID No.", receipt.patientUhid, "Date", new Date(receipt.issuedAt).toLocaleString("en-IN")],
++    ["UHID No.", receipt.patientUhid, "Date", formatRoshniDateTime(receipt.issuedAt)],
+     ["Name", receipt.patientName, "Receipt No.", receipt.invoiceNumber],
+-    ["Age/Sex", "-", "Pay Mode", receipt.paymentMode.toUpperCase()],
++    ["Age/Sex", ageSexText(receipt), "Pay Mode", receipt.paymentMode.toUpperCase()],
+     ["Mobile No.", receipt.patientPhone, "Token No.", valueOrDash(receipt.token)],
+-    ["Address", receipt.patientCity || "-", "Patient Type", "NEW PATIENT"],
++    ["Address", receipt.patientAddress || receipt.patientCity || "-", "Patient Type", receipt.patientType || "NEW PATIENT"],
+     ["Doctor", receipt.doctorName, "", ""],
+   ] as const;
+ 
+diff --git a/src/server/invoicing.ts b/src/server/invoicing.ts
+index cf1b138..bc3c4bd 100644
+--- a/src/server/invoicing.ts
++++ b/src/server/invoicing.ts
+@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
+ import type { OpdReceiptPayload } from "@/lib/opd-receipt";
+ import { receiptFromGstBreakdown } from "@/lib/opd-receipt";
+ import { computeGstInvoice, parseBranchGstSettings, type GstSettings } from "@/lib/gst-invoicing";
+-import { patientDisplayName } from "@/lib/frontdesk-workflow";
++import { patientDisplayName, resolvePatientAge } from "@/lib/frontdesk-workflow";
+ import { parsePatientRegistrationMeta } from "@/lib/registration-meta";
+ import type { ServerContext } from "@/server/context";
+ import { branchScope } from "@/server/tenancy";
+@@ -232,6 +232,20 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
+   }
+ 
+   const reg = parsePatientRegistrationMeta(patient.meta);
++  const age = resolvePatientAge(patient.age, patient.dateOfBirth ? patient.dateOfBirth.toISOString() : undefined);
++  const genderMap: Record<string, string> = {
++    M: "Male",
++    F: "Female",
++    O: "Other",
++    male: "Male",
++    female: "Female",
++    other: "Other",
++    prefer_not: "Other",
++  };
++  const patientGender = patient.gender ? genderMap[patient.gender] ?? patient.gender : undefined;
++  const patientAddress = reg.address || [reg.city, reg.district].filter(Boolean).join(", ") || undefined;
++  const visitTypeTag = patient.tags.find((t) => ["opd", "followup", "procedure"].includes(t));
++  const patientType = visitTypeTag === "followup" ? "OLD PATIENT" : visitTypeTag === "procedure" ? "PROCEDURE" : "NEW PATIENT";
+ 
+   const branch = await prisma.branch.findUnique({ where: { id: ctx.branchId } });
+   const branchGst = parseBranchGstSettings(branch?.meta);
+@@ -262,6 +276,10 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
+     patientPhone: patient.phone,
+     patientCity: reg.city,
+     patientDistrict: reg.district,
++    patientAddress,
++    patientAge: age > 0 ? age : undefined,
++    patientGender,
++    patientType,
+     appointmentCenter: reg.appointmentCentre || branch?.name || undefined,
+     doctorName: visit.doctorName || "Consultant",
+     token: visit.token ?? undefined,

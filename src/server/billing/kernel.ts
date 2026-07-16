@@ -111,7 +111,7 @@ export type ServiceInvoiceInput = {
   lines: BillableLine[];
   paymentSplits: { mode: string; amount: number }[];
   gstOverride: Partial<Pick<GstSettings, "gstRatePercent" | "taxMode">>;
-  packageLines?: { packageId: string; label: string; amount: number; quantity: number; description?: string }[];
+  packageLines?: { packageId: string; label: string; amount: number; quantity: number }[];
 };
 
 export async function createServiceInvoice(input: ServiceInvoiceInput) {

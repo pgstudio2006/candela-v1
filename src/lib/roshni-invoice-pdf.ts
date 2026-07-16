@@ -172,15 +172,6 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
     drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
     y -= 13;
   }
-  if (receipt.packageNotes && receipt.packageNotes.length > 0) {
-    y -= 13;
-    drawText(page, "Package notes:", 15, y, bold, FONT.body);
-    y -= 11;
-    for (const note of receipt.packageNotes) {
-      drawText(page, `- ${note}`, 15, y, font, FONT.body);
-      y -= 11;
-    }
-  }
   line(page, 15, 575, y, 0.5);
   y -= 13;
   drawRight(page, "GLOBAL HOSPITAL & TRAUMA CENTRE", 575, y, font, FONT.body);
