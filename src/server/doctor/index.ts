@@ -786,6 +786,8 @@ export async function completeConsultation(
           payload: JSON.parse(JSON.stringify(updatedConsult)) as object,
         },
       });
+    } else {
+      await tx.counsellorQueueItem.deleteMany({ where: { visitId } });
     }
   });
 

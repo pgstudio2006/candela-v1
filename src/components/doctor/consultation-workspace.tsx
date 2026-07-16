@@ -255,7 +255,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     );
   }
 
-  const finishConsult = async () => {
+  const finishConsult = async (forceSkip = false) => {
     setCompleting(true);
     const consultData = getConsultation(visitId);
     const examErrors = validateFormValues(examSchema, consultData?.examination ?? {});
@@ -281,7 +281,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     const result = await completeConsultation(visitId, {
       treatmentMode,
       recommendCounsellor: isPataudi ? false : recommendCounsellor,
-      skipCounsellor: isPataudi ? true : skipCounsellor,
+      skipCounsellor: isPataudi ? true : forceSkip || skipCounsellor,
       handoff: handoffPayload,
       sendWhatsapp,
     });
@@ -409,7 +409,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
             </>
           )}
           {!completed && (
-            <AttioButton variant="primary" className="gap-1.5" onClick={finishConsult} disabled={completing}>
+            <AttioButton variant="primary" className="gap-1.5" onClick={() => finishConsult()} disabled={completing}>
               {completing ? (
                 <>
                   <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -1046,7 +1046,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 placeholder="Private consult notes…"
                 className="w-full resize-none rounded-lg border border-[var(--attio-border)] px-3 py-2 text-[13px] outline-none"
               />
-              <AttioButton variant="primary" className="w-full gap-1.5" onClick={finishConsult} disabled={completing}>
+              <AttioButton variant="primary" className="w-full gap-1.5" onClick={() => finishConsult()} disabled={completing}>
                 {completing ? (
                   <>
                     <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -1071,8 +1071,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                   disabled={completing}
                   onClick={() => {
                     setSkipCounsellor(true);
-                    updateConsultation(visitId, { skipCounsellor: true });
-                    finishConsult();
+                    finishConsult(true);
                   }}
                 >
                   {completing ? (
