@@ -76,7 +76,7 @@ export function filterDoctorOpdQueue(
     if (!isInReceptionQueue(v)) return false;
     if (includeDept || !doctorId) return true;
     // Doctor-specific view: only show patients explicitly assigned to this doctor
-    if (v.doctorId === doctorId) return true;
+    if (isSameDoctor(v.doctorId, doctorId)) return true;
     if (doctorName && v.doctorName && v.doctorName === doctorName) return true;
     return false;
   });

@@ -13,6 +13,7 @@ import type { DocumentTemplate } from "@/design-system/document-templates";
 import { validateCompleteConsultation } from "@/lib/doctor-validation";
 import { visitVisibleInDoctorWorkspace } from "@/lib/doctor-queue";
 import { isInReceptionQueue, isRedFlagVisit, patientDisplayName } from "@/lib/frontdesk-workflow";
+import { doctorIdVariants } from "@/lib/clinical-roster";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { getClinicalSnapshot } from "@/server/clinical";
@@ -422,8 +423,9 @@ export async function skipConsultation(ctx: ServerContext, visitId: string) {
     throw new ServerActionError("VALIDATION", "Visit is not in the active queue.");
   }
 
+  const doctorIdSet = new Set(doctorIdVariants(doctorId));
   // If visit is not assigned to this doctor, assign it first
-  if (visit.doctorId && visit.doctorId !== doctorId) {
+  if (visit.doctorId && !doctorIdSet.has(visit.doctorId)) {
     throw new ServerActionError("FORBIDDEN", "This visit is assigned to another doctor.");
   }
 
