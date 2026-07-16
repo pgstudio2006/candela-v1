@@ -25,6 +25,8 @@ export function PharmacyInvoiceModal({ open, bill, onClose }: PharmacyInvoiceMod
     setReceipt(buildPharmacyReceipt(bill, drugs));
   }, [open, bill, drugs]);
 
+  const hasBalance = Boolean(receipt && receipt.balanceDue > 0);
+
   return (
     <InvoicePdfPreviewModal
       open={open}
@@ -32,6 +34,8 @@ export function PharmacyInvoiceModal({ open, bill, onClose }: PharmacyInvoiceMod
       title="Pharmacy invoice"
       receipt={receipt}
       loading={open && !receipt}
+      blockPrint={hasBalance}
+      blockPrintMessage="Invoice is available only after the full amount is collected. Clear the balance before printing."
     />
   );
 }

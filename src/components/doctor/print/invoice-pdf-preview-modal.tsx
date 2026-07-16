@@ -14,6 +14,8 @@ type InvoicePdfPreviewModalProps = {
   receipt: OpdReceiptPayload | null;
   loading?: boolean;
   error?: string;
+  blockPrint?: boolean;
+  blockPrintMessage?: string;
 };
 
 export function InvoicePdfPreviewModal({
@@ -23,6 +25,8 @@ export function InvoicePdfPreviewModal({
   receipt,
   loading = false,
   error = "",
+  blockPrint = false,
+  blockPrintMessage = "Invoice available after full payment is received.",
 }: InvoicePdfPreviewModalProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
@@ -79,6 +83,7 @@ export function InvoicePdfPreviewModal({
 
   const busy = loading || generating;
   const displayError = error || genError;
+  const printDisabled = blockPrint || !pdfBytes || busy;
 
   return createPortal(
     <div
@@ -99,7 +104,7 @@ export function InvoicePdfPreviewModal({
             <AttioButton
               variant="primary"
               className="gap-1.5"
-              disabled={!pdfBytes || busy}
+              disabled={printDisabled}
               onClick={() => {
                 if (pdfBytes) printPdfBytes(pdfBytes, title);
               }}
@@ -110,7 +115,7 @@ export function InvoicePdfPreviewModal({
             <AttioButton
               variant="secondary"
               className="gap-1.5"
-              disabled={!pdfBytes || busy}
+              disabled={printDisabled}
               onClick={() => {
                 if (pdfBytes && receipt) {
                   downloadPdfBytes(pdfBytes, `${receipt.invoiceNumber}.pdf`);
@@ -139,6 +144,11 @@ export function InvoicePdfPreviewModal({
           )}
           {displayError && !busy && (
             <p className="py-16 text-center text-[13px] text-red-600">{displayError}</p>
+          )}
+          {blockPrint && !busy && !displayError && (
+            <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+              {blockPrintMessage}
+            </div>
           )}
           {pdfUrl && !busy && !displayError && (
             <iframe

@@ -57,6 +57,8 @@ export function BillingReceiptModal({
     };
   }, [open, visitId]);
 
+  const hasBalance = Boolean(receipt && receipt.balanceDue > 0);
+
   return (
     <InvoicePdfPreviewModal
       open={open}
@@ -65,6 +67,8 @@ export function BillingReceiptModal({
       receipt={receipt}
       loading={loading}
       error={error}
+      blockPrint={hasBalance}
+      blockPrintMessage="Invoice is available only after the full amount is collected. Current balance due must be cleared before printing."
     />
   );
 }

@@ -129,10 +129,11 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
     finalized?: boolean;
   }) => {
     setRoutingFlash(result.routingNote);
-    setReceiptVisitId(result.visitId);
     if (result.finalized) {
+      setReceiptVisitId(result.visitId);
       setPendingRoute(result.routeHref);
     } else {
+      setReceiptVisitId(null);
       setPendingRoute(null);
     }
   };
@@ -182,6 +183,9 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
             {routingFlash}
             {receiptVisitId && (
               <p className="mt-1 text-[12px]">Receipt ready — print for the patient, then continue.</p>
+            )}
+            {!receiptVisitId && routingFlash && (
+              <p className="mt-1 text-[12px]">Partial payment received — invoice will be available once the full amount is collected.</p>
             )}
           </div>
         )}

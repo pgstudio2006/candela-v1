@@ -128,8 +128,9 @@ export default function PharmacyBillingPage() {
               <button
                 type="button"
                 onClick={() => setInvoiceBill(b)}
-                className="rounded p-1.5 text-[var(--attio-text-tertiary)] hover:bg-[var(--attio-hover)]"
-                title="Print invoice"
+                disabled={!b.paid}
+                className="rounded p-1.5 text-[var(--attio-text-tertiaryary)] hover:bg-[var(--attio-hover)] disabled:cursor-not-allowed disabled:opacity-30"
+                title={b.paid ? "Print invoice" : "Invoice available after full payment"}
               >
                 <Printer className="size-3.5" />
               </button>
@@ -278,9 +279,13 @@ export default function PharmacyBillingPage() {
                   View patient cart
                 </AttioButton>
               )}
-              <AttioButton variant="secondary" onClick={() => setInvoiceBill(selected)}>
+              <AttioButton
+                variant="secondary"
+                disabled={!selected.paid}
+                onClick={() => setInvoiceBill(selected)}
+              >
                 <Printer className="mr-1 size-4" />
-                Print Bill
+                {selected.paid ? "Print Bill" : "Print Bill (pending payment)"}
               </AttioButton>
               <AttioButton
                 variant="secondary"
