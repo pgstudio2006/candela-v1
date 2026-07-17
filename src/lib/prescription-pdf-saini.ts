@@ -33,7 +33,7 @@ const PAGE = { width: 595.2, height: 841.9 };
 const LAYOUT = {
   marginLeft: 148,
   marginRight: 560,
-  contentTop: 515,
+  contentTop: 570,
   minRowHeight: 14,
   lineLeading: 11,
   footerMinY: 110,
@@ -60,6 +60,7 @@ const SHOWN_IN_PATIENT_INFO = new Set([
   "chiefComplaint",
   "historyPresent",
   "pastHistory",
+  "investigations",
 ]);
 
 function formatFieldValue(value: string | number | boolean): string {
@@ -231,26 +232,15 @@ function drawPrescriptionContent(
   const pr = String(consult.examination?.vitalsPulse ?? "");
   const allergies = String(consult.examination?.allergies ?? "");
 
-  const panelLeft = 242;
+  const panelLeft = 148;
   const panelRight = 562;
-  const panelTop = 518;
-  const panelBottom = 280;
-
-  // Clear the pre-printed middle block so we can render our own data cleanly.
-  ctx.page.drawRectangle({
-    x: panelLeft - 6,
-    y: panelBottom,
-    width: panelRight - panelLeft + 12,
-    height: panelTop - panelBottom,
-    color: COLORS.white,
-  });
-
+  const panelTop = 570;
   const leftLabelX = panelLeft + 10;
-  const leftValueX = panelLeft + 95;
-  const rightLabelX = panelLeft + 185;
-  const rightValueX = panelLeft + 270;
+  const leftValueX = panelLeft + 92;
+  const rightLabelX = panelLeft + 215;
+  const rightValueX = panelLeft + 300;
   const lineGap = 22;
-  let panelY = panelTop - 20;
+  let panelY = panelTop - 18;
 
   drawText(ctx.page, "PATIENT DETAILS", leftLabelX, panelY, bold, FONT.tableHead);
   drawHLine(ctx.page, leftLabelX, panelRight - 6, panelY - 7);
@@ -317,7 +307,7 @@ function drawPrescriptionContent(
     drawCheckbox(ctx.page, checkboxNoX, y, 7, noChecked);
     drawText(ctx.page, "No", checkboxNoX + 12, y, font, FONT.body);
   }
-  ctx.y = panelBottom - 112;
+  ctx.y = panelY - 52;
 
   // 1. Chief Complaints
   const chiefComplaint = String(consult.examination?.chiefComplaint ?? "").trim();
