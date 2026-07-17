@@ -234,7 +234,7 @@ function drawPrescriptionContent(
 
   const panelLeft = 148;
   const panelRight = 562;
-  const panelTop = 578;
+  const panelTop = 586;
   const leftLabelX = panelLeft + 10;
   const leftValueX = panelLeft + 92;
   const rightLabelX = panelLeft + 215;
@@ -244,7 +244,7 @@ function drawPrescriptionContent(
 
   drawText(ctx.page, "PATIENT DETAILS", leftLabelX, panelY, bold, FONT.tableHead);
   drawHLine(ctx.page, leftLabelX, panelRight - 6, panelY - 7);
-  panelY -= 18;
+  panelY -= 12;
 
   drawText(ctx.page, "Patient Name:", leftLabelX, panelY, font, FONT.body);
   drawPatientValue(ctx.page, leftValueX, panelY, patient.name, font, FONT.body, 255);
@@ -307,7 +307,7 @@ function drawPrescriptionContent(
     drawCheckbox(ctx.page, checkboxNoX, y, 7, noChecked);
     drawText(ctx.page, "No", checkboxNoX + 12, y, font, FONT.body);
   }
-  ctx.y = panelY - 56;
+  ctx.y = panelY - 60;
 
   // 1. Chief Complaints
   const chiefComplaint = String(consult.examination?.chiefComplaint ?? "").trim();
@@ -412,18 +412,19 @@ function drawPrescriptionContent(
 
   function drawMedicationHeader() {
     ensureSpace(ctx, pdfDoc, image, 48);
+    ctx.y -= 6;
     drawText(ctx.page, "Rx", LAYOUT.marginLeft, ctx.y, bold, 12);
-    ctx.y -= 14;
+    ctx.y -= 18;
     drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-    ctx.y -= 11;
+    ctx.y -= 16;
     drawText(ctx.page, "#", medColX[0], ctx.y, bold, FONT.tableHead);
     drawText(ctx.page, "Medicine", medColX[1], ctx.y, bold, FONT.tableHead);
     drawText(ctx.page, "Dose", medColX[2], ctx.y, bold, FONT.tableHead);
     drawText(ctx.page, "Frequency", medColX[3], ctx.y, bold, FONT.tableHead);
     drawText(ctx.page, "Duration", medColX[4], ctx.y, bold, FONT.tableHead);
-    ctx.y -= 14;
+    ctx.y -= 18;
     drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-    ctx.y -= 12;
+    ctx.y -= 16;
   }
 
   drawMedicationHeader();
@@ -449,7 +450,7 @@ function drawPrescriptionContent(
       const durLines = duration && duration !== "--" ? wrapText(duration, font, FONT.table, medColWidths[4]) : [];
 
       const maxLines = Math.max(medLines.length, doseLines.length, freqLines.length, durLines.length, 1);
-      const rowHeight = Math.max(LAYOUT.minRowHeight, maxLines * LAYOUT.lineLeading + 4);
+      const rowHeight = Math.max(LAYOUT.minRowHeight + 4, maxLines * LAYOUT.lineLeading + 8);
 
       const instLines = instructions ? wrapText(instructions, font, FONT.caption, medColWidths[1]) : [];
       const noteLines = notes ? wrapText(notes, font, FONT.caption, medColWidths[1]) : [];
@@ -484,9 +485,9 @@ function drawPrescriptionContent(
         });
       }
 
-      ctx.y -= 2;
+      ctx.y -= 4;
       drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-      ctx.y -= 6;
+      ctx.y -= 8;
     });
   }
 
