@@ -158,11 +158,13 @@ function ensureSpace(
   pdfDoc: PDFDocument,
   image: PDFImage,
   required: number,
-): void {
+): boolean {
   if (ctx.y - required < LAYOUT.footerMinY) {
     ctx.page = addSainiPage(pdfDoc, image);
     ctx.y = LAYOUT.contentTop;
+    return true;
   }
+  return false;
 }
 
 function drawExaminationSection(
@@ -264,26 +266,30 @@ function drawPrescriptionContent(
     LAYOUT.marginRight - medColX[3] - 6,
   ];
 
-  ensureSpace(ctx, pdfDoc, image, 52);
-  drawText(ctx.page, "℞ Medications", LAYOUT.marginLeft, ctx.y, bold, FONT.emphasis);
-  ctx.y -= 14;
+  function drawMedicationHeader() {
+    ensureSpace(ctx, pdfDoc, image, 52);
+    drawText(ctx.page, "℞ Medications", LAYOUT.marginLeft, ctx.y, bold, FONT.emphasis);
+    ctx.y -= 14;
 
-  drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-  ctx.y -= 12;
-  drawText(ctx.page, "#", medColX[0], ctx.y, bold, FONT.tableHead);
-  drawText(ctx.page, "Medicine", medColX[1], ctx.y, bold, FONT.tableHead);
-  drawText(ctx.page, "Dosage", medColX[2], ctx.y, bold, FONT.tableHead);
-  drawText(ctx.page, "Instructions", medColX[3], ctx.y, bold, FONT.tableHead);
-  ctx.y -= 16;
-  drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-  ctx.y -= 10;
+    drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
+    ctx.y -= 12;
+    drawText(ctx.page, "#", medColX[0], ctx.y, bold, FONT.tableHead);
+    drawText(ctx.page, "Medicine", medColX[1], ctx.y, bold, FONT.tableHead);
+    drawText(ctx.page, "Dosage", medColX[2], ctx.y, bold, FONT.tableHead);
+    drawText(ctx.page, "Instructions", medColX[3], ctx.y, bold, FONT.tableHead);
+    ctx.y -= 16;
+    drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
+    ctx.y -= 10;
+  }
+
+  drawMedicationHeader();
 
   if (!consult.prescription?.length) {
     ensureSpace(ctx, pdfDoc, image, 20);
     drawText(ctx.page, "No medicines prescribed", medColX[1], ctx.y, font, FONT.table);
     ctx.y -= 20;
     drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-    ctx.y -= 6;
+    ctx.y -= 10;
   } else {
     consult.prescription.forEach((line, i) => {
       const medicine = line.drug || "—";
@@ -300,20 +306,22 @@ function drawPrescriptionContent(
       const maxLines = Math.max(medLines.length, doseLines.length, instLines.length);
       const rowHeight = Math.max(LAYOUT.minRowHeight, maxLines * LAYOUT.lineLeading + 4);
 
-      ensureSpace(ctx, pdfDoc, image, rowHeight + 4);
+      const newPage = ensureSpace(ctx, pdfDoc, image, rowHeight + 4);
+      if (newPage) drawMedicationHeader();
 
       const rowTop = ctx.y;
+      const serialY = Math.min(rowTop, rowTop - ((maxLines - 1) * LAYOUT.lineLeading) / 2 + 3);
       for (let idx = 0; idx < maxLines; idx++) {
         const lineY = rowTop - idx * LAYOUT.lineLeading;
         if (idx < medLines.length) drawText(ctx.page, medLines[idx], medColX[1], lineY, font, FONT.table);
         if (idx < doseLines.length) drawText(ctx.page, doseLines[idx], medColX[2], lineY, font, FONT.table);
         if (idx < instLines.length) drawText(ctx.page, instLines[idx], medColX[3], lineY, font, FONT.table);
       }
-      drawText(ctx.page, String(i + 1), medColX[0], rowTop, font, FONT.table);
+      drawText(ctx.page, String(i + 1), medColX[0], serialY, font, FONT.table);
 
       ctx.y -= rowHeight;
       drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-      ctx.y -= 6;
+      ctx.y -= 10;
     });
   }
 
@@ -433,16 +441,32 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   drawText(page, allergies || "None", col1 + bold.widthOfTextAtSize(allergiesLabel, FONT.body) + 8, infoY, font, FONT.body);
   infoY -= rowH;
 
+  function isYes(value: unknown): boolean {
+    return value === true || value === "Yes" || value === "yes";
+  }
+  function isNo(value: unknown): boolean {
+    return value === false || value === "No" || value === "no";
+  }
+
   const conditions = [
-    { label: "Diabetes:", key: "diabetes" },
-    { label: "Thyroid disorder:", key: "thyroidDisorder" },
-    { label: "Hypertension:", key: "hypertension" },
+    { label: "Diabetes:", keys: ["diabetes"] as const },
+    { label: "Thyroid disorder:", keys: ["thyroidDisorder", "thyroid"] as const },
+    { label: "Hypertension:", keys: ["hypertension"] as const },
   ] as const;
-  for (const { label, key } of conditions) {
-    const value = consult.examination?.[key];
-    const status = isEmptyValue(value) ? "—" : formatFieldValue(value);
+  for (const { label, keys } of conditions) {
+    const value = keys.map((k) => consult.examination?.[k]).find((v) => !isEmptyValue(v));
+    const yesChecked = isYes(value);
+    const noChecked = isNo(value);
     drawText(page, label, col1, infoY, bold, FONT.body);
-    drawText(page, status, col1 + bold.widthOfTextAtSize(label, FONT.body) + 8, infoY, font, FONT.body);
+    drawYesNoPair(
+      page,
+      col1 + bold.widthOfTextAtSize(label, FONT.body) + 8,
+      infoY,
+      font,
+      FONT.body,
+      yesChecked,
+      noChecked,
+    );
     infoY -= rowH;
   }
 
