@@ -276,9 +276,7 @@ function drawPrescriptionContent(
   drawPatientValue(ctx.page, rightValueX, panelY, pr || "--", font, FONT.body, 90);
   panelY -= lineGap;
 
-  drawText(ctx.page, "Allergy:", leftLabelX, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, leftValueX, panelY, allergies && allergies.trim() ? allergies.trim() : "None", font, FONT.body, 255);
-  panelY -= lineGap + 2;
+  const hasAllergy = !!(allergies && allergies.trim() && allergies.trim().toLowerCase() !== "none" && allergies.trim() !== "--");
 
   function isYes(value: unknown): boolean {
     return value === true || value === "Yes" || value === "yes";
@@ -287,14 +285,25 @@ function drawPrescriptionContent(
     return value === false || value === "No" || value === "no";
   }
 
+  const checkboxYesX = leftLabelX + 105;
+  const checkboxNoX = leftLabelX + 145;
+  const allergyDetailX = checkboxNoX + 40;
+
+  drawText(ctx.page, "Allergy:", leftLabelX, panelY, font, FONT.body);
+  drawCheckbox(ctx.page, checkboxYesX, panelY, 7, hasAllergy);
+  drawText(ctx.page, "Yes", checkboxYesX + 12, panelY, font, FONT.body);
+  drawCheckbox(ctx.page, checkboxNoX, panelY, 7, !hasAllergy);
+  drawText(ctx.page, "No", checkboxNoX + 12, panelY, font, FONT.body);
+  if (hasAllergy) {
+    drawPatientValue(ctx.page, allergyDetailX, panelY, allergies.trim(), font, FONT.body, LAYOUT.marginRight - allergyDetailX - 8);
+  }
+  panelY -= lineGap + 2;
+
   const conditions = [
     { label: "Diabetes", keys: ["diabetes"] as const, y: panelY },
     { label: "Thyroid Disorder", keys: ["thyroidDisorder", "thyroid"] as const, y: panelY - lineGap },
     { label: "Hypertension", keys: ["hypertension"] as const, y: panelY - lineGap * 2 },
   ] as const;
-
-  const checkboxYesX = leftLabelX + 105;
-  const checkboxNoX = leftLabelX + 145;
   const conditionLabelX = leftLabelX;
 
   for (const { label, keys, y } of conditions) {
