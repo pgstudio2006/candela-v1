@@ -229,46 +229,36 @@ function drawPrescriptionContent(
   const date = formatConsultDate(consult.completedAt ?? consult.startedAt ?? new Date().toISOString());
   const bp = String(consult.examination?.vitalsBp ?? "");
   const pr = String(consult.examination?.vitalsPulse ?? "");
-  const weight = String(consult.examination?.vitalsWeight ?? "");
-  const spo2 = String(consult.examination?.vitalsSpo2 ?? "");
-  const temperature = String(consult.examination?.vitalsTemperature ?? "");
   const allergies = String(consult.examination?.allergies ?? "");
 
+  const nameValueX = LAYOUT.marginLeft + 58;
   const leftValueX = LAYOUT.marginLeft + 58;
-  const midValueX = LAYOUT.marginLeft + 66;
-  const rightValueX = 446;
+  const rightValueX = 445;
   const rowH = 16;
-  const conditionRowYs = [ctx.y - 48, ctx.y - 64, ctx.y - 80, ctx.y - 96];
+  const row1Y = ctx.y;
+  const row2Y = row1Y - rowH;
+  const row3Y = row2Y - rowH;
+  const row4Y = row3Y - rowH;
+  const row5Y = row4Y - rowH;
+  const row6Y = row5Y - rowH;
+  const row7Y = row6Y - rowH;
   const yesBoxX = LAYOUT.marginLeft + 86;
   const noBoxX = LAYOUT.marginLeft + 122;
 
-  drawPatientValue(ctx.page, leftValueX, ctx.y, patient.name, font, FONT.body, 315);
+  drawPatientValue(ctx.page, nameValueX, row1Y, patient.name, font, FONT.body, 315);
   drawPatientValue(
     ctx.page,
-    midValueX,
-    ctx.y,
+    leftValueX,
+    row2Y,
     `${resolvePatientAge(patient.age, patient.dateOfBirth) || "--"} / ${patient.gender || "--"}`,
     font,
     FONT.body,
-    120,
+    155,
   );
-  drawPatientValue(ctx.page, rightValueX, ctx.y, date, font, FONT.body, 110);
-  ctx.y -= rowH;
+  drawPatientValue(ctx.page, rightValueX, row2Y, patient.phone || "--", font, FONT.body, 110);
 
-  drawPatientValue(ctx.page, leftValueX, ctx.y, patient.phone || "--", font, FONT.body, 170);
-  drawPatientValue(ctx.page, midValueX, ctx.y, patient.city || "--", font, FONT.body, 240);
-  drawPatientValue(ctx.page, rightValueX, ctx.y, bp || "--", font, FONT.body, 110);
-  ctx.y -= rowH;
-
-  drawPatientValue(ctx.page, leftValueX, ctx.y, weight ? `${weight} kg` : "--", font, FONT.body, 170);
-  drawPatientValue(ctx.page, midValueX, ctx.y, pr || "--", font, FONT.body, 90);
-  drawPatientValue(ctx.page, rightValueX, ctx.y, spo2 ? `${spo2}%` : "--", font, FONT.body, 100);
-  ctx.y -= rowH;
-
-  drawPatientValue(ctx.page, leftValueX, ctx.y, temperature ? `${temperature} F` : "--", font, FONT.body, 170);
-  const allergiesValue = allergies && allergies.trim() ? allergies.trim() : "None";
-  drawPatientValue(ctx.page, midValueX, ctx.y, allergiesValue, font, FONT.body, 240);
-  ctx.y -= rowH;
+  drawPatientValue(ctx.page, leftValueX, row3Y, patient.city || "--", font, FONT.body, 250);
+  drawPatientValue(ctx.page, rightValueX, row3Y, date, font, FONT.body, 110);
 
   function isYes(value: unknown): boolean {
     return value === true || value === "Yes" || value === "yes";
@@ -278,16 +268,17 @@ function drawPrescriptionContent(
   }
 
   const conditions = [
-    { keys: ["diabetes"] as const, y: conditionRowYs[1] },
-    { keys: ["thyroidDisorder", "thyroid"] as const, y: conditionRowYs[2] },
-    { keys: ["hypertension"] as const, y: conditionRowYs[3] },
+    { keys: ["diabetes"] as const, y: row5Y },
+    { keys: ["thyroidDisorder", "thyroid"] as const, y: row6Y },
+    { keys: ["hypertension"] as const, y: row7Y },
   ] as const;
 
   const allergyValue = String(consult.examination?.allergies ?? "").trim();
   const allergyYes = allergyValue !== "" && !/^none$/i.test(allergyValue) && !/^no$/i.test(allergyValue);
   const allergyNo = !allergyYes;
-  drawCheckbox(ctx.page, yesBoxX, conditionRowYs[0], 7, allergyYes);
-  drawCheckbox(ctx.page, noBoxX, conditionRowYs[0], 7, allergyNo);
+  drawCheckbox(ctx.page, yesBoxX, row4Y, 7, allergyYes);
+  drawCheckbox(ctx.page, noBoxX, row4Y, 7, allergyNo);
+  drawPatientValue(ctx.page, rightValueX, row4Y, bp || "--", font, FONT.body, 110);
 
   for (const { keys, y } of conditions) {
     const value = keys.map((k) => consult.examination?.[k]).find((v) => !isEmptyValue(v));
@@ -296,7 +287,9 @@ function drawPrescriptionContent(
     drawCheckbox(ctx.page, yesBoxX, y, 7, yesChecked);
     drawCheckbox(ctx.page, noBoxX, y, 7, noChecked);
   }
-  ctx.y = conditionRowYs[3] - 28;
+  drawPatientValue(ctx.page, rightValueX, row5Y, pr || "--", font, FONT.body, 110);
+  drawPatientValue(ctx.page, leftValueX, row4Y, allergies && allergies.trim() ? allergies.trim() : "None", font, FONT.body, 240);
+  ctx.y = row7Y - 34;
 
   // 1. Chief Complaints
   const chiefComplaint = String(consult.examination?.chiefComplaint ?? "").trim();
