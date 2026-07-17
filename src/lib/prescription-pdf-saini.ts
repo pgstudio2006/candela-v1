@@ -488,7 +488,7 @@ function drawPrescriptionContent(
 
       ctx.y -= 2;
       drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-      ctx.y -= 6;
+      ctx.y -= 10;
     });
   }
 
