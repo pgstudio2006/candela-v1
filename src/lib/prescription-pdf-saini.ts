@@ -315,7 +315,7 @@ function drawPrescriptionContent(
     const ccLines = wrapText(chiefComplaint, font, FONT.body, infoWidth);
     ensureSpace(ctx, pdfDoc, image, 12 + ccLines.length * LAYOUT.lineLeading + LAYOUT.paragraphGap);
     drawText(ctx.page, "Chief Complaints", LAYOUT.marginLeft, ctx.y, bold, FONT.tableHead);
-    ctx.y -= 12;
+    ctx.y -= 18;
     ccLines.forEach((line) => {
       drawText(ctx.page, line, LAYOUT.marginLeft, ctx.y, font, FONT.body);
       ctx.y -= LAYOUT.lineLeading;
