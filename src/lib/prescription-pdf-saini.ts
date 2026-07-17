@@ -234,7 +234,7 @@ function drawPrescriptionContent(
 
   const panelLeft = 148;
   const panelRight = 562;
-  const panelTop = 570;
+  const panelTop = 578;
   const leftLabelX = panelLeft + 10;
   const leftValueX = panelLeft + 92;
   const rightLabelX = panelLeft + 215;
@@ -307,7 +307,7 @@ function drawPrescriptionContent(
     drawCheckbox(ctx.page, checkboxNoX, y, 7, noChecked);
     drawText(ctx.page, "No", checkboxNoX + 12, y, font, FONT.body);
   }
-  ctx.y = panelY - 52;
+  ctx.y = panelY - 56;
 
   // 1. Chief Complaints
   const chiefComplaint = String(consult.examination?.chiefComplaint ?? "").trim();
@@ -423,7 +423,7 @@ function drawPrescriptionContent(
     drawText(ctx.page, "Duration", medColX[4], ctx.y, bold, FONT.tableHead);
     ctx.y -= 14;
     drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-    ctx.y -= 8;
+    ctx.y -= 12;
   }
 
   drawMedicationHeader();
