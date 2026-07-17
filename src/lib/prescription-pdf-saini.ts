@@ -140,16 +140,6 @@ function drawYesNoPair(
 function addSainiPage(pdfDoc: PDFDocument, image: PDFImage): PDFPage {
   const page = pdfDoc.addPage([PAGE.width, PAGE.height]);
   page.drawImage(image, { x: 0, y: 0, width: PAGE.width, height: PAGE.height });
-  // White-out the pre-printed patient info block on every page so it doesn't show through.
-  page.drawRectangle({
-    x: PATIENT_INFO_RECT.x,
-    y: PATIENT_INFO_RECT.y,
-    width: PATIENT_INFO_RECT.width,
-    height: PATIENT_INFO_RECT.height,
-    color: COLORS.white,
-    borderColor: COLORS.border,
-    borderWidth: 0.5,
-  });
   return page;
 }
 
