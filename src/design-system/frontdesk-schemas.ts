@@ -172,6 +172,14 @@ export const REGISTRATION_SCHEMA: FormSchema = {
           options: [],
         },
         {
+          id: "problem",
+          type: "select",
+          label: "Particular problem",
+          required: true,
+          options: [],
+          hint: "Select a department first",
+        },
+        {
           id: "visitType",
           type: "select",
           label: "Visit type",

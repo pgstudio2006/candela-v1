@@ -10,6 +10,7 @@ import { PatientDocumentsPanel } from "@/components/patient-documents";
 import { PatientConsentsPanel } from "@/components/patient-consents";
 import { PatientPrescriptionsPanel } from "@/components/frontdesk/patient-prescriptions-panel";
 import { formatStageStatus } from "@/lib/frontdesk-workflow";
+import { problemLabelForValue } from "@/lib/department-problems";
 import { ArrowLeft, CreditCard, Download, ListOrdered, Pencil, Printer, UserCog } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -196,6 +197,7 @@ export default function PatientRecordPage() {
                 <div><dt className="text-[var(--attio-text-tertiary)]">Referral source</dt><dd>{patient.referrerSource ?? "—"}</dd></div>
                 <div><dt className="text-[var(--attio-text-tertiary)]">Referral doctor</dt><dd>{(patient as any).referralDoctorName ?? "—"}</dd></div>
                 <div><dt className="text-[var(--attio-text-tertiary)]">Corporate ID</dt><dd>{patient.corporateId ?? "—"}</dd></div>
+                <div><dt className="text-[var(--attio-text-tertiary)]">Problem</dt><dd>{patient.problem ? problemLabelForValue(patient.problem) : "—"}</dd></div>
                 <div><dt className="text-[var(--attio-text-tertiary)]">Status</dt>
                   <dd>
                     <select

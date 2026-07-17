@@ -58,6 +58,7 @@ export type Patient = {
   doctorName?: string;
   appointmentCentre?: string;
   userNote?: string;
+  problem?: string;
   campaignName?: string;
   actionCreatedBy?: string;
   actionCreatedByEmail?: string;

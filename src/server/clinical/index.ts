@@ -593,6 +593,7 @@ export async function registerPatient(
   await assertNoDuplicatePatient(ctx, phone, uhid, patientId, forceDuplicate || emergency);
 
   const registration = buildPatientRegistrationPayload(data);
+  const problem = String(data.problem ?? "").trim();
 
   await prisma.patient.upsert({
     where: { id: patientId },
@@ -650,6 +651,7 @@ export async function registerPatient(
         departmentId: deptId,
         tenantId: scope.tenantId,
         branchId: scope.branchId,
+        complaint: problem || undefined,
       },
       create: {
         id: visitId,
@@ -663,6 +665,7 @@ export async function registerPatient(
         exam: "not_started",
         appointment: false,
         waitMin: 0,
+        complaint: problem || undefined,
       },
     });
     const opd = await prisma.opdVisit.findUnique({ where: { id: visitId } });

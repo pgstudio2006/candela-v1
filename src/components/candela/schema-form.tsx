@@ -29,6 +29,7 @@ import {
   resolveIndiaLocationOptions,
 } from "@/lib/india-locations";
 import { searchSocieties } from "@/lib/gurgaon-societies";
+import { problemsForDepartment, problemLabelForValue } from "@/lib/department-problems";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -294,16 +295,18 @@ function SchemaFieldInput({
   if (field.type === "select") {
     const raw = String(value ?? "");
     const indiaOptions = allValues ? resolveIndiaLocationOptions(field.id, allValues) : null;
-    let options = indiaOptions ?? fieldOptionsForRender(field);
+    const problemOptions = field.id === "problem" && allValues ? problemsForDepartment(String(allValues.department ?? "")) : null;
+    let options = indiaOptions ?? problemOptions ?? fieldOptionsForRender(field);
     if (raw && !options.some((o) => o.value === raw)) {
-      options = [{ value: raw, label: humanizeSelectValue(raw, field.id, roster) }, ...options];
+      const fallbackLabel = field.id === "problem" ? problemLabelForValue(raw) : humanizeSelectValue(raw, field.id, roster);
+      options = [{ value: raw, label: fallbackLabel }, ...options];
     }
     const selectedOption = options.find((o) => o.value === raw);
     return (
       <Select value={raw || undefined} onValueChange={(v) => v != null && onChange(v)}>
         <SelectTrigger className={cn(base, "h-9 w-full")}>
           <SelectValue placeholder={field.placeholder ?? "Select…"}>
-            {selectedOption?.label ?? (raw ? humanizeSelectValue(raw, field.id, roster) : undefined)}
+            {selectedOption?.label ?? (raw ? (field.id === "problem" ? problemLabelForValue(raw) : humanizeSelectValue(raw, field.id, roster)) : undefined)}
           </SelectValue>
         </SelectTrigger>
         <SelectContent className="max-h-72">

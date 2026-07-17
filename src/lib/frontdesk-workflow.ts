@@ -203,6 +203,7 @@ export function mapPrismaPatientRow(row: PrismaPatientRow): Patient {
     doctorName: metaString(meta.doctorName),
     appointmentCentre: metaString(meta.appointmentCentre),
     userNote: metaString(meta.userNote),
+    problem: metaString(meta.problem),
     campaignName: metaString(meta.campaignName),
     actionCreatedBy: metaString(meta.actionCreatedBy),
     actionCreatedByEmail: metaString(meta.actionCreatedByEmail),

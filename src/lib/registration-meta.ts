@@ -10,6 +10,7 @@ export type PatientRegistrationMeta = {
   fullName?: string;
   alternatePhone?: string;
   appointmentCentre?: string;
+  problem?: string;
   country?: string;
   state?: string;
   district?: string;
@@ -45,6 +46,7 @@ export function buildPatientRegistrationPayload(data: RegistrationInput) {
     fullName: data.fullName ? String(data.fullName) : undefined,
     alternatePhone: data.alternatePhone ? String(data.alternatePhone) : undefined,
     appointmentCentre: data.appointmentCentre ? String(data.appointmentCentre) : undefined,
+    problem: data.problem ? String(data.problem) : undefined,
     country: data.country ? String(data.country) : undefined,
     state: data.state ? String(data.state) : undefined,
     district: data.district ? String(data.district) : undefined,
@@ -78,6 +80,7 @@ export function parsePatientRegistrationMeta(meta: unknown): PatientRegistration
     fullName: row.fullName ? String(row.fullName) : undefined,
     alternatePhone: row.alternatePhone ? String(row.alternatePhone) : undefined,
     appointmentCentre: row.appointmentCentre ? String(row.appointmentCentre) : undefined,
+    problem: row.problem ? String(row.problem) : undefined,
     country: row.country ? String(row.country) : undefined,
     state: row.state ? String(row.state) : undefined,
     district: row.district ? String(row.district) : undefined,
