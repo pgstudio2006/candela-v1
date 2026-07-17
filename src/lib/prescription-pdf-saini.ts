@@ -32,7 +32,7 @@ const PAGE = { width: 595.2, height: 841.9 };
 const LAYOUT = {
   marginLeft: 155,
   marginRight: 575,
-  contentTop: 370,
+  contentTop: 714,
   minRowHeight: 18,
   lineLeading: 11,
   footerMinY: 90,
@@ -41,7 +41,7 @@ const LAYOUT = {
 } as const;
 
 /** Cleared area that replaces the pre-printed patient info block on the first page. */
-const PATIENT_INFO_RECT = { x: 145, y: 405, width: 435, height: 220 };
+const PATIENT_INFO_RECT = { x: 145, y: 380, width: 440, height: 350 };
 
 const EXAM_FIELD_LABELS: Record<string, string> = Object.fromEntries(
   DOCTOR_EXAMINATION_SCHEMA.sections.flatMap((section) =>
@@ -223,7 +223,84 @@ function drawPrescriptionContent(
 ): void {
   const ctx: PageContext = { page: startPage, y: startY };
   const infoWidth = LAYOUT.marginRight - LAYOUT.marginLeft;
-  const { consult, doctorName } = props;
+  const { consult, doctorName, patient } = props;
+
+  const date = formatConsultDate(consult.completedAt ?? consult.startedAt ?? new Date().toISOString());
+  const bp = String(consult.examination?.vitalsBp ?? "");
+  const pr = String(consult.examination?.vitalsPulse ?? "");
+  const weight = String(consult.examination?.vitalsWeight ?? "");
+  const spo2 = String(consult.examination?.vitalsSpo2 ?? "");
+  const temperature = String(consult.examination?.vitalsTemperature ?? "");
+  const allergies = String(consult.examination?.allergies ?? "");
+
+  // 0. Patient Information
+  ensureSpace(ctx, pdfDoc, image, 24);
+  drawText(ctx.page, "Patient Information", LAYOUT.marginLeft, ctx.y, bold, FONT.title);
+  ctx.y -= 16;
+  drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
+  ctx.y -= 12;
+
+  const col1 = LAYOUT.marginLeft;
+  const col2 = LAYOUT.marginLeft + 225;
+  const rowH = 16;
+
+  drawText(ctx.page, `Name: ${patient.name}`, col1, ctx.y, bold, FONT.body);
+  drawText(ctx.page, `Date: ${date}`, col2, ctx.y, font, FONT.body);
+  ctx.y -= rowH;
+
+  drawText(ctx.page, `Age/Sex: ${resolvePatientAge(patient.age, patient.dateOfBirth) || "--"}y / ${patient.gender || "--"}`, col1, ctx.y, font, FONT.body);
+  drawText(ctx.page, `Mobile: ${patient.phone || "--"}`, col2, ctx.y, font, FONT.body);
+  ctx.y -= rowH;
+
+  drawText(ctx.page, `City: ${patient.city || "--"}`, col1, ctx.y, font, FONT.body);
+  drawText(ctx.page, `BP: ${bp || "--"}`, col2, ctx.y, font, FONT.body);
+  ctx.y -= rowH;
+
+  drawText(ctx.page, `Weight: ${weight ? weight + " kg" : "--"}`, col1, ctx.y, font, FONT.body);
+  drawText(ctx.page, `Pulse: ${pr || "--"}`, col2, ctx.y, font, FONT.body);
+  ctx.y -= rowH;
+
+  drawText(ctx.page, `SpO2: ${spo2 ? spo2 + "%" : "--"}`, col1, ctx.y, font, FONT.body);
+  drawText(ctx.page, `Temp: ${temperature ? temperature + " F" : "--"}`, col2, ctx.y, font, FONT.body);
+  ctx.y -= rowH;
+
+  // Allergies
+  const allergiesLabel = "Allergies:";
+  drawText(ctx.page, allergiesLabel, col1, ctx.y, bold, FONT.body);
+  drawText(ctx.page, allergies || "None", col1 + bold.widthOfTextAtSize(allergiesLabel, FONT.body) + 8, ctx.y, font, FONT.body);
+  ctx.y -= rowH;
+
+  // Chronic conditions with Yes/No checkboxes
+  function isYes(value: unknown): boolean {
+    return value === true || value === "Yes" || value === "yes";
+  }
+  function isNo(value: unknown): boolean {
+    return value === false || value === "No" || value === "no";
+  }
+
+  const conditions = [
+    { label: "Diabetes:", keys: ["diabetes"] as const },
+    { label: "Thyroid:", keys: ["thyroidDisorder", "thyroid"] as const },
+    { label: "Hypertension:", keys: ["hypertension"] as const },
+  ] as const;
+  for (const { label, keys } of conditions) {
+    const value = keys.map((k) => consult.examination?.[k]).find((v) => !isEmptyValue(v));
+    const yesChecked = isYes(value);
+    const noChecked = isNo(value);
+    drawText(ctx.page, label, col1, ctx.y, bold, FONT.body);
+    drawYesNoPair(
+      ctx.page,
+      col1 + bold.widthOfTextAtSize(label, FONT.body) + 8,
+      ctx.y,
+      font,
+      FONT.body,
+      yesChecked,
+      noChecked,
+    );
+    ctx.y -= rowH;
+  }
+
+  ctx.y -= LAYOUT.paragraphGap;
 
   // 1. Chief Complaints
   const chiefComplaint = String(consult.examination?.chiefComplaint ?? "").trim();
@@ -447,8 +524,6 @@ function drawPrescriptionContent(
 }
 
 export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<Uint8Array> {
-  const { patient, visit, consult, doctorName } = props;
-
   const imageBytes = await fetch(SAINI_IMAGE_URL).then((res) => {
     if (!res.ok) throw new Error("Saini letterhead image not found.");
     return res.arrayBuffer();
@@ -462,9 +537,7 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const date = formatConsultDate(consult.completedAt ?? consult.startedAt ?? new Date().toISOString());
-
-  // White-out the pre-printed patient info block on the first page.
+  // White-out the pre-printed patient info block on the first page only.
   page.drawRectangle({
     x: PATIENT_INFO_RECT.x,
     y: PATIENT_INFO_RECT.y,
@@ -475,76 +548,7 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
     borderWidth: 0.5,
   });
 
-  // Draw system patient info inside the cleared area.
-  let infoY = PATIENT_INFO_RECT.y + PATIENT_INFO_RECT.height - 16;
-  const col1 = PATIENT_INFO_RECT.x + 12;
-  const col2 = PATIENT_INFO_RECT.x + 225;
-  const rowH = 20;
-
-  const bp = String(consult.examination?.vitalsBp ?? "");
-  const pr = String(consult.examination?.vitalsPulse ?? "");
-  const weight = String(consult.examination?.vitalsWeight ?? "");
-  const spo2 = String(consult.examination?.vitalsSpo2 ?? "");
-  const temperature = String(consult.examination?.vitalsTemperature ?? "");
-  const allergies = String(consult.examination?.allergies ?? "");
-
-  drawText(page, "Patient Information", col1, infoY, bold, FONT.title);
-  infoY -= 18;
-
-  drawText(page, `Name: ${patient.name}`, col1, infoY, bold, FONT.body);
-  drawText(page, `Date: ${date}`, col2, infoY, font, FONT.body);
-  infoY -= rowH;
-
-  drawText(page, `Age/Sex: ${resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y / ${patient.gender || "—"}`, col1, infoY, font, FONT.body);
-  drawText(page, `Mobile: ${patient.phone || "—"}`, col2, infoY, font, FONT.body);
-  infoY -= rowH;
-
-  drawText(page, `City: ${patient.city || "—"}`, col1, infoY, font, FONT.body);
-  drawText(page, `BP: ${bp || "—"}`, col2, infoY, font, FONT.body);
-  infoY -= rowH;
-
-  drawText(page, `Weight: ${weight ? weight + " kg" : "—"}`, col1, infoY, font, FONT.body);
-  drawText(page, `Pulse: ${pr || "—"}`, col2, infoY, font, FONT.body);
-  infoY -= rowH;
-
-  drawText(page, `SpO2: ${spo2 ? spo2 + "%" : "—"}`, col1, infoY, font, FONT.body);
-  drawText(page, `Temp: ${temperature ? temperature + " F" : "—"}`, col2, infoY, font, FONT.body);
-  infoY -= rowH;
-
-  const allergiesLabel = "Allergies:";
-  drawText(page, allergiesLabel, col1, infoY, bold, FONT.body);
-  drawText(page, allergies || "None", col1 + bold.widthOfTextAtSize(allergiesLabel, FONT.body) + 8, infoY, font, FONT.body);
-  infoY -= rowH;
-
-  function isYes(value: unknown): boolean {
-    return value === true || value === "Yes" || value === "yes";
-  }
-  function isNo(value: unknown): boolean {
-    return value === false || value === "No" || value === "no";
-  }
-
-  const conditions = [
-    { label: "Diabetes:", keys: ["diabetes"] as const },
-    { label: "Thyroid disorder:", keys: ["thyroidDisorder", "thyroid"] as const },
-    { label: "Hypertension:", keys: ["hypertension"] as const },
-  ] as const;
-  for (const { label, keys } of conditions) {
-    const value = keys.map((k) => consult.examination?.[k]).find((v) => !isEmptyValue(v));
-    const yesChecked = isYes(value);
-    const noChecked = isNo(value);
-    drawText(page, label, col1, infoY, bold, FONT.body);
-    drawYesNoPair(
-      page,
-      col1 + bold.widthOfTextAtSize(label, FONT.body) + 8,
-      infoY,
-      font,
-      FONT.body,
-      yesChecked,
-      noChecked,
-    );
-    infoY -= rowH;
-  }
-
+  // All content (patient info + prescription) flows from top of cleared area.
   drawPrescriptionContent(pdfDoc, image, page, props, LAYOUT.contentTop, font, bold);
 
   return pdfDoc.save();
