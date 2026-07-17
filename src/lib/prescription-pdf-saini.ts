@@ -16,7 +16,7 @@ import {
   wrapText,
 } from "@/lib/prescription-pdf-shared";
 
-const SAINI_IMAGE_URL = "/templates/Letterhead Dr. Sunil Saini.jpg.jpeg";
+const SAINI_IMAGE_URL = "/templates/ChatGPT Image Jul 17, 2026, 04_04_43 PM.png";
 
 const FONT = {
   ...BASE_FONT,
@@ -229,15 +229,12 @@ function drawPrescriptionContent(
   const date = formatConsultDate(consult.completedAt ?? consult.startedAt ?? new Date().toISOString());
   const bp = String(consult.examination?.vitalsBp ?? "");
   const pr = String(consult.examination?.vitalsPulse ?? "");
-  const weight = String(consult.examination?.vitalsWeight ?? "");
-  const spo2 = String(consult.examination?.vitalsSpo2 ?? "");
-  const temperature = String(consult.examination?.vitalsTemperature ?? "");
   const allergies = String(consult.examination?.allergies ?? "");
 
-  const panelLeft = 42;
+  const panelLeft = 242;
   const panelRight = 562;
   const panelTop = 518;
-  const panelBottom = 284;
+  const panelBottom = 280;
 
   // Clear the pre-printed middle block so we can render our own data cleanly.
   ctx.page.drawRectangle({
@@ -248,56 +245,49 @@ function drawPrescriptionContent(
     color: COLORS.white,
   });
 
-  const colLeft = panelLeft + 4;
-  const colMid = 320;
-  const valueOffset = 92;
+  const leftLabelX = panelLeft + 10;
+  const leftValueX = panelLeft + 95;
+  const rightLabelX = panelLeft + 185;
+  const rightValueX = panelLeft + 270;
   const lineGap = 22;
   let panelY = panelTop - 20;
 
-  drawText(ctx.page, "PATIENT DETAILS", colLeft, panelY, bold, FONT.tableHead);
-  drawHLine(ctx.page, colLeft, panelRight - 4, panelY - 7);
+  drawText(ctx.page, "PATIENT DETAILS", leftLabelX, panelY, bold, FONT.tableHead);
+  drawHLine(ctx.page, leftLabelX, panelRight - 6, panelY - 7);
   panelY -= 18;
 
-  drawText(ctx.page, "Patient Name:", colLeft, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, patient.name, font, FONT.body, 330);
+  drawText(ctx.page, "Patient Name:", leftLabelX, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, leftValueX, panelY, patient.name, font, FONT.body, 255);
   panelY -= lineGap;
 
-  drawText(ctx.page, "Age/Sex:", colLeft, panelY, font, FONT.body);
+  drawText(ctx.page, "Age/Sex:", leftLabelX, panelY, font, FONT.body);
   drawPatientValue(
     ctx.page,
-    colLeft + valueOffset,
+    leftValueX,
     panelY,
     `${resolvePatientAge(patient.age, patient.dateOfBirth) || "--"} / ${patient.gender || "--"}`,
     font,
     FONT.body,
-    120,
+    95,
   );
-  drawText(ctx.page, "Mobile No.:", colMid, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colMid + 80, panelY, patient.phone || "--", font, FONT.body, 100);
+  drawText(ctx.page, "Mobile No.:", rightLabelX, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, rightValueX, panelY, patient.phone || "--", font, FONT.body, 90);
   panelY -= lineGap;
 
-  drawText(ctx.page, "City:", colLeft, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, patient.city || "--", font, FONT.body, 250);
-  drawText(ctx.page, "Date:", colMid, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colMid + 80, panelY, date, font, FONT.body, 100);
+  drawText(ctx.page, "City:", leftLabelX, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, leftValueX, panelY, patient.city || "--", font, FONT.body, 255);
+  drawText(ctx.page, "Date:", rightLabelX, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, rightValueX, panelY, date, font, FONT.body, 90);
   panelY -= lineGap;
 
-  drawText(ctx.page, "BP:", colLeft, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, bp || "--", font, FONT.body, 120);
-  drawText(ctx.page, "PR:", colMid, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colMid + 80, panelY, pr || "--", font, FONT.body, 100);
+  drawText(ctx.page, "BP:", leftLabelX, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, leftValueX, panelY, bp || "--", font, FONT.body, 80);
+  drawText(ctx.page, "PR:", rightLabelX, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, rightValueX, panelY, pr || "--", font, FONT.body, 90);
   panelY -= lineGap;
 
-  drawText(ctx.page, "Weight:", colLeft, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, weight ? `${weight} kg` : "--", font, FONT.body, 120);
-  drawText(ctx.page, "SpO2:", colMid, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colMid + 80, panelY, spo2 ? `${spo2}%` : "--", font, FONT.body, 100);
-  panelY -= lineGap;
-
-  drawText(ctx.page, "Temp:", colLeft, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, temperature ? `${temperature} F` : "--", font, FONT.body, 120);
-  drawText(ctx.page, "Allergy:", colMid, panelY, font, FONT.body);
-  drawPatientValue(ctx.page, colMid + 80, panelY, allergies && allergies.trim() ? allergies.trim() : "None", font, FONT.body, 150);
+  drawText(ctx.page, "Allergy:", leftLabelX, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, leftValueX, panelY, allergies && allergies.trim() ? allergies.trim() : "None", font, FONT.body, 255);
   panelY -= lineGap + 2;
 
   function isYes(value: unknown): boolean {
@@ -313,9 +303,9 @@ function drawPrescriptionContent(
     { label: "Hypertension", keys: ["hypertension"] as const, y: panelY - lineGap * 2 },
   ] as const;
 
-  const checkboxYesX = colLeft + 102;
-  const checkboxNoX = colLeft + 138;
-  const conditionLabelX = colLeft;
+  const checkboxYesX = leftLabelX + 105;
+  const checkboxNoX = leftLabelX + 145;
+  const conditionLabelX = leftLabelX;
 
   for (const { label, keys, y } of conditions) {
     const value = keys.map((k) => consult.examination?.[k]).find((v) => !isEmptyValue(v));
@@ -327,7 +317,7 @@ function drawPrescriptionContent(
     drawCheckbox(ctx.page, checkboxNoX, y, 7, noChecked);
     drawText(ctx.page, "No", checkboxNoX + 12, y, font, FONT.body);
   }
-  ctx.y = panelBottom - 18;
+  ctx.y = panelBottom - 112;
 
   // 1. Chief Complaints
   const chiefComplaint = String(consult.examination?.chiefComplaint ?? "").trim();
@@ -568,7 +558,9 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([PAGE.width, PAGE.height]);
-  const image = await pdfDoc.embedJpg(imageBytes);
+  const image = SAINI_IMAGE_URL.toLowerCase().endsWith(".png")
+    ? await pdfDoc.embedPng(imageBytes)
+    : await pdfDoc.embedJpg(imageBytes);
   page.drawImage(image, { x: 0, y: 0, width: PAGE.width, height: PAGE.height });
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
