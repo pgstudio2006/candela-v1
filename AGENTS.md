@@ -385,6 +385,88 @@ A follow-up sprint integrated the doctor module with pharmacy inventory and made
 
 ---
 
+## Workflows
+
+This section lists all end-to-end workflows in Candela. Detailed process steps for the core clinical flows are in [Key business flows](#5-key-business-flows) above.
+
+### Clinical workflows
+
+- **OPD visit lifecycle** (5.1)
+  - Frontdesk registers a `Patient` and `OpdVisit` → junior exam/MSK → doctor `completeConsultation` (`src/server/doctor/index.ts`) → counselling, pharmacy, or discharge → `processBilling` (`src/server/clinical/index.ts`).
+  - `Invoice.visitId` is **not** unique; each payment event creates a new invoice (`createVisitInvoice` in `src/server/invoicing.ts`).
+
+- **Counsellor → IPD conversion** (5.2)
+  - Counsellor package quote → approval → `processCounselBilling` (`src/server/clinical/index.ts`) → `BillingHandoff` + `NursingHandoff` → optional `IpdAdmission`.
+
+- **Direct IPD admission** (5.3)
+  - Frontdesk bed map → `admitPatient` (`src/server/ipd/index.ts`) → `OpdVisit` with `treatmentPath=ipd` → `IpdAdmission` + `NursingHandoff` → auto-assigned `NursingEpisode` if a matching on-duty nurse exists.
+
+- **Doctor → IPD handoff** (5.4)
+  - `completeConsultation` with `treatmentMode=ipd` → `ensureIpdWardBed` → `IpdAdmission` + unconditional `NursingHandoff`.
+
+- **Nurse workflow** (5.5)
+  - Nurse queue (`getNurseSnapshot` in `src/server/nurse/index.ts`) → `claimEpisode` → vitals, consent, sessions, tasks → `IpdRoundLog` (`writeIpdRoundLog`) → discharge.
+
+- **IPD billing** (5.6)
+  - Service cart in `IpdAdmission.cart` + IPD pharmacy charges (`getIpdPharmacyCharges` in `src/server/ipd/index.ts`) → `processBilling` / `generateIpdFinalBill` → per-transaction invoices.
+
+### Module workflows
+
+- **Pharmacy dispense**
+  - Doctor prescription (`DoctorDrugSearch` in `src/components/doctor/doctor-drug-search.tsx`) → prescription pushed to pharmacy → pharmacy verifies/dispenses → `processBilling` (pharmacy invoice).
+
+- **IPD medication orders**
+  - `IpdRoundWorkspace` structured medication lines → `saveIpdRound` → pharmacy prescription with `source=ipd` → dispense/bill.
+
+- **CRM / leads**
+  - Online/offline lead capture → `bookAppointment` (`src/server/crm/online-counsellor.ts`) or `offline-lead` route → visit bridge updates lead status (`src/server/crm/visit-bridge.ts`).
+
+- **Admin / master data**
+  - Wards, beds, IPD round config, geo pins, roles, permissions, staff roster (`/app/admin`, `src/server/admin/`, `src/server/hr/`).
+
+- **HR**
+  - Staff, shifts, leave, attendance, payroll — scaffolded/partial.
+
+- **Emergency**
+  - Scaffolded in `src/server/emergency/` and `/app/frontdesk/emergency`; not yet fully wired.
+
+### Integration workflows (in progress)
+
+- **WhatsApp / Meta OAuth (per branch)**
+  - `GET /api/auth/meta/connect` starts Meta OAuth.
+  - `GET /api/auth/meta/callback` exchanges code and stores `BranchMetaConnection` (access token, refresh token, WABA ID, phone number ID).
+
+- **Inbound WhatsApp webhooks**
+  - `POST /api/hooks/whatsapp` receives `messages`, `message_deliveries`, `message_reads` and logs conversations.
+
+- **Meta Lead Ads webhooks**
+  - `POST /api/hooks/meta` receives `leadgen` events and creates/updates CRM leads.
+
+- **WhatsApp outbound**
+  - `sendWhatsApp` / `sendWhatsAppAsync` (`src/server/whatsapp/service.ts`) use the stored per-branch token and templates in `src/server/whatsapp/service.ts`.
+
+### Development workflows
+
+- **Local setup** (from repo root)
+  ```bash
+  npm install
+  npx prisma generate
+  npx prisma db push
+  npm run db:seed
+  npm run dev
+  ```
+
+- **Post-change validation**
+  ```bash
+  npx prisma generate
+  npm run build
+  # or, for a faster TypeScript-only check:
+  npx tsc --noEmit
+  ```
+
+- **Scenario testing**
+  - Run end-to-end flows on staging tenant `os.candela.adrine.in` using branch-specific test credentials and synthetic patients (e.g., `AutoTest`, `AutoTest2`).
+
 ## 7. Developer commands
 
 Run everything from repo root (`candela/`):

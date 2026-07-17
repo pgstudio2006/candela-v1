@@ -1,6 +1,7 @@
 import { PDFDocument, PDFImage, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
+import { DOCTOR_EXAMINATION_SCHEMA } from "@/design-system/doctor-schemas";
 import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import {
   COLORS,
@@ -41,6 +42,41 @@ const LAYOUT = {
 
 /** Cleared area that replaces the pre-printed patient info block on every page. */
 const PATIENT_INFO_RECT = { x: 140, y: 400, width: 440, height: 215 };
+
+const EXAM_FIELD_LABELS: Record<string, string> = Object.fromEntries(
+  DOCTOR_EXAMINATION_SCHEMA.sections.flatMap((section) =>
+    section.fields.map((field) => [field.id, field.label]),
+  ),
+);
+
+const SHOWN_IN_PATIENT_INFO = new Set([
+  "vitalsBp",
+  "vitalsPulse",
+  "vitalsWeight",
+  "vitalsSpo2",
+  "vitalsTemperature",
+  "allergies",
+  "diabetes",
+  "thyroidDisorder",
+  "hypertension",
+]);
+
+function formatFieldValue(value: string | number | boolean): string {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+}
+
+function isEmptyValue(value: unknown): boolean {
+  return value === undefined || value === null || value === "";
+}
+
+function humanizeKey(key: string): string {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
 
 type SainiProps = {
   patient: Patient;
@@ -129,6 +165,58 @@ function ensureSpace(
   }
 }
 
+function drawExaminationSection(
+  ctx: PageContext,
+  pdfDoc: PDFDocument,
+  image: PDFImage,
+  consult: ConsultationRecord,
+  font: PDFFont,
+  bold: PDFFont,
+): void {
+  const entries = Object.entries(consult.examination ?? {})
+    .filter(([key, value]) => !SHOWN_IN_PATIENT_INFO.has(key) && !isEmptyValue(value))
+    .sort(([a], [b]) => {
+      const order = Object.keys(EXAM_FIELD_LABELS);
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
+    });
+
+  if (entries.length === 0) return;
+
+  const infoWidth = LAYOUT.marginRight - LAYOUT.marginLeft;
+  const labelWidth = infoWidth * 0.35;
+  const valueX = LAYOUT.marginLeft + labelWidth + 8;
+
+  ensureSpace(ctx, pdfDoc, image, 24);
+  drawText(ctx.page, "Examination / Vitals", LAYOUT.marginLeft, ctx.y, bold, FONT.tableHead);
+  ctx.y -= 14;
+  drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
+  ctx.y -= 12;
+
+  for (const [key, value] of entries) {
+    const label = EXAM_FIELD_LABELS[key] ?? humanizeKey(key);
+    const text = formatFieldValue(value);
+    const labelLines = wrapText(`${label}:`, bold, FONT.body, labelWidth);
+    const valueLines = wrapText(text, font, FONT.body, infoWidth - labelWidth - 16);
+    const maxLines = Math.max(labelLines.length, valueLines.length);
+    const blockHeight = maxLines * LAYOUT.lineLeading + 6;
+
+    ensureSpace(ctx, pdfDoc, image, blockHeight);
+    const topY = ctx.y;
+    for (let i = 0; i < maxLines; i++) {
+      const y = topY - i * LAYOUT.lineLeading;
+      if (i < labelLines.length) drawText(ctx.page, labelLines[i], LAYOUT.marginLeft, y, bold, FONT.body);
+      if (i < valueLines.length) drawText(ctx.page, valueLines[i], valueX, y, font, FONT.body);
+    }
+    ctx.y -= blockHeight;
+  }
+  ctx.y -= LAYOUT.paragraphGap;
+}
+
 function drawPrescriptionContent(
   pdfDoc: PDFDocument,
   image: PDFImage,
@@ -158,21 +246,23 @@ function drawPrescriptionContent(
     ctx.y -= LAYOUT.paragraphGap;
   }
 
+  // Examination
+  drawExaminationSection(ctx, pdfDoc, image, consult, font, bold);
+
   // Medications
-  const colX = [
+  const medColX = [
     LAYOUT.marginLeft,
-    LAYOUT.marginLeft + 20,
-    LAYOUT.marginLeft + 150,
-    LAYOUT.marginLeft + 190,
-    LAYOUT.marginLeft + 250,
-    LAYOUT.marginLeft + 300,
+    LAYOUT.marginLeft + 25,
+    LAYOUT.marginLeft + 170,
+    LAYOUT.marginLeft + 270,
   ];
 
-  const medWidth = colX[2] - colX[1] - 6;
-  const doseWidth = colX[3] - colX[2] - 6;
-  const freqWidth = colX[4] - colX[3] - 6;
-  const durWidth = colX[5] - colX[4] - 6;
-  const instWidth = LAYOUT.marginRight - colX[5] - 6;
+  const medColWidths = [
+    medColX[1] - medColX[0] - 6,
+    medColX[2] - medColX[1] - 6,
+    medColX[3] - medColX[2] - 6,
+    LAYOUT.marginRight - medColX[3] - 6,
+  ];
 
   ensureSpace(ctx, pdfDoc, image, 52);
   drawText(ctx.page, "℞ Medications", LAYOUT.marginLeft, ctx.y, bold, FONT.emphasis);
@@ -180,43 +270,34 @@ function drawPrescriptionContent(
 
   drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
   ctx.y -= 12;
-  drawText(ctx.page, "#", colX[0], ctx.y, bold, FONT.tableHead);
-  drawText(ctx.page, "Medicine", colX[1], ctx.y, bold, FONT.tableHead);
-  drawText(ctx.page, "Dose", colX[2], ctx.y, bold, FONT.tableHead);
-  drawText(ctx.page, "Frequency", colX[3], ctx.y, bold, FONT.tableHead);
-  drawText(ctx.page, "Duration", colX[4], ctx.y, bold, FONT.tableHead);
-  drawText(ctx.page, "Instructions", colX[5], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "#", medColX[0], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "Medicine", medColX[1], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "Dosage", medColX[2], ctx.y, bold, FONT.tableHead);
+  drawText(ctx.page, "Instructions", medColX[3], ctx.y, bold, FONT.tableHead);
   ctx.y -= 16;
   drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
   ctx.y -= 10;
 
   if (!consult.prescription?.length) {
     ensureSpace(ctx, pdfDoc, image, 20);
-    drawText(ctx.page, "No medicines prescribed", colX[1], ctx.y, font, FONT.table);
+    drawText(ctx.page, "No medicines prescribed", medColX[1], ctx.y, font, FONT.table);
     ctx.y -= 20;
     drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
     ctx.y -= 6;
   } else {
     consult.prescription.forEach((line, i) => {
       const medicine = line.drug || "—";
-      const dose = line.dose || "—";
-      const frequency = formatFrequency(line.frequency);
-      const duration = formatDuration(line);
+      const dosageParts = [line.dose, formatFrequency(line.frequency), formatDuration(line)].filter(
+        (part) => part && part !== "—",
+      );
+      const dosage = dosageParts.length ? dosageParts.join(" — ") : "—";
       const instructions = line.instructions?.trim() || "—";
 
-      const medLines = wrapText(medicine, font, FONT.table, medWidth);
-      const doseLines = wrapText(dose, font, FONT.table, doseWidth);
-      const freqLines = wrapText(frequency, font, FONT.table, freqWidth);
-      const durLines = wrapText(duration, font, FONT.table, durWidth);
-      const instLines = wrapText(instructions, font, FONT.table, instWidth);
+      const medLines = wrapText(medicine, font, FONT.table, medColWidths[1]);
+      const doseLines = wrapText(dosage, font, FONT.table, medColWidths[2]);
+      const instLines = wrapText(instructions, font, FONT.table, medColWidths[3]);
 
-      const maxLines = Math.max(
-        medLines.length,
-        doseLines.length,
-        freqLines.length,
-        durLines.length,
-        instLines.length,
-      );
+      const maxLines = Math.max(medLines.length, doseLines.length, instLines.length);
       const rowHeight = Math.max(LAYOUT.minRowHeight, maxLines * LAYOUT.lineLeading + 4);
 
       ensureSpace(ctx, pdfDoc, image, rowHeight + 4);
@@ -224,13 +305,11 @@ function drawPrescriptionContent(
       const rowTop = ctx.y;
       for (let idx = 0; idx < maxLines; idx++) {
         const lineY = rowTop - idx * LAYOUT.lineLeading;
-        if (idx < medLines.length) drawText(ctx.page, medLines[idx], colX[1], lineY, font, FONT.table);
-        if (idx < doseLines.length) drawText(ctx.page, doseLines[idx], colX[2], lineY, font, FONT.table);
-        if (idx < freqLines.length) drawText(ctx.page, freqLines[idx], colX[3], lineY, font, FONT.table);
-        if (idx < durLines.length) drawText(ctx.page, durLines[idx], colX[4], lineY, font, FONT.table);
-        if (idx < instLines.length) drawText(ctx.page, instLines[idx], colX[5], lineY, font, FONT.table);
+        if (idx < medLines.length) drawText(ctx.page, medLines[idx], medColX[1], lineY, font, FONT.table);
+        if (idx < doseLines.length) drawText(ctx.page, doseLines[idx], medColX[2], lineY, font, FONT.table);
+        if (idx < instLines.length) drawText(ctx.page, instLines[idx], medColX[3], lineY, font, FONT.table);
       }
-      drawText(ctx.page, String(i + 1), colX[0], rowTop, font, FONT.table);
+      drawText(ctx.page, String(i + 1), medColX[0], rowTop, font, FONT.table);
 
       ctx.y -= rowHeight;
       drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
@@ -321,6 +400,10 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
 
   const bp = String(consult.examination?.vitalsBp ?? "");
   const pr = String(consult.examination?.vitalsPulse ?? "");
+  const weight = String(consult.examination?.vitalsWeight ?? "");
+  const spo2 = String(consult.examination?.vitalsSpo2 ?? "");
+  const temperature = String(consult.examination?.vitalsTemperature ?? "");
+  const allergies = String(consult.examination?.allergies ?? "");
 
   drawText(page, "Patient Information", col1, infoY, bold, FONT.title);
   infoY -= 18;
@@ -337,25 +420,31 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   drawText(page, `BP: ${bp || "—"}`, col2, infoY, font, FONT.body);
   infoY -= rowH;
 
-  const allergyLabel = "Allergies:";
-  drawText(page, allergyLabel, col1, infoY, bold, FONT.body);
-  drawYesNoPair(page, col1 + bold.widthOfTextAtSize(allergyLabel, FONT.body) + 8, infoY, font, FONT.body);
+  drawText(page, `Weight: ${weight ? weight + " kg" : "—"}`, col1, infoY, font, FONT.body);
   drawText(page, `PR: ${pr || "—"}`, col2, infoY, font, FONT.body);
   infoY -= rowH;
 
-  const diabetesLabel = "Diabetes:";
-  drawText(page, diabetesLabel, col1, infoY, bold, FONT.body);
-  drawYesNoPair(page, col1 + bold.widthOfTextAtSize(diabetesLabel, FONT.body) + 8, infoY, font, FONT.body);
+  drawText(page, `SpO₂: ${spo2 ? spo2 + "%" : "—"}`, col1, infoY, font, FONT.body);
+  drawText(page, `Temperature: ${temperature ? temperature + " °F" : "—"}`, col2, infoY, font, FONT.body);
   infoY -= rowH;
 
-  const thyroidLabel = "Thyroid disorder:";
-  drawText(page, thyroidLabel, col1, infoY, bold, FONT.body);
-  drawYesNoPair(page, col1 + bold.widthOfTextAtSize(thyroidLabel, FONT.body) + 8, infoY, font, FONT.body);
+  const allergiesLabel = "Allergies:";
+  drawText(page, allergiesLabel, col1, infoY, bold, FONT.body);
+  drawText(page, allergies || "None", col1 + bold.widthOfTextAtSize(allergiesLabel, FONT.body) + 8, infoY, font, FONT.body);
   infoY -= rowH;
 
-  const hypertensionLabel = "Hypertension:";
-  drawText(page, hypertensionLabel, col1, infoY, bold, FONT.body);
-  drawYesNoPair(page, col1 + bold.widthOfTextAtSize(hypertensionLabel, FONT.body) + 8, infoY, font, FONT.body);
+  const conditions = [
+    { label: "Diabetes:", key: "diabetes" },
+    { label: "Thyroid disorder:", key: "thyroidDisorder" },
+    { label: "Hypertension:", key: "hypertension" },
+  ] as const;
+  for (const { label, key } of conditions) {
+    const value = consult.examination?.[key];
+    const status = isEmptyValue(value) ? "—" : formatFieldValue(value);
+    drawText(page, label, col1, infoY, bold, FONT.body);
+    drawText(page, status, col1 + bold.widthOfTextAtSize(label, FONT.body) + 8, infoY, font, FONT.body);
+    infoY -= rowH;
+  }
 
   drawPrescriptionContent(pdfDoc, image, page, props, LAYOUT.contentTop, font, bold);
 
