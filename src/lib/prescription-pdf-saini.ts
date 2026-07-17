@@ -1,4 +1,4 @@
-import { PDFDocument, PDFImage, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, PDFImage, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
 import { DOCTOR_EXAMINATION_SCHEMA } from "@/design-system/doctor-schemas";
@@ -12,6 +12,7 @@ import {
   formatConsultDate,
   formatDuration,
   formatFrequency,
+  pdfSafeText,
   wrapText,
 } from "@/lib/prescription-pdf-shared";
 
@@ -30,18 +31,15 @@ const FONT = {
 const PAGE = { width: 595.2, height: 841.9 };
 
 const LAYOUT = {
-  marginLeft: 50,
-  marginRight: 555,
-  contentTop: 720,
-  minRowHeight: 16,
-  lineLeading: 12,
-  footerMinY: 80,
-  sectionGap: 12,
+  marginLeft: 148,
+  marginRight: 560,
+  contentTop: 515,
+  minRowHeight: 14,
+  lineLeading: 11,
+  footerMinY: 110,
+  sectionGap: 10,
   paragraphGap: 8,
 } as const;
-
-/** Cleared area — white-out the pre-printed patient info block on the first page. */
-const PATIENT_INFO_RECT = { x: 40, y: 370, width: 520, height: 380 };
 
 const EXAM_FIELD_LABELS: Record<string, string> = Object.fromEntries(
   DOCTOR_EXAMINATION_SCHEMA.sections.flatMap((section) =>
@@ -119,25 +117,16 @@ function drawCheckbox(page: PDFPage, x: number, y: number, size = 7, checked = f
   }
 }
 
-function drawYesNoPair(
-  page: PDFPage,
-  x: number,
-  y: number,
-  font: PDFFont,
-  size: number,
-  yesChecked = false,
-  noChecked = false,
-) {
-  const boxSize = 7;
-  const spacing = 4;
-  let cx = x;
-  drawCheckbox(page, cx, y, boxSize, yesChecked);
-  cx += boxSize + 2;
-  drawText(page, "Yes", cx, y, font, size);
-  cx += font.widthOfTextAtSize("Yes", size) + spacing;
-  drawCheckbox(page, cx, y, boxSize, noChecked);
-  cx += boxSize + 2;
-  drawText(page, "No", cx, y, font, size);
+function fitSingleLine(text: string, font: PDFFont, size: number, maxWidth: number): string {
+  const safe = text.trim() ? pdfSafeText(text.trim()) : "--";
+  if (font.widthOfTextAtSize(safe, size) <= maxWidth) return safe;
+
+  const ellipsis = "...";
+  let end = safe.length;
+  while (end > 1 && font.widthOfTextAtSize(`${safe.slice(0, end)}${ellipsis}`, size) > maxWidth) {
+    end -= 1;
+  }
+  return `${safe.slice(0, Math.max(1, end)).trimEnd()}${ellipsis}`;
 }
 
 function addSainiPage(pdfDoc: PDFDocument, image: PDFImage): PDFPage {
@@ -158,6 +147,18 @@ function ensureSpace(
     return true;
   }
   return false;
+}
+
+function drawPatientValue(
+  page: PDFPage,
+  x: number,
+  y: number,
+  text: string,
+  font: PDFFont,
+  size: number,
+  maxWidth: number,
+) {
+  drawText(page, fitSingleLine(text, font, size, maxWidth), x, y, font, size);
 }
 
 function drawClinicalFindings(
@@ -233,43 +234,42 @@ function drawPrescriptionContent(
   const temperature = String(consult.examination?.vitalsTemperature ?? "");
   const allergies = String(consult.examination?.allergies ?? "");
 
-  // 0. Patient Information — compact 3-column grid
-  const col1 = LAYOUT.marginLeft;
-  const col2 = LAYOUT.marginLeft + 175;
-  const col3 = LAYOUT.marginLeft + 350;
-  const rowH = 14;
+  const leftValueX = LAYOUT.marginLeft + 58;
+  const midValueX = LAYOUT.marginLeft + 66;
+  const rightValueX = 446;
+  const rowH = 16;
+  const conditionRowYs = [ctx.y - 48, ctx.y - 64, ctx.y - 80, ctx.y - 96];
+  const yesBoxX = LAYOUT.marginLeft + 86;
+  const noBoxX = LAYOUT.marginLeft + 122;
 
-  drawText(ctx.page, "Patient Information", col1, ctx.y, bold, FONT.title);
-  ctx.y -= 14;
-  drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
-  ctx.y -= 10;
-
-  // Row 1: Name | Age/Sex | Date
-  drawText(ctx.page, `Name: ${patient.name}`, col1, ctx.y, bold, FONT.body);
-  drawText(ctx.page, `Age/Sex: ${resolvePatientAge(patient.age, patient.dateOfBirth) || "--"} / ${patient.gender || "--"}`, col2, ctx.y, font, FONT.body);
-  drawText(ctx.page, `Date: ${date}`, col3, ctx.y, font, FONT.body);
+  drawPatientValue(ctx.page, leftValueX, ctx.y, patient.name, font, FONT.body, 315);
+  drawPatientValue(
+    ctx.page,
+    midValueX,
+    ctx.y,
+    `${resolvePatientAge(patient.age, patient.dateOfBirth) || "--"} / ${patient.gender || "--"}`,
+    font,
+    FONT.body,
+    120,
+  );
+  drawPatientValue(ctx.page, rightValueX, ctx.y, date, font, FONT.body, 110);
   ctx.y -= rowH;
 
-  // Row 2: Mobile | City | BP
-  drawText(ctx.page, `Mobile: ${patient.phone || "--"}`, col1, ctx.y, font, FONT.body);
-  drawText(ctx.page, `City: ${patient.city || "--"}`, col2, ctx.y, font, FONT.body);
-  drawText(ctx.page, `BP: ${bp || "--"}`, col3, ctx.y, font, FONT.body);
+  drawPatientValue(ctx.page, leftValueX, ctx.y, patient.phone || "--", font, FONT.body, 170);
+  drawPatientValue(ctx.page, midValueX, ctx.y, patient.city || "--", font, FONT.body, 240);
+  drawPatientValue(ctx.page, rightValueX, ctx.y, bp || "--", font, FONT.body, 110);
   ctx.y -= rowH;
 
-  // Row 3: Weight | Pulse | SpO2
-  drawText(ctx.page, `Weight: ${weight ? weight + " kg" : "--"}`, col1, ctx.y, font, FONT.body);
-  drawText(ctx.page, `Pulse: ${pr || "--"}`, col2, ctx.y, font, FONT.body);
-  drawText(ctx.page, `SpO2: ${spo2 ? spo2 + "%" : "--"}`, col3, ctx.y, font, FONT.body);
+  drawPatientValue(ctx.page, leftValueX, ctx.y, weight ? `${weight} kg` : "--", font, FONT.body, 170);
+  drawPatientValue(ctx.page, midValueX, ctx.y, pr || "--", font, FONT.body, 90);
+  drawPatientValue(ctx.page, rightValueX, ctx.y, spo2 ? `${spo2}%` : "--", font, FONT.body, 100);
   ctx.y -= rowH;
 
-  // Row 4: Temp | Allergies | (empty)
-  drawText(ctx.page, `Temp: ${temperature ? temperature + " F" : "--"}`, col1, ctx.y, font, FONT.body);
-  const allergiesLabel = "Allergies:";
-  drawText(ctx.page, allergiesLabel, col2, ctx.y, bold, FONT.body);
-  drawText(ctx.page, allergies || "None", col2 + bold.widthOfTextAtSize(allergiesLabel, FONT.body) + 6, ctx.y, font, FONT.body);
+  drawPatientValue(ctx.page, leftValueX, ctx.y, temperature ? `${temperature} F` : "--", font, FONT.body, 170);
+  const allergiesValue = allergies && allergies.trim() ? allergies.trim() : "None";
+  drawPatientValue(ctx.page, midValueX, ctx.y, allergiesValue, font, FONT.body, 240);
   ctx.y -= rowH;
 
-  // Row 5: Chronic conditions with Yes/No checkboxes (all 3 in one row)
   function isYes(value: unknown): boolean {
     return value === true || value === "Yes" || value === "yes";
   }
@@ -278,20 +278,25 @@ function drawPrescriptionContent(
   }
 
   const conditions = [
-    { label: "Diabetes", keys: ["diabetes"] as const, x: col1 },
-    { label: "Thyroid", keys: ["thyroidDisorder", "thyroid"] as const, x: col2 },
-    { label: "Hypertension", keys: ["hypertension"] as const, x: col3 },
+    { keys: ["diabetes"] as const, y: conditionRowYs[1] },
+    { keys: ["thyroidDisorder", "thyroid"] as const, y: conditionRowYs[2] },
+    { keys: ["hypertension"] as const, y: conditionRowYs[3] },
   ] as const;
-  for (const { label, keys, x } of conditions) {
+
+  const allergyValue = String(consult.examination?.allergies ?? "").trim();
+  const allergyYes = allergyValue !== "" && !/^none$/i.test(allergyValue) && !/^no$/i.test(allergyValue);
+  const allergyNo = !allergyYes;
+  drawCheckbox(ctx.page, yesBoxX, conditionRowYs[0], 7, allergyYes);
+  drawCheckbox(ctx.page, noBoxX, conditionRowYs[0], 7, allergyNo);
+
+  for (const { keys, y } of conditions) {
     const value = keys.map((k) => consult.examination?.[k]).find((v) => !isEmptyValue(v));
     const yesChecked = isYes(value);
     const noChecked = isNo(value);
-    drawText(ctx.page, `${label}:`, x, ctx.y, bold, FONT.body);
-    drawYesNoPair(ctx.page, x + bold.widthOfTextAtSize(`${label}:`, FONT.body) + 6, ctx.y, font, FONT.body, yesChecked, noChecked);
+    drawCheckbox(ctx.page, yesBoxX, y, 7, yesChecked);
+    drawCheckbox(ctx.page, noBoxX, y, 7, noChecked);
   }
-  ctx.y -= rowH;
-
-  ctx.y -= LAYOUT.paragraphGap;
+  ctx.y = conditionRowYs[3] - 28;
 
   // 1. Chief Complaints
   const chiefComplaint = String(consult.examination?.chiefComplaint ?? "").trim();
@@ -380,23 +385,23 @@ function drawPrescriptionContent(
   // 6. Prescription — 5 columns with proper proportions
   const medColX = [
     LAYOUT.marginLeft,           // #
-    LAYOUT.marginLeft + 20,      // Medicine
-    LAYOUT.marginLeft + 250,     // Dose
-    LAYOUT.marginLeft + 330,     // Frequency
-    LAYOUT.marginLeft + 420,     // Duration
+    LAYOUT.marginLeft + 22,      // Medicine
+    LAYOUT.marginLeft + 170,     // Dose
+    LAYOUT.marginLeft + 260,     // Frequency
+    LAYOUT.marginLeft + 350,     // Duration
   ];
 
   const medColWidths = [
     12,                          // #
-    medColX[2] - medColX[1] - 8, // Medicine (~222px)
-    medColX[3] - medColX[2] - 8, // Dose (~72px)
-    medColX[4] - medColX[3] - 8, // Frequency (~82px)
-    LAYOUT.marginRight - medColX[4] - 8, // Duration (~127px)
+    medColX[2] - medColX[1] - 8, // Medicine
+    medColX[3] - medColX[2] - 8, // Dose
+    medColX[4] - medColX[3] - 8, // Frequency
+    LAYOUT.marginRight - medColX[4] - 8, // Duration
   ];
 
   function drawMedicationHeader() {
     ensureSpace(ctx, pdfDoc, image, 48);
-    drawText(ctx.page, "\u211E", LAYOUT.marginLeft, ctx.y, bold, 14);
+    drawText(ctx.page, "Rx", LAYOUT.marginLeft, ctx.y, bold, 12);
     ctx.y -= 14;
     drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
     ctx.y -= 11;
@@ -538,16 +543,6 @@ export async function generateSainiPrescriptionPdf(props: SainiProps): Promise<U
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // White-out the pre-printed patient info block on the first page only (no border).
-  page.drawRectangle({
-    x: PATIENT_INFO_RECT.x,
-    y: PATIENT_INFO_RECT.y,
-    width: PATIENT_INFO_RECT.width,
-    height: PATIENT_INFO_RECT.height,
-    color: COLORS.white,
-  });
-
-  // All content (patient info + prescription) flows from top of cleared area.
   drawPrescriptionContent(pdfDoc, image, page, props, LAYOUT.contentTop, font, bold);
 
   return pdfDoc.save();
