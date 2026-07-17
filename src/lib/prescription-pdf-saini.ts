@@ -16,7 +16,7 @@ import {
   wrapText,
 } from "@/lib/prescription-pdf-shared";
 
-const SAINI_IMAGE_URL = "/templates/ChatGPT Image Jul 17, 2026, 04_04_43 PM.png";
+const SAINI_IMAGE_URL = "/templates/saini-letterhead.png";
 
 const FONT = {
   ...BASE_FONT,
