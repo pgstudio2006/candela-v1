@@ -229,36 +229,76 @@ function drawPrescriptionContent(
   const date = formatConsultDate(consult.completedAt ?? consult.startedAt ?? new Date().toISOString());
   const bp = String(consult.examination?.vitalsBp ?? "");
   const pr = String(consult.examination?.vitalsPulse ?? "");
+  const weight = String(consult.examination?.vitalsWeight ?? "");
+  const spo2 = String(consult.examination?.vitalsSpo2 ?? "");
+  const temperature = String(consult.examination?.vitalsTemperature ?? "");
   const allergies = String(consult.examination?.allergies ?? "");
 
-  const nameValueX = LAYOUT.marginLeft + 58;
-  const leftValueX = LAYOUT.marginLeft + 58;
-  const rightValueX = 445;
-  const rowH = 16;
-  const row1Y = ctx.y;
-  const row2Y = row1Y - rowH;
-  const row3Y = row2Y - rowH;
-  const row4Y = row3Y - rowH;
-  const row5Y = row4Y - rowH;
-  const row6Y = row5Y - rowH;
-  const row7Y = row6Y - rowH;
-  const yesBoxX = LAYOUT.marginLeft + 86;
-  const noBoxX = LAYOUT.marginLeft + 122;
+  const panelLeft = 42;
+  const panelRight = 562;
+  const panelTop = 518;
+  const panelBottom = 284;
 
-  drawPatientValue(ctx.page, nameValueX, row1Y, patient.name, font, FONT.body, 315);
+  // Clear the pre-printed middle block so we can render our own data cleanly.
+  ctx.page.drawRectangle({
+    x: panelLeft - 6,
+    y: panelBottom,
+    width: panelRight - panelLeft + 12,
+    height: panelTop - panelBottom,
+    color: COLORS.white,
+  });
+
+  const colLeft = panelLeft + 4;
+  const colMid = 320;
+  const valueOffset = 92;
+  const lineGap = 22;
+  let panelY = panelTop - 20;
+
+  drawText(ctx.page, "PATIENT DETAILS", colLeft, panelY, bold, FONT.tableHead);
+  drawHLine(ctx.page, colLeft, panelRight - 4, panelY - 7);
+  panelY -= 18;
+
+  drawText(ctx.page, "Patient Name:", colLeft, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, patient.name, font, FONT.body, 330);
+  panelY -= lineGap;
+
+  drawText(ctx.page, "Age/Sex:", colLeft, panelY, font, FONT.body);
   drawPatientValue(
     ctx.page,
-    leftValueX,
-    row2Y,
+    colLeft + valueOffset,
+    panelY,
     `${resolvePatientAge(patient.age, patient.dateOfBirth) || "--"} / ${patient.gender || "--"}`,
     font,
     FONT.body,
-    155,
+    120,
   );
-  drawPatientValue(ctx.page, rightValueX, row2Y, patient.phone || "--", font, FONT.body, 110);
+  drawText(ctx.page, "Mobile No.:", colMid, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colMid + 80, panelY, patient.phone || "--", font, FONT.body, 100);
+  panelY -= lineGap;
 
-  drawPatientValue(ctx.page, leftValueX, row3Y, patient.city || "--", font, FONT.body, 250);
-  drawPatientValue(ctx.page, rightValueX, row3Y, date, font, FONT.body, 110);
+  drawText(ctx.page, "City:", colLeft, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, patient.city || "--", font, FONT.body, 250);
+  drawText(ctx.page, "Date:", colMid, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colMid + 80, panelY, date, font, FONT.body, 100);
+  panelY -= lineGap;
+
+  drawText(ctx.page, "BP:", colLeft, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, bp || "--", font, FONT.body, 120);
+  drawText(ctx.page, "PR:", colMid, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colMid + 80, panelY, pr || "--", font, FONT.body, 100);
+  panelY -= lineGap;
+
+  drawText(ctx.page, "Weight:", colLeft, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, weight ? `${weight} kg` : "--", font, FONT.body, 120);
+  drawText(ctx.page, "SpO2:", colMid, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colMid + 80, panelY, spo2 ? `${spo2}%` : "--", font, FONT.body, 100);
+  panelY -= lineGap;
+
+  drawText(ctx.page, "Temp:", colLeft, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colLeft + valueOffset, panelY, temperature ? `${temperature} F` : "--", font, FONT.body, 120);
+  drawText(ctx.page, "Allergy:", colMid, panelY, font, FONT.body);
+  drawPatientValue(ctx.page, colMid + 80, panelY, allergies && allergies.trim() ? allergies.trim() : "None", font, FONT.body, 150);
+  panelY -= lineGap + 2;
 
   function isYes(value: unknown): boolean {
     return value === true || value === "Yes" || value === "yes";
@@ -268,28 +308,26 @@ function drawPrescriptionContent(
   }
 
   const conditions = [
-    { keys: ["diabetes"] as const, y: row5Y },
-    { keys: ["thyroidDisorder", "thyroid"] as const, y: row6Y },
-    { keys: ["hypertension"] as const, y: row7Y },
+    { label: "Diabetes", keys: ["diabetes"] as const, y: panelY },
+    { label: "Thyroid Disorder", keys: ["thyroidDisorder", "thyroid"] as const, y: panelY - lineGap },
+    { label: "Hypertension", keys: ["hypertension"] as const, y: panelY - lineGap * 2 },
   ] as const;
 
-  const allergyValue = String(consult.examination?.allergies ?? "").trim();
-  const allergyYes = allergyValue !== "" && !/^none$/i.test(allergyValue) && !/^no$/i.test(allergyValue);
-  const allergyNo = !allergyYes;
-  drawCheckbox(ctx.page, yesBoxX, row4Y, 7, allergyYes);
-  drawCheckbox(ctx.page, noBoxX, row4Y, 7, allergyNo);
-  drawPatientValue(ctx.page, rightValueX, row4Y, bp || "--", font, FONT.body, 110);
+  const checkboxYesX = colLeft + 102;
+  const checkboxNoX = colLeft + 138;
+  const conditionLabelX = colLeft;
 
-  for (const { keys, y } of conditions) {
+  for (const { label, keys, y } of conditions) {
     const value = keys.map((k) => consult.examination?.[k]).find((v) => !isEmptyValue(v));
     const yesChecked = isYes(value);
     const noChecked = isNo(value);
-    drawCheckbox(ctx.page, yesBoxX, y, 7, yesChecked);
-    drawCheckbox(ctx.page, noBoxX, y, 7, noChecked);
+    drawText(ctx.page, `${label}:`, conditionLabelX, y, font, FONT.body);
+    drawCheckbox(ctx.page, checkboxYesX, y, 7, yesChecked);
+    drawText(ctx.page, "Yes", checkboxYesX + 12, y, font, FONT.body);
+    drawCheckbox(ctx.page, checkboxNoX, y, 7, noChecked);
+    drawText(ctx.page, "No", checkboxNoX + 12, y, font, FONT.body);
   }
-  drawPatientValue(ctx.page, rightValueX, row5Y, pr || "--", font, FONT.body, 110);
-  drawPatientValue(ctx.page, leftValueX, row4Y, allergies && allergies.trim() ? allergies.trim() : "None", font, FONT.body, 240);
-  ctx.y = row7Y - 34;
+  ctx.y = panelBottom - 18;
 
   // 1. Chief Complaints
   const chiefComplaint = String(consult.examination?.chiefComplaint ?? "").trim();
