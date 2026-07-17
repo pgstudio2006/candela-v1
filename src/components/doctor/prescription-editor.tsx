@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AttioButton } from "@/components/frontdesk/ui";
 import { DoctorDrugSearch } from "@/components/doctor/doctor-drug-search";
 import type { PrescriptionLine } from "@/design-system/doctor-data";
 import { PRESCRIPTION_FREQUENCY_OPTIONS, DURATION_UNIT_OPTIONS } from "@/design-system/doctor-data";
-import { Plus, Trash2, FileText, ChevronDown, ChevronUp, Star, GripVertical } from "lucide-react";
+import { Plus, Trash2, FileText, Pencil, X, GripVertical } from "lucide-react";
 
-const INSTRUCTION_SUGGESTIONS = [
+const DEFAULT_INSTRUCTION_SUGGESTIONS = [
   "After meals",
   "Before meals",
   "With water",
@@ -22,15 +22,43 @@ const INSTRUCTION_SUGGESTIONS = [
   "Shake well",
   "Refrigerate",
   "Complete course",
-] as const;
+];
+
+const CUSTOM_SUGGESTIONS_KEY = "candela-custom-instruction-suggestions";
 
 type PrescriptionEditorProps = {
   lines: PrescriptionLine[];
   onChange: (lines: PrescriptionLine[]) => void;
 };
 
+function loadCustomSuggestions(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_SUGGESTIONS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((s) => typeof s === "string" && s.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomSuggestions(suggestions: string[]) {
+  try {
+    localStorage.setItem(CUSTOM_SUGGESTIONS_KEY, JSON.stringify(suggestions));
+  } catch {}
+}
+
 export function PrescriptionEditor({ lines, onChange }: PrescriptionEditorProps) {
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
+  const [editingSuggestions, setEditingSuggestions] = useState(false);
+  const [customSuggestions, setCustomSuggestions] = useState<string[]>([]);
+  const [newSuggestion, setNewSuggestion] = useState("");
+
+  useEffect(() => {
+    setCustomSuggestions(loadCustomSuggestions());
+  }, []);
+
+  const instructionSuggestions = [...DEFAULT_INSTRUCTION_SUGGESTIONS, ...customSuggestions];
 
   const addLine = () => {
     const newId = `rx_${Date.now()}`;
@@ -202,8 +230,9 @@ export function PrescriptionEditor({ lines, onChange }: PrescriptionEditorProps)
 
                 {/* Suggestion chips */}
                 <div className="mb-2.5 flex flex-wrap gap-1.5">
-                  {INSTRUCTION_SUGGESTIONS.map((chip) => {
+                  {instructionSuggestions.map((chip: string) => {
                     const active = isChipActive(line, chip);
+                    const isCustom = customSuggestions.includes(chip);
                     return (
                       <button
                         key={chip}
@@ -221,10 +250,76 @@ export function PrescriptionEditor({ lines, onChange }: PrescriptionEditorProps)
                           <Plus className="size-3" />
                         )}
                         {chip}
+                        {editingSuggestions && isCustom && (
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const next = customSuggestions.filter((s) => s !== chip);
+                              setCustomSuggestions(next);
+                              saveCustomSuggestions(next);
+                            }}
+                            className="ml-0.5 inline-flex cursor-pointer items-center text-amber-600 hover:text-amber-800"
+                            title="Remove custom suggestion"
+                          >
+                            <X className="size-3" />
+                          </span>
+                        )}
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    onClick={() => setEditingSuggestions((v) => !v)}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                      editingSuggestions
+                        ? "border-amber-400 bg-amber-200/70 text-amber-800"
+                        : "border-amber-300 bg-white text-amber-700 hover:border-amber-400 hover:bg-amber-100"
+                    }`}
+                    title="Edit common instructions"
+                  >
+                    <Pencil className="size-3" />
+                    {editingSuggestions ? "Done" : "Edit"}
+                  </button>
                 </div>
+
+                {editingSuggestions && (
+                  <div className="mb-2.5 flex items-center gap-2">
+                    <input
+                      value={newSuggestion}
+                      onChange={(e) => setNewSuggestion(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const trimmed = newSuggestion.trim();
+                          if (!trimmed) return;
+                          if (instructionSuggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase())) return;
+                          const next = [...customSuggestions, trimmed];
+                          setCustomSuggestions(next);
+                          saveCustomSuggestions(next);
+                          setNewSuggestion("");
+                        }
+                      }}
+                      placeholder="Add common instruction…"
+                      className="min-w-0 flex-1 rounded border border-amber-300 bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = newSuggestion.trim();
+                        if (!trimmed) return;
+                        if (instructionSuggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase())) return;
+                        const next = [...customSuggestions, trimmed];
+                        setCustomSuggestions(next);
+                        saveCustomSuggestions(next);
+                        setNewSuggestion("");
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-600 px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-amber-700"
+                    >
+                      <Plus className="size-3.5" />
+                      Add
+                    </button>
+                  </div>
+                )}
 
                 {/* Free-text textarea */}
                 <textarea
