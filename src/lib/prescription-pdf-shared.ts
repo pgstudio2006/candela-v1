@@ -31,9 +31,13 @@ export function formatFrequency(value: string): string {
 }
 
 export function formatDuration(line: PrescriptionLine): string {
-  if (line.days && line.days > 0) return `${line.days} day${line.days === 1 ? "" : "s"}`;
-  if (line.duration) return line.duration;
-  return "—";
+  if (line.duration && line.duration.trim()) return line.duration.trim();
+  const n = line.days;
+  if (!n || n <= 0) return "--";
+  const unit = line.durationUnit ?? "days";
+  const unitLabel = unit === "minutes" ? "min" : unit === "hours" ? "hr" : unit === "days" ? "day" : unit === "weeks" ? "wk" : unit === "months" ? "mo" : unit === "years" ? "yr" : "day";
+  const plural = n === 1 ? "" : unit === "minutes" ? "s" : unit === "hours" ? "s" : unit === "days" ? "s" : unit === "weeks" ? "s" : unit === "months" ? "s" : unit === "years" ? "s" : "s";
+  return `${n} ${unitLabel}${plural}`;
 }
 
 export function formatConsultDate(iso: string): string {

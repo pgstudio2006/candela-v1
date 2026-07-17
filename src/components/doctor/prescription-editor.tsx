@@ -3,7 +3,7 @@
 import { AttioButton } from "@/components/frontdesk/ui";
 import { DoctorDrugSearch } from "@/components/doctor/doctor-drug-search";
 import type { PrescriptionLine } from "@/design-system/doctor-data";
-import { PRESCRIPTION_FREQUENCY_OPTIONS } from "@/design-system/doctor-data";
+import { PRESCRIPTION_FREQUENCY_OPTIONS, DURATION_UNIT_OPTIONS } from "@/design-system/doctor-data";
 import { Plus, Trash2 } from "lucide-react";
 
 type PrescriptionEditorProps = {
@@ -21,6 +21,7 @@ export function PrescriptionEditor({ lines, onChange }: PrescriptionEditorProps)
         dose: "1 tab",
         frequency: "OD",
         days: 7,
+        durationUnit: "days",
       },
     ]);
   };
@@ -57,7 +58,7 @@ export function PrescriptionEditor({ lines, onChange }: PrescriptionEditorProps)
                 />
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               <input
                 value={line.dose}
                 onChange={(e) => update(line.id, { dose: e.target.value })}
@@ -80,20 +81,31 @@ export function PrescriptionEditor({ lines, onChange }: PrescriptionEditorProps)
                 min={1}
                 value={line.days}
                 onChange={(e) => update(line.id, { days: Number(e.target.value) })}
-                placeholder="Days"
+                placeholder="Duration"
                 className="rounded border border-[var(--attio-border)] bg-white px-2 py-1.5 text-[12px] outline-none"
               />
+              <select
+                value={line.durationUnit ?? "days"}
+                onChange={(e) => update(line.id, { durationUnit: e.target.value as PrescriptionLine["durationUnit"] })}
+                className="rounded border border-[var(--attio-border)] bg-white px-2 py-1.5 text-[12px] outline-none"
+              >
+                {DURATION_UNIT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
               <input
-                value={line.duration ?? ""}
-                onChange={(e) => update(line.id, { duration: e.target.value })}
-                placeholder="Duration (optional)"
+                value={line.instructions ?? ""}
+                onChange={(e) => update(line.id, { instructions: e.target.value })}
+                placeholder="Instructions"
                 className="rounded border border-[var(--attio-border)] bg-white px-2 py-1.5 text-[12px] outline-none"
               />
             </div>
             <input
-              value={line.instructions ?? ""}
-              onChange={(e) => update(line.id, { instructions: e.target.value })}
-              placeholder="Instructions (optional)"
+              value={line.notes ?? ""}
+              onChange={(e) => update(line.id, { notes: e.target.value })}
+              placeholder="Notes for patient (optional)"
               className="w-full rounded border border-[var(--attio-border)] bg-white px-2 py-1.5 text-[12px] outline-none"
             />
           </div>

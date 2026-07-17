@@ -15,6 +15,17 @@ export const PRESCRIPTION_FREQUENCY_OPTIONS = [
   { value: "weekly", label: "Once a week" },
 ];
 
+export const DURATION_UNIT_OPTIONS = [
+  { value: "minutes", label: "Minutes" },
+  { value: "hours", label: "Hours" },
+  { value: "days", label: "Days" },
+  { value: "weeks", label: "Weeks" },
+  { value: "months", label: "Months" },
+  { value: "years", label: "Years" },
+] as const;
+
+export type DurationUnit = (typeof DURATION_UNIT_OPTIONS)[number]["value"];
+
 export type PrescriptionLine = {
   id: string;
   drug: string;
@@ -25,7 +36,9 @@ export type PrescriptionLine = {
   frequency: string;
   days: number;
   duration?: string;
+  durationUnit?: DurationUnit;
   instructions?: string;
+  notes?: string;
 };
 
 export type ConsultationCartItem = {

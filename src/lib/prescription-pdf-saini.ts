@@ -394,10 +394,9 @@ function drawPrescriptionContent(
   const medColX = [
     LAYOUT.marginLeft,
     LAYOUT.marginLeft + 18,
-    LAYOUT.marginLeft + 175,
-    LAYOUT.marginLeft + 230,
-    LAYOUT.marginLeft + 300,
-    LAYOUT.marginLeft + 355,
+    LAYOUT.marginLeft + 200,
+    LAYOUT.marginLeft + 260,
+    LAYOUT.marginLeft + 340,
   ];
 
   const medColWidths = [
@@ -405,8 +404,7 @@ function drawPrescriptionContent(
     medColX[2] - medColX[1] - 6,
     medColX[3] - medColX[2] - 6,
     medColX[4] - medColX[3] - 6,
-    medColX[5] - medColX[4] - 6,
-    LAYOUT.marginRight - medColX[5] - 6,
+    LAYOUT.marginRight - medColX[4] - 6,
   ];
 
   function drawMedicationHeader() {
@@ -421,7 +419,6 @@ function drawPrescriptionContent(
     drawText(ctx.page, "Dose", medColX[2], ctx.y, bold, FONT.tableHead);
     drawText(ctx.page, "Frequency", medColX[3], ctx.y, bold, FONT.tableHead);
     drawText(ctx.page, "Duration", medColX[4], ctx.y, bold, FONT.tableHead);
-    drawText(ctx.page, "Instructions", medColX[5], ctx.y, bold, FONT.tableHead);
     ctx.y -= 16;
     drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
     ctx.y -= 10;
@@ -442,17 +439,23 @@ function drawPrescriptionContent(
       const frequency = formatFrequency(line.frequency);
       const duration = formatDuration(line);
       const instructions = line.instructions?.trim() || "";
+      const notes = (line as { notes?: string }).notes?.trim() || "";
 
       const medLines = wrapText(medicine, font, FONT.table, medColWidths[1]);
       const doseLines = dose ? wrapText(dose, font, FONT.table, medColWidths[2]) : [];
-      const freqLines = frequency && frequency !== "\u2014" ? wrapText(frequency, font, FONT.table, medColWidths[3]) : [];
-      const durLines = duration && duration !== "\u2014" ? wrapText(duration, font, FONT.table, medColWidths[4]) : [];
-      const instLines = instructions ? wrapText(instructions, font, FONT.table, medColWidths[5]) : [];
+      const freqLines = frequency && frequency !== "--" ? wrapText(frequency, font, FONT.table, medColWidths[3]) : [];
+      const durLines = duration && duration !== "--" ? wrapText(duration, font, FONT.table, medColWidths[4]) : [];
 
-      const maxLines = Math.max(medLines.length, doseLines.length, freqLines.length, durLines.length, instLines.length, 1);
+      const maxLines = Math.max(medLines.length, doseLines.length, freqLines.length, durLines.length, 1);
       const rowHeight = Math.max(LAYOUT.minRowHeight, maxLines * LAYOUT.lineLeading + 6);
 
-      const newPage = ensureSpace(ctx, pdfDoc, image, rowHeight + 4);
+      // Sub-lines for instructions and notes
+      const instLines = instructions ? wrapText(`Instr: ${instructions}`, font, FONT.caption, infoWidth - 24) : [];
+      const noteLines = notes ? wrapText(`Note: ${notes}`, font, FONT.caption, infoWidth - 24) : [];
+      const subHeight = (instLines.length + noteLines.length) * (LAYOUT.lineLeading - 1);
+
+      const totalHeight = rowHeight + subHeight + 4;
+      const newPage = ensureSpace(ctx, pdfDoc, image, totalHeight + 4);
       if (newPage) drawMedicationHeader();
 
       const rowTop = ctx.y;
@@ -463,11 +466,27 @@ function drawPrescriptionContent(
         if (idx < doseLines.length && doseLines[idx]) drawText(ctx.page, doseLines[idx], medColX[2], lineY, font, FONT.table);
         if (idx < freqLines.length && freqLines[idx]) drawText(ctx.page, freqLines[idx], medColX[3], lineY, font, FONT.table);
         if (idx < durLines.length && durLines[idx]) drawText(ctx.page, durLines[idx], medColX[4], lineY, font, FONT.table);
-        if (idx < instLines.length && instLines[idx]) drawText(ctx.page, instLines[idx], medColX[5], lineY, font, FONT.table);
       }
       drawText(ctx.page, String(i + 1), medColX[0], serialY, font, FONT.table);
 
       ctx.y -= rowHeight;
+
+      // Draw instructions sub-line
+      if (instLines.length) {
+        instLines.forEach((il) => {
+          drawText(ctx.page, `  ${il}`, LAYOUT.marginLeft + 18, ctx.y, font, FONT.caption);
+          ctx.y -= LAYOUT.lineLeading - 1;
+        });
+      }
+      // Draw notes sub-line
+      if (noteLines.length) {
+        noteLines.forEach((nl) => {
+          drawText(ctx.page, `  ${nl}`, LAYOUT.marginLeft + 18, ctx.y, font, FONT.caption);
+          ctx.y -= LAYOUT.lineLeading - 1;
+        });
+      }
+
+      ctx.y -= 4;
       drawHLine(ctx.page, LAYOUT.marginLeft, LAYOUT.marginRight, ctx.y);
       ctx.y -= 8;
     });
