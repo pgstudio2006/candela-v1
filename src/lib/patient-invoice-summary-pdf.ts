@@ -1,4 +1,4 @@
-import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFImage, PDFPage, PDFFont, StandardFonts, rgb } from "pdf-lib";
 import type { OpdReceiptPayload } from "@/lib/opd-receipt";
 
 const COLORS = {
@@ -8,8 +8,15 @@ const COLORS = {
   white: rgb(1, 1, 1),
 };
 
-const PAGE = { width: 595, height: 842, margin: 40 };
-const FONT_SIZES = { title: 16, section: 11, body: 9, small: 8 };
+const PAGE = { width: 595, height: 842, marginLeft: 55, marginRight: 540 };
+const LAYOUT = {
+  headerHeight: 170,
+  footerMinY: 100,
+  rowHeight: 13,
+  lineLeading: 11,
+  contentTop: PAGE.height - 170,
+};
+const FONT_SIZES = { title: 14, section: 11, body: 9, small: 8 };
 
 function pdfSafeText(text: string): string {
   return String(text)
@@ -96,77 +103,92 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): 
   return lines.length ? lines : [""];
 }
 
+function drawTableHeader(page: PDFPage, y: number, bold: PDFFont) {
+  page.drawRectangle({
+    x: PAGE.marginLeft,
+    y: y - LAYOUT.rowHeight,
+    width: PAGE.marginRight - PAGE.marginLeft,
+    height: LAYOUT.rowHeight,
+    color: COLORS.headerFill,
+  });
+}
+
 export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPayload[]): Promise<Uint8Array> {
   if (receipts.length === 0) throw new Error("No invoices to summarize.");
 
   const pdfDoc = await PDFDocument.create();
-  let page = pdfDoc.addPage([PAGE.width, PAGE.height]);
+  let backgroundImage: PDFImage | null = null;
+  try {
+    const res = await fetch("/templates/invoice-reference.png");
+    if (res.ok) {
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      backgroundImage = await pdfDoc.embedPng(bytes);
+    }
+  } catch {
+    backgroundImage = null;
+  }
+
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const first = receipts[0];
-  let y = PAGE.height - PAGE.margin;
 
-  drawText(page, "Patient Invoice Summary", PAGE.margin, y, bold, FONT_SIZES.title);
-  y -= 20;
+  const addPage = () => {
+    const p = pdfDoc.addPage([PAGE.width, PAGE.height]);
+    if (backgroundImage) {
+      p.drawImage(backgroundImage, { x: 0, y: 0, width: PAGE.width, height: PAGE.height });
+    }
+    return p;
+  };
 
-  drawText(
-    page,
-    `Generated: ${formatDateTime(new Date().toISOString())}`,
-    PAGE.margin,
-    y,
-    font,
-    FONT_SIZES.small,
-  );
-  y -= 22;
+  let page = addPage();
+  let y = LAYOUT.contentTop;
 
-  const infoBoxTop = y;
+  drawText(page, "Patient Invoice Summary", PAGE.marginLeft, y - 18, bold, FONT_SIZES.title);
+  y -= 32;
+
+  drawText(page, `Generated: ${formatDateTime(new Date().toISOString())}`, PAGE.marginLeft, y, font, FONT_SIZES.small);
+  y -= 16;
+
   page.drawRectangle({
-    x: PAGE.margin,
-    y: y - 50,
-    width: PAGE.width - PAGE.margin * 2,
-    height: 50,
+    x: PAGE.marginLeft,
+    y: y - 42,
+    width: PAGE.marginRight - PAGE.marginLeft,
+    height: 42,
     borderWidth: 0.6,
     borderColor: COLORS.border,
     color: COLORS.white,
   });
-  drawText(page, `Patient: ${first.patientName}`, PAGE.margin + 8, y - 18, bold, FONT_SIZES.body);
-  drawText(page, `UHID: ${first.patientUhid}`, PAGE.margin + 8, y - 34, font, FONT_SIZES.body);
+  drawText(page, `Patient: ${first.patientName}`, PAGE.marginLeft + 8, y - 16, bold, FONT_SIZES.body);
+  drawText(page, `UHID: ${first.patientUhid}`, PAGE.marginLeft + 8, y - 30, font, FONT_SIZES.body);
   drawText(
     page,
     `Phone: ${first.patientPhone}`,
-    PAGE.margin + 8 + 220,
-    y - 34,
+    PAGE.marginLeft + 260,
+    y - 30,
     font,
     FONT_SIZES.body,
   );
-  y -= 62;
+  y -= 56;
 
   const colX = {
-    date: PAGE.margin,
-    invoice: PAGE.margin + 70,
-    services: PAGE.margin + 170,
-    total: PAGE.width - PAGE.margin - 150,
-    paid: PAGE.width - PAGE.margin - 90,
-    balance: PAGE.width - PAGE.margin - 30,
+    date: PAGE.marginLeft,
+    invoice: PAGE.marginLeft + 65,
+    services: PAGE.marginLeft + 160,
+    total: PAGE.marginRight - 148,
+    paid: PAGE.marginRight - 78,
+    balance: PAGE.marginRight - 4,
   };
-  const rowHeight = 14;
 
-  page.drawRectangle({
-    x: PAGE.margin,
-    y: y - rowHeight,
-    width: PAGE.width - PAGE.margin * 2,
-    height: rowHeight,
-    color: COLORS.headerFill,
-  });
-  drawText(page, "Date", colX.date + 4, y - 10, bold, FONT_SIZES.body);
-  drawText(page, "Invoice #", colX.invoice + 4, y - 10, bold, FONT_SIZES.body);
-  drawText(page, "Services", colX.services + 4, y - 10, bold, FONT_SIZES.body);
-  drawRightText(page, "Total", colX.total + 40, y - 10, bold, FONT_SIZES.body);
-  drawRightText(page, "Paid", colX.paid + 40, y - 10, bold, FONT_SIZES.body);
-  drawRightText(page, "Balance", colX.balance + 40, y - 10, bold, FONT_SIZES.body);
-  y -= rowHeight;
-  drawHLine(page, PAGE.margin, PAGE.width - PAGE.margin, y);
+  drawTableHeader(page, y, bold);
+  drawText(page, "Date", colX.date + 4, y - 9, bold, FONT_SIZES.body);
+  drawText(page, "Invoice #", colX.invoice + 4, y - 9, bold, FONT_SIZES.body);
+  drawText(page, "Services", colX.services + 4, y - 9, bold, FONT_SIZES.body);
+  drawRightText(page, "Total", colX.total - 4, y - 9, bold, FONT_SIZES.body);
+  drawRightText(page, "Paid", colX.paid - 4, y - 9, bold, FONT_SIZES.body);
+  drawRightText(page, "Balance", colX.balance - 4, y - 9, bold, FONT_SIZES.body);
+  y -= LAYOUT.rowHeight;
+  drawHLine(page, PAGE.marginLeft, PAGE.marginRight, y);
 
   let totalBilled = 0;
   let totalPaid = 0;
@@ -182,76 +204,73 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
     totalBalance += receipt.balanceDue;
 
     const serviceLabels = receipt.lines.map((l) => l.label).join(" · ");
-    const serviceLines = wrapText(serviceLabels, font, FONT_SIZES.body, colX.total - colX.services - 12);
+    const serviceLines = wrapText(serviceLabels, font, FONT_SIZES.body, colX.total - colX.services - 14);
     const rowLines = Math.max(1, serviceLines.length);
-    const rowH = rowLines * 12 + 4;
+    const rowH = rowLines * LAYOUT.lineLeading + 6;
 
-    if (y - rowH < PAGE.margin + 80) {
+    if (y - rowH < LAYOUT.footerMinY) {
       page.drawText(pdfSafeText("Continued..."), {
-        x: PAGE.margin,
-        y: PAGE.margin,
+        x: PAGE.marginLeft,
+        y: LAYOUT.footerMinY - 20,
         font,
         size: FONT_SIZES.small,
       });
-      const newPage = pdfDoc.addPage([PAGE.width, PAGE.height]);
-      page = newPage;
-      y = PAGE.height - PAGE.margin;
-      page.drawRectangle({
-        x: PAGE.margin,
-        y: y - rowHeight,
-        width: PAGE.width - PAGE.margin * 2,
-        height: rowHeight,
-        color: COLORS.headerFill,
-      });
-      drawText(page, "Date", colX.date + 4, y - 10, bold, FONT_SIZES.body);
-      drawText(page, "Invoice #", colX.invoice + 4, y - 10, bold, FONT_SIZES.body);
-      drawText(page, "Services", colX.services + 4, y - 10, bold, FONT_SIZES.body);
-      drawRightText(page, "Total", colX.total + 40, y - 10, bold, FONT_SIZES.body);
-      drawRightText(page, "Paid", colX.paid + 40, y - 10, bold, FONT_SIZES.body);
-      drawRightText(page, "Balance", colX.balance + 40, y - 10, bold, FONT_SIZES.body);
-      y -= rowHeight;
+      page = addPage();
+      y = LAYOUT.contentTop;
+      drawTableHeader(page, y, bold);
+      drawText(page, "Date", colX.date + 4, y - 9, bold, FONT_SIZES.body);
+      drawText(page, "Invoice #", colX.invoice + 4, y - 9, bold, FONT_SIZES.body);
+      drawText(page, "Services", colX.services + 4, y - 9, bold, FONT_SIZES.body);
+      drawRightText(page, "Total", colX.total - 4, y - 9, bold, FONT_SIZES.body);
+      drawRightText(page, "Paid", colX.paid - 4, y - 9, bold, FONT_SIZES.body);
+      drawRightText(page, "Balance", colX.balance - 4, y - 9, bold, FONT_SIZES.body);
+      y -= LAYOUT.rowHeight;
     }
 
-    drawText(page, formatDate(receipt.issuedAt), colX.date + 4, y - 10, font, FONT_SIZES.body);
-    drawText(page, receipt.invoiceNumber, colX.invoice + 4, y - 10, font, FONT_SIZES.body);
+    drawText(page, formatDate(receipt.issuedAt), colX.date + 4, y - 9, font, FONT_SIZES.body);
+    drawText(page, receipt.invoiceNumber, colX.invoice + 4, y - 9, font, FONT_SIZES.body);
     serviceLines.forEach((line, i) => {
-      drawText(page, line, colX.services + 4, y - 10 - i * 12, font, FONT_SIZES.body);
+      drawText(page, line, colX.services + 4, y - 9 - i * LAYOUT.lineLeading, font, FONT_SIZES.body);
     });
-    drawRightText(page, formatInr(receipt.total), colX.total + 40, y - 10, font, FONT_SIZES.body);
-    drawRightText(page, formatInr(receipt.amountPaid), colX.paid + 40, y - 10, font, FONT_SIZES.body);
-    drawRightText(page, formatInr(receipt.balanceDue), colX.balance + 40, y - 10, font, FONT_SIZES.body);
+    drawRightText(page, formatInr(receipt.total), colX.total - 4, y - 9, font, FONT_SIZES.body);
+    drawRightText(page, formatInr(receipt.amountPaid), colX.paid - 4, y - 9, font, FONT_SIZES.body);
+    drawRightText(page, formatInr(receipt.balanceDue), colX.balance - 4, y - 9, font, FONT_SIZES.body);
 
     y -= rowH;
-    drawHLine(page, PAGE.margin, PAGE.width - PAGE.margin, y);
+    drawHLine(page, PAGE.marginLeft, PAGE.marginRight, y);
   }
 
+  y -= 12;
+  if (y - 50 < LAYOUT.footerMinY) {
+    page = addPage();
+    y = LAYOUT.contentTop;
+  }
+  drawText(page, "Summary", PAGE.marginLeft, y, bold, FONT_SIZES.section);
   y -= 16;
-  drawText(page, "Summary", PAGE.margin, y, bold, FONT_SIZES.section);
-  y -= 18;
   page.drawRectangle({
-    x: PAGE.margin,
-    y: y - 40,
-    width: PAGE.width - PAGE.margin * 2,
-    height: 40,
+    x: PAGE.marginLeft,
+    y: y - 36,
+    width: PAGE.marginRight - PAGE.marginLeft,
+    height: 36,
     borderWidth: 0.6,
     borderColor: COLORS.border,
     color: COLORS.white,
   });
-  drawText(page, `Total billed: ${formatInr(totalBilled)}`, PAGE.margin + 8, y - 16, bold, FONT_SIZES.body);
-  drawText(page, `Total paid: ${formatInr(totalPaid)}`, PAGE.margin + 8 + 180, y - 16, bold, FONT_SIZES.body);
+  drawText(page, `Total billed: ${formatInr(totalBilled)}`, PAGE.marginLeft + 8, y - 14, bold, FONT_SIZES.body);
+  drawText(page, `Total paid: ${formatInr(totalPaid)}`, PAGE.marginLeft + 180, y - 14, bold, FONT_SIZES.body);
   drawText(
     page,
     `Total balance: ${formatInr(totalBalance)}`,
-    PAGE.margin + 8 + 360,
-    y - 16,
+    PAGE.marginLeft + 340,
+    y - 14,
     bold,
     FONT_SIZES.body,
   );
   drawText(
     page,
     `Invoices: ${receipts.length}`,
-    PAGE.margin + 8,
-    y - 32,
+    PAGE.marginLeft + 8,
+    y - 28,
     font,
     FONT_SIZES.body,
   );

@@ -9,6 +9,7 @@ import { Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useSession } from "@/components/candela/session-provider";
 import { useFrontdeskPoll } from "@/hooks/use-frontdesk-poll";
 import { useToast } from "@/components/ui/toast-provider";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -53,7 +54,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
 
   const pending = getPendingBilling();
-  const activeVisitId = selectedVisitId || billingHandoffs[0]?.visitId || "";
+  const activeVisitId = selectedVisitId || "";
   const counselForVisit = activeVisitId ? getBillingHandoff(activeVisitId) : undefined;
   const activeVisit = activeVisitId ? getVisit(activeVisitId) : undefined;
   const activePatient = activeVisit ? getPatient(activeVisit.patientId) : undefined;
@@ -68,8 +69,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
   }, [visitParam]);
 
   useEffect(() => {
-    if (directPatient) setSelectedPatient(directPatient);
-    else if (activePatient) setSelectedPatient(activePatient);
+    setSelectedPatient(directPatient ?? activePatient ?? undefined);
   }, [activePatient?.id, directPatient?.id]);
 
   // Directly fetch a visit from URL when it is not in the polled workspace snapshot
@@ -237,18 +237,37 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
             {billingHandoffs.length > 0 && (
               <Panel title="From counsellor">
                 <ul className="space-y-2">
-                  {billingHandoffs.map((h) => (
-                    <li key={h.visitId}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedVisitId(h.visitId)}
-                        className="w-full rounded-lg border border-[var(--attio-border-subtle)] p-3 text-left hover:bg-[var(--attio-hover)]"
-                      >
-                        <p className="text-[13px] font-medium">{h.patientName}</p>
-                        <p className="text-[11px] text-[var(--attio-text-tertiary)]">{h.quote.packageLabel}</p>
-                      </button>
-                    </li>
-                  ))}
+                  {billingHandoffs.map((h) => {
+                    const selected = selectedVisitId === h.visitId;
+                    return (
+                      <li key={h.visitId} className="flex items-stretch gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedVisitId(selected ? "" : h.visitId)}
+                          className={cn(
+                            "flex-1 rounded-lg border p-3 text-left transition-colors",
+                            selected
+                              ? "border-[var(--attio-accent)] bg-[var(--attio-accent)]/10"
+                              : "border-[var(--attio-border-subtle)] hover:bg-[var(--attio-hover)]",
+                          )}
+                        >
+                          <p className="text-[13px] font-medium">{h.patientName}</p>
+                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">{h.quote.packageLabel}</p>
+                        </button>
+                        {selected && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedVisitId("")}
+                            className="flex items-center rounded-lg border border-red-200 px-2 text-red-600 hover:bg-red-50"
+                            title="Clear selection"
+                            aria-label="Clear selection"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </Panel>
             )}
