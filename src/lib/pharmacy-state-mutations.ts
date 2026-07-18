@@ -730,11 +730,13 @@ export function mutateDeleteDrug(state: PharmacyStateShape, operator: PharmacySt
 export function mutateDeleteSupplier(state: PharmacyStateShape, operator: PharmacyStaff, id: string): PharmacyStateShape {
   const supplier = state.suppliers.find((s) => s.id === id);
   if (!supplier) throw new ServerActionError("NOT_FOUND", "Supplier not found.");
+  const supplierCatalogue = state.supplierCatalogue ?? [];
+  const purchaseOrders = state.purchaseOrders ?? [];
   return {
     ...state,
     suppliers: state.suppliers.filter((s) => s.id !== id),
-    supplierCatalogue: state.supplierCatalogue.filter((i) => i.supplierId !== id),
-    purchaseOrders: state.purchaseOrders.filter((p) => p.supplierId !== id),
+    supplierCatalogue: supplierCatalogue.filter((i) => i.supplierId !== id),
+    purchaseOrders: purchaseOrders.filter((p) => p.supplierId !== id),
     activities: appendPharmacyActivity(state.activities, operator.name, "supplier_delete", `Deleted supplier ${supplier.name}`, id),
   };
 }
