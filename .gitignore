@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated preview/sample files
+prescreption.jpeg
+preview-*.pdf
+preview-*.png
+sample-*.pdf
