@@ -1,4 +1,4 @@
-import { PDFDocument, PDFImage, PDFPage, PDFFont, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFEmbeddedPage, PDFPage, PDFFont, StandardFonts, rgb } from "pdf-lib";
 import type { OpdReceiptPayload } from "@/lib/opd-receipt";
 
 const COLORS = {
@@ -136,15 +136,16 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
   if (receipts.length === 0) throw new Error("No invoices to summarize.");
 
   const pdfDoc = await PDFDocument.create();
-  let backgroundImage: PDFImage | null = null;
+  let embeddedTemplate: PDFEmbeddedPage | null = null;
   try {
-    const res = await fetch("/templates/invoice-reference.png");
+    const res = await fetch("/templates/navayu-invoice-template.pdf");
     if (res.ok) {
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      backgroundImage = await pdfDoc.embedPng(bytes);
+      const bytes = await res.arrayBuffer();
+      const templateDoc = await PDFDocument.load(bytes);
+      [embeddedTemplate] = await pdfDoc.embedPdf(templateDoc, [0]);
     }
   } catch {
-    backgroundImage = null;
+    embeddedTemplate = null;
   }
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -154,8 +155,8 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
 
   const addPage = () => {
     const p = pdfDoc.addPage([PAGE.width, PAGE.height]);
-    if (backgroundImage) {
-      p.drawImage(backgroundImage, { x: 0, y: 0, width: PAGE.width, height: PAGE.height });
+    if (embeddedTemplate) {
+      p.drawPage(embeddedTemplate, { x: 0, y: 0, width: PAGE.width, height: PAGE.height });
     }
     return p;
   };
