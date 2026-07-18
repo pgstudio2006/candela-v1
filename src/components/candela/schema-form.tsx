@@ -29,7 +29,7 @@ import {
   resolveIndiaLocationOptions,
 } from "@/lib/india-locations";
 import { searchSocieties } from "@/lib/gurgaon-societies";
-import { problemsForDepartment, problemLabelForValue } from "@/lib/department-problems";
+import { problemLabelForValue } from "@/lib/department-problems";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -295,18 +295,24 @@ function SchemaFieldInput({
   if (field.type === "select") {
     const raw = String(value ?? "");
     const indiaOptions = allValues ? resolveIndiaLocationOptions(field.id, allValues) : null;
-    const problemOptions = field.id === "problem" && allValues ? problemsForDepartment(String(allValues.department ?? "")) : null;
-    let options = indiaOptions ?? problemOptions ?? fieldOptionsForRender(field);
+    const cascadeParentValue = field.cascadeFrom && allValues ? String(allValues[field.cascadeFrom] ?? "") : "";
+    const cascadeOptions = field.cascadeOptions && cascadeParentValue ? field.cascadeOptions[cascadeParentValue] : null;
+    let options = indiaOptions ?? cascadeOptions ?? fieldOptionsForRender(field);
     if (raw && !options.some((o) => o.value === raw)) {
       const fallbackLabel = field.id === "problem" ? problemLabelForValue(raw) : humanizeSelectValue(raw, field.id, roster);
       options = [{ value: raw, label: fallbackLabel }, ...options];
     }
     const selectedOption = options.find((o) => o.value === raw);
+    const fallbackSelectedLabel = raw
+      ? field.id === "problem"
+        ? problemLabelForValue(raw)
+        : humanizeSelectValue(raw, field.id, roster)
+      : undefined;
     return (
       <Select value={raw || undefined} onValueChange={(v) => v != null && onChange(v)}>
         <SelectTrigger className={cn(base, "h-9 w-full")}>
           <SelectValue placeholder={field.placeholder ?? "Select…"}>
-            {selectedOption?.label ?? (raw ? (field.id === "problem" ? problemLabelForValue(raw) : humanizeSelectValue(raw, field.id, roster)) : undefined)}
+            {selectedOption?.label ?? fallbackSelectedLabel}
           </SelectValue>
         </SelectTrigger>
         <SelectContent className="max-h-72">

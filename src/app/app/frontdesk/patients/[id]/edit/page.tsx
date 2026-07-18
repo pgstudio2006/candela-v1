@@ -47,6 +47,22 @@ export default function PatientEditPage() {
       consentData: patient.consentData ?? false,
       notes: patient.registrationNotes ?? "",
       visitType: patient.tags[0] ?? "opd",
+      age: patient.age ?? "",
+      dob: patient.dateOfBirth ? patient.dateOfBirth.split("T")[0] : "",
+      alternatePhone: patient.alternatePhone ?? "",
+      country: patient.country ?? "",
+      state: patient.state ?? "",
+      district: patient.district ?? "",
+      city: patient.city ?? "",
+      society: patient.society ?? "",
+      houseNumber: patient.houseNumber ?? "",
+      street: patient.street ?? "",
+      locality: patient.locality ?? "",
+      landmark: patient.landmark ?? "",
+      address: patient.address ?? "",
+      pincode: patient.pincode ?? "",
+      appointmentCentre: patient.appointmentCentre ?? "",
+      problem: patient.problem ?? "",
     };
   }, [patient]);
 
