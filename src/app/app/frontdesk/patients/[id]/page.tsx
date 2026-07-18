@@ -39,6 +39,8 @@ export default function PatientRecordPage() {
   const [reprintInvoiceId, setReprintInvoiceId] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<Extract<Awaited<ReturnType<typeof getPatientInvoicesAction>>, { ok: true }>["data"]["invoices"]>([]);
   const [printingAll, setPrintingAll] = useState(false);
+  const [selectedInvoiceNumbers, setSelectedInvoiceNumbers] = useState<Set<string>>(() => new Set());
+  const [downloadingSelected, setDownloadingSelected] = useState(false);
   const [counsellors, setCounsellors] = useState<{ id: string; name: string }[]>([]);
   const [selectedCounsellor, setSelectedCounsellor] = useState("");
   const [reassigning, setReassigning] = useState(false);
@@ -432,7 +434,59 @@ export default function PatientRecordPage() {
             ))}
           </Panel>
 
-          <Panel title="All invoices" className="mt-4">
+          <Panel
+            title="All invoices"
+            className="mt-4"
+            action={
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedInvoiceNumbers(new Set(invoices.map((inv) => inv.invoiceNumber)))}
+                  className="text-[11px] text-[var(--attio-accent)] hover:underline"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedInvoiceNumbers(new Set())}
+                  className="text-[11px] text-[var(--attio-text-tertiary)] hover:underline"
+                >
+                  Clear
+                </button>
+                <AttioButton
+                  variant="secondary"
+                  className="h-8 gap-1.5 text-[11px]"
+                  disabled={downloadingSelected || selectedInvoiceNumbers.size === 0 || invoices.length === 0}
+                  onClick={async () => {
+                    if (!patient) return;
+                    setDownloadingSelected(true);
+                    const result = await getPatientInvoiceReceiptsAction(patient.id);
+                    if (!result.ok || !result.data?.length) {
+                      setDownloadingSelected(false);
+                      return;
+                    }
+                    const selected = result.data.filter((r) => selectedInvoiceNumbers.has(r.invoiceNumber));
+                    if (selected.length === 0) {
+                      setDownloadingSelected(false);
+                      return;
+                    }
+                    try {
+                      const bytes = await generatePatientInvoiceSummaryPdf(selected);
+                      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+                      downloadPdfBytes(bytes, `${patient.uhid ?? patient.id}_invoices_${timestamp}.pdf`);
+                    } catch (err) {
+                      console.error("Download selected invoices failed", err);
+                    } finally {
+                      setDownloadingSelected(false);
+                    }
+                  }}
+                >
+                  <Download className="size-3.5" />
+                  {downloadingSelected ? "Preparing…" : `Download selected (${selectedInvoiceNumbers.size})`}
+                </AttioButton>
+              </div>
+            }
+          >
             {invoices.length === 0 ? (
               <p className="text-[13px] text-[var(--attio-text-secondary)]">No invoices yet.</p>
             ) : (
@@ -441,6 +495,19 @@ export default function PatientRecordPage() {
                   <li key={inv.id} className="flex flex-col gap-1 rounded-lg border border-[var(--attio-border-subtle)] p-3 text-[13px]">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedInvoiceNumbers.has(inv.invoiceNumber)}
+                          onChange={() => {
+                            setSelectedInvoiceNumbers((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(inv.invoiceNumber)) next.delete(inv.invoiceNumber);
+                              else next.add(inv.invoiceNumber);
+                              return next;
+                            });
+                          }}
+                          className="h-4 w-4"
+                        />
                         <span className="font-medium">{inv.invoiceNumber}</span>
                         <StatusBadge label={inv.status} variant={inv.status === "paid" ? "success" : inv.status === "partial" ? "warning" : "neutral"} />
                         {inv.treatmentPath === "ipd" && <StatusBadge label="IPD" variant="info" />}
