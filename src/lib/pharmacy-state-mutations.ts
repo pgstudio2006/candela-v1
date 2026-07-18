@@ -122,6 +122,27 @@ export function mutateRejectPrescription(
   };
 }
 
+export function mutateSkipPrescription(
+  state: PharmacyStateShape,
+  rxId: string,
+  operator: PharmacyStaff,
+  reason?: string,
+): PharmacyStateShape {
+  const rx = state.prescriptions.find((r) => r.id === rxId);
+  if (!rx) throw new ServerActionError("NOT_FOUND", "Prescription not found.");
+  if (!["pending", "verified"].includes(rx.status)) {
+    throw new ServerActionError("VALIDATION", "Cannot skip this prescription.");
+  }
+  const now = new Date().toISOString();
+  return {
+    ...state,
+    prescriptions: state.prescriptions.map((r) =>
+      r.id === rxId ? { ...r, status: "skipped" as const, rejectReason: reason, updatedAt: now, assigneeId: undefined } : r,
+    ),
+    activities: appendPharmacyActivity(state.activities, operator.name, "skip", `Skipped Rx ${rxId}`, rxId),
+  };
+}
+
 export type DispenseResult = { billId: string; total: number; allDone: boolean; visitId?: string; patientName: string };
 
 export function mutateDispensePrescription(

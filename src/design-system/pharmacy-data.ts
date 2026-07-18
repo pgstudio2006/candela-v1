@@ -10,7 +10,8 @@ export type RxStatus =
   | "partially_dispensed"
   | "dispensed"
   | "cancelled"
-  | "rejected";
+  | "rejected"
+  | "skipped";
 
 export type RxPriority = "routine" | "urgent" | "stat";
 
@@ -405,6 +406,7 @@ export const RX_STATUS_LABELS: Record<RxStatus, string> = {
   dispensed: "Dispensed",
   cancelled: "Cancelled",
   rejected: "Rejected",
+  skipped: "Skipped",
 };
 
 export const PO_STATUS_LABELS: Record<PoStatus, string> = {

@@ -23,6 +23,7 @@ import {
   mutateDeletePurchaseOrder,
   mutateDeleteStockBatch,
   mutateDeleteSupplier,
+  mutateSkipPrescription,
   mutateDispensePrescription,
   mutateFulfillIndent,
   mutateMarkBillPaid,
@@ -269,6 +270,25 @@ export async function rejectPrescription(ctx: ServerContext, operatorId: string,
     return next;
   });
   await updateRelationalPrescriptionStatus(rxId, { status: "rejected", rejectReason: validatedReason });
+}
+
+export async function skipPrescription(ctx: ServerContext, operatorId: string, rxId: string, reason?: string) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    const next = mutateSkipPrescription(state, rxId, operator, reason);
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "prescription_skipped",
+      entityType: "prescription",
+      entityId: rxId,
+      summary: reason
+        ? `Prescription skipped by ${operator.name}: ${reason}`
+        : `Prescription skipped by ${operator.name}`,
+      severity: "info",
+    });
+    return next;
+  });
+  await updateRelationalPrescriptionStatus(rxId, { status: "skipped", rejectReason: reason });
 }
 
 export async function dispensePrescription(

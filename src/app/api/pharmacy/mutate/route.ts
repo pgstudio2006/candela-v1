@@ -28,6 +28,7 @@ import {
   rejectPrescription,
   resetPharmacyWorkspace,
   restockReturn,
+  skipPrescription,
   updateDrug,
   updatePOStatus,
   updateSupplier,
@@ -105,6 +106,9 @@ export async function POST(request: Request) {
         break;
       case "rejectPrescription":
         result = await rejectPrescription(ctx, operatorId, body.rxId!, body.reason!);
+        break;
+      case "skipPrescription":
+        result = await skipPrescription(ctx, operatorId, body.rxId!, body.reason);
         break;
       case "dispensePrescription":
         result = await dispensePrescription(ctx, operatorId, body.rxId!, body.quantities!, body.witnessName, body.batchIds, body.newLines);

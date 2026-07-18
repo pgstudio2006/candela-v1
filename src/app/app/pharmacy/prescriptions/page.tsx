@@ -20,7 +20,7 @@ export default function PharmacyPrescriptionsPage() {
   usePharmacyPoll();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { getActivePrescriptions, prescriptions, createManualPrescription } = usePharmacyStore();
+  const { getActivePrescriptions, prescriptions, createManualPrescription, skipPrescription } = usePharmacyStore();
   const { getPatient } = useFrontdeskStore();
   const [selected, setSelected] = useState<Prescription | null>(null);
   const [filter, setFilter] = useState<string>("active");
@@ -158,6 +158,7 @@ export default function PharmacyPrescriptionsPage() {
           { key: "items", label: "Items" },
           { key: "status", label: "Status" },
           { key: "time", label: "Received" },
+          { key: "actions", label: "" },
         ]}
         rows={rows.map((r) => ({
           patient: (
@@ -172,6 +173,19 @@ export default function PharmacyPrescriptionsPage() {
           items: r.lines.length,
           status: <StatusBadge label={RX_STATUS_LABELS[r.status]} variant="info" />,
           time: new Date(r.createdAt).toLocaleString("en-IN"),
+          actions: ["pending", "verified"].includes(r.status) && (
+            <AttioButton
+              variant="ghost"
+              className="!h-7 !text-[11px]"
+              onClick={() => {
+                if (window.confirm("Skip this prescription? It will be removed from the active queue.")) {
+                  void skipPrescription(r.id).catch((err: Error) => alert(err.message));
+                }
+              }}
+            >
+              Skip
+            </AttioButton>
+          ),
         }))}
       />
       {selected && <RxWorkspaceModal rx={selected} onClose={() => setSelected(null)} />}

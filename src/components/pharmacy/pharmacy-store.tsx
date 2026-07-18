@@ -40,6 +40,7 @@ type Store = PharmacySnapshot & {
   getActivePrescriptions: () => Prescription[];
   verifyPrescription: (id: string, counselingNotes?: string) => Promise<void>;
   rejectPrescription: (id: string, reason: string) => Promise<void>;
+  skipPrescription: (id: string, reason?: string) => Promise<void>;
   dispensePrescription: (
     id: string,
     quantities: Record<string, number>,
@@ -247,7 +248,7 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
       getSupplier: (id) => data.suppliers.find((s) => s.id === id),
       getActivePrescriptions: () =>
         getFilteredPrescriptions(
-          data.prescriptions.filter((r) => !["dispensed", "cancelled", "rejected"].includes(r.status)),
+          data.prescriptions.filter((r) => !["dispensed", "cancelled", "rejected", "skipped"].includes(r.status)),
         ),
       verifyPrescription: async (id, counselingNotes) => {
         const res = await pharmacyMutate({ op: "verifyPrescription", operatorId: opId(), rxId: id, counselingNotes });
@@ -257,6 +258,11 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
       rejectPrescription: async (id, reason) => {
         const res = await pharmacyMutate({ op: "rejectPrescription", operatorId: opId(), rxId: id, reason });
         if (!res.ok) throw new Error(res.error ?? "Failed to reject prescription");
+        await refresh({ silent: true });
+      },
+      skipPrescription: async (id, reason) => {
+        const res = await pharmacyMutate({ op: "skipPrescription", operatorId: opId(), rxId: id, reason });
+        if (!res.ok) throw new Error(res.error ?? "Failed to skip prescription");
         await refresh({ silent: true });
       },
       dispensePrescription: async (id, quantities, witnessName, batchIds, newLines) => {
