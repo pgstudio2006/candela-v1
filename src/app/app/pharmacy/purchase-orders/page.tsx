@@ -154,7 +154,7 @@ export default function PharmacyPurchaseOrdersPage() {
                     Approve
                   </AttioButton>
                 )}
-                {p.status === "draft" && canDelete && (
+                {canDelete && (
                   <AttioButton
                     variant="ghost"
                     className="!h-7 !text-[11px] text-red-600 hover:text-red-700"

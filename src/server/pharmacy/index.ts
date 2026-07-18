@@ -21,6 +21,7 @@ import {
   mutateCreateReturn,
   mutateDeleteDrug,
   mutateDeletePurchaseOrder,
+  mutateDeleteStockBatch,
   mutateDeleteSupplier,
   mutateDispensePrescription,
   mutateFulfillIndent,
@@ -551,6 +552,22 @@ export async function deletePurchaseOrder(ctx: ServerContext, operatorId: string
       entityType: "purchase_order",
       entityId: id,
       summary: `Purchase order deleted by ${operator.name}`,
+    });
+    return next;
+  });
+}
+
+export async function deleteStockBatch(ctx: ServerContext, operatorId: string, id: string) {
+  await withOperator(ctx, operatorId, async (state, operator) => {
+    assertManager(operator);
+    const next = mutateDeleteStockBatch(state, operator, id);
+    await writePlatformAudit({
+      ctx,
+      module: "pharmacy",
+      action: "stock_batch_deleted",
+      entityType: "stock_batch",
+      entityId: id,
+      summary: `Stock batch deleted by ${operator.name}`,
     });
     return next;
   });

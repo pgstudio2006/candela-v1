@@ -68,6 +68,7 @@ type Store = PharmacySnapshot & {
   deletePurchaseOrder: (id: string) => Promise<void>;
   receivePO: (poId: string, received: Record<string, { qty: number; batchNo: string; expiry: string; shelf?: string; box?: string }>) => Promise<void>;
   adjustStock: (batchId: string, delta: number, reason: string) => Promise<void>;
+  deleteStockBatch: (batchId: string) => Promise<void>;
   quarantineBatch: (batchId: string, quarantined: boolean) => Promise<void>;
   markBillPaid: (id: string, mode: PharmacyBill["paymentMode"]) => Promise<void>;
   applyBillDiscount: (billId: string, discount: number, discountReason: string) => Promise<{ ok: boolean; error?: string }>;
@@ -335,6 +336,11 @@ export function PharmacyStoreProvider({ children }: { children: ReactNode }) {
       },
       adjustStock: async (batchId, delta, reason) => {
         await pharmacyMutate({ op: "adjustStock", operatorId: opId(), batchId, delta, reason });
+        await refresh({ silent: true });
+      },
+      deleteStockBatch: async (batchId) => {
+        const res = await pharmacyMutate({ op: "deleteStockBatch", operatorId: opId(), id: batchId });
+        if (!res.ok) throw new Error(res.error ?? "Failed to delete stock batch");
         await refresh({ silent: true });
       },
       quarantineBatch: async (batchId, quarantined) => {

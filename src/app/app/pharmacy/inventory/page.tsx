@@ -7,15 +7,18 @@ import { PharmacyDialog, PharmacyInput, PharmacyTextarea, FormRow } from "@/comp
 import type { StockBatch } from "@/design-system/pharmacy-data";
 import { daysToExpiry } from "@/lib/pharmacy-platform";
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
 export default function PharmacyInventoryPage() {
-  const { stock, getDrug, getSupplier, quarantineBatch, adjustStock } = usePharmacyStore();
+  const { stock, getDrug, getSupplier, quarantineBatch, adjustStock, deleteStockBatch, isManager } = usePharmacyStore();
   const [tab, setTab] = useState<"all" | "low" | "expiry">("all");
   const [adjust, setAdjust] = useState<StockBatch | null>(null);
   const [delta, setDelta] = useState("");
   const [reason, setReason] = useState("");
   const [adjusting, setAdjusting] = useState(false);
+
+  const canDelete = isManager();
 
   const rows = stock.filter((s) => {
     const drug = getDrug(s.drugId);
@@ -125,6 +128,20 @@ export default function PharmacyInventoryPage() {
                 <AttioButton variant="ghost" className="!h-7 !text-[11px]" onClick={() => void quarantineBatch(s.id, !s.quarantined)}>
                   {s.quarantined ? "Release" : "Quarantine"}
                 </AttioButton>
+                {canDelete && (
+                  <AttioButton
+                    variant="ghost"
+                    className="!h-7 !text-[11px] text-red-600 hover:text-red-700"
+                    title="Delete batch"
+                    onClick={() => {
+                      if (window.confirm(`Delete batch ${s.batchNo}? This cannot be undone.`)) {
+                        void deleteStockBatch(s.id).catch((err: Error) => alert(err.message));
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </AttioButton>
+                )}
               </div>
             ),
           };

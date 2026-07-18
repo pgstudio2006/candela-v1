@@ -11,6 +11,7 @@ import {
   createPharmacyBill,
   deleteDrug,
   deletePurchaseOrder,
+  deleteStockBatch,
   deleteSupplier,
   adjustStock,
   applyBillDiscount,
@@ -146,6 +147,9 @@ export async function POST(request: Request) {
         break;
       case "deletePurchaseOrder":
         result = await deletePurchaseOrder(ctx, operatorId, body.id!);
+        break;
+      case "deleteStockBatch":
+        result = await deleteStockBatch(ctx, operatorId, body.id!);
         break;
       case "approveReturn":
         result = await approveReturn(ctx, operatorId, body.id!);

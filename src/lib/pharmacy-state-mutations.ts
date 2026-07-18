@@ -713,9 +713,6 @@ export function mutateFulfillIndent(
 export function mutateDeleteDrug(state: PharmacyStateShape, operator: PharmacyStaff, id: string): PharmacyStateShape {
   const drug = state.drugs.find((d) => d.id === id);
   if (!drug) throw new ServerActionError("NOT_FOUND", "Drug not found.");
-  if (state.stock.some((s) => s.drugId === id)) {
-    throw new ServerActionError("VALIDATION", "Cannot delete a drug that has stock batches.");
-  }
   if (state.prescriptions.some((r) => r.lines.some((l) => l.drugId === id))) {
     throw new ServerActionError("VALIDATION", "Cannot delete a drug referenced by prescriptions.");
   }
@@ -725,6 +722,7 @@ export function mutateDeleteDrug(state: PharmacyStateShape, operator: PharmacySt
   return {
     ...state,
     drugs: state.drugs.filter((d) => d.id !== id),
+    stock: state.stock.filter((s) => s.drugId !== id),
     activities: appendPharmacyActivity(state.activities, operator.name, "drug_delete", `Deleted drug ${drug.brandName}`, id),
   };
 }
@@ -732,15 +730,11 @@ export function mutateDeleteDrug(state: PharmacyStateShape, operator: PharmacySt
 export function mutateDeleteSupplier(state: PharmacyStateShape, operator: PharmacyStaff, id: string): PharmacyStateShape {
   const supplier = state.suppliers.find((s) => s.id === id);
   if (!supplier) throw new ServerActionError("NOT_FOUND", "Supplier not found.");
-  if (state.purchaseOrders.some((p) => p.supplierId === id)) {
-    throw new ServerActionError("VALIDATION", "Cannot delete a supplier with purchase orders.");
-  }
-  if (state.supplierCatalogue.some((i) => i.supplierId === id)) {
-    throw new ServerActionError("VALIDATION", "Cannot delete a supplier with catalogue items.");
-  }
   return {
     ...state,
     suppliers: state.suppliers.filter((s) => s.id !== id),
+    supplierCatalogue: state.supplierCatalogue.filter((i) => i.supplierId !== id),
+    purchaseOrders: state.purchaseOrders.filter((p) => p.supplierId !== id),
     activities: appendPharmacyActivity(state.activities, operator.name, "supplier_delete", `Deleted supplier ${supplier.name}`, id),
   };
 }
@@ -752,13 +746,30 @@ export function mutateDeletePurchaseOrder(
 ): PharmacyStateShape {
   const po = state.purchaseOrders.find((p) => p.id === id);
   if (!po) throw new ServerActionError("NOT_FOUND", "Purchase order not found.");
-  if (po.status !== "draft") {
-    throw new ServerActionError("VALIDATION", "Only draft purchase orders can be deleted.");
-  }
   return {
     ...state,
     purchaseOrders: state.purchaseOrders.filter((p) => p.id !== id),
     activities: appendPharmacyActivity(state.activities, operator.name, "po_delete", `Deleted purchase order ${po.id}`, id),
+  };
+}
+
+export function mutateDeleteStockBatch(
+  state: PharmacyStateShape,
+  operator: PharmacyStaff,
+  id: string,
+): PharmacyStateShape {
+  const batch = state.stock.find((s) => s.id === id);
+  if (!batch) throw new ServerActionError("NOT_FOUND", "Stock batch not found.");
+  return {
+    ...state,
+    stock: state.stock.filter((s) => s.id !== id),
+    activities: appendPharmacyActivity(
+      state.activities,
+      operator.name,
+      "stock_delete",
+      `Deleted stock batch ${batch.batchNo}`,
+      id,
+    ),
   };
 }
 
