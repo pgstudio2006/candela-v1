@@ -8,7 +8,7 @@ import { PatientConsentsPanel } from "@/components/patient-consents";
 import { PatientIpdRecord } from "@/components/doctor/patient-ipd-record";
 import { consultPrimaryDiagnosis, formatConsultDate } from "@/lib/doctor-records";
 import { parseScribeSessions } from "@/lib/scribe-transcript";
-import { formatStageStatus } from "@/lib/frontdesk-workflow";
+import { formatStageStatus, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { ArrowLeft, ChevronRight, FileText, Mic, Pill, Stethoscope } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -49,7 +49,7 @@ export default function DoctorPatientDetailPage() {
         { label: patient.name },
       ]}
       title={patient.name}
-      meta={`${patient.uhid} · ${patient.department} · ${patient.age}y ${patient.gender}`}
+      meta={`${patient.uhid} · ${patient.department} · ${resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y ${patient.gender}`}
       tabs={[
         { id: "timeline", label: "Clinical timeline" },
         { id: "ipd", label: "IPD" },

@@ -7,6 +7,7 @@ import {
   scribeLanguageLabel,
 } from "@/lib/doctor-records";
 import { NavayuLetterhead, letterheadStyles as s } from "./navayu-letterhead";
+import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 
 type PrintableConsultRecordProps = {
   patient: Patient;
@@ -55,7 +56,7 @@ export function PrintableConsultRecord({
         <div>
           <strong>Patient:</strong> {patient.name} · {patient.uhid}
           <br />
-          <strong>Age / Sex:</strong> {patient.age}y / {patient.gender}
+          <strong>Age / Sex:</strong> {resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y / {patient.gender}
           <br />
           <strong>Department:</strong> {patient.department}
         </div>

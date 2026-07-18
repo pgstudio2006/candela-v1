@@ -1,6 +1,7 @@
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
 import { formatConsultDate } from "@/lib/doctor-records";
+import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { NavayuLetterhead, letterheadStyles as s } from "./navayu-letterhead";
 
 type PrintablePrescriptionProps = {
@@ -26,7 +27,7 @@ export function PrintablePrescription({
           <br />
           <strong>UHID:</strong> {patient.uhid}
           <br />
-          <strong>Age / Sex:</strong> {patient.age}y / {patient.gender}
+          <strong>Age / Sex:</strong> {resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y / {patient.gender}
         </div>
         <div>
           <strong>Date:</strong> {date}

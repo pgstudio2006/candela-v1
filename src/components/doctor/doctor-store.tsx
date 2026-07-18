@@ -375,13 +375,14 @@ export function DoctorStoreProvider({ children }: { children: ReactNode }) {
             ...prev,
             visits: prev.visits.map((v) =>
               v.id === visitId
-                ? { ...v, stage: "completed", token: undefined, routingNote: `Skipped by ${doctor.profile.name}` }
+                ? { ...v, stage: "completed" as const, token: undefined, routingNote: `Skipped by ${doctor.profile.name}` }
                 : v,
             ),
           };
         });
-        scheduleRefresh();
+        void refresh({ silent: true });
         return { ok: true };
+
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Something went wrong.";
         setError(msg);

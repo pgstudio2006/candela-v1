@@ -10,7 +10,7 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useSession } from "@/components/candela/session-provider";
 import type { ConsultationCartItem, TreatmentMode } from "@/design-system/doctor-data";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
-import { isRedFlagVisit } from "@/lib/frontdesk-workflow";
+import { isRedFlagVisit, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import {
   fetchBillingPackagesFromAPI,
   fetchServiceChargesFromAPI,
@@ -661,7 +661,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
             transcript={consult?.scribeTranscript ?? ""}
             patientContext={
               patient
-                ? `${patient.name}, UHID ${patient.uhid}, ${patient.age}y ${patient.gender}`
+                ? `${patient.name}, UHID ${patient.uhid}, ${resolvePatientAge(patient.age, patient.dateOfBirth)}y ${patient.gender}`
                 : undefined
             }
             applied={scribeApplied}

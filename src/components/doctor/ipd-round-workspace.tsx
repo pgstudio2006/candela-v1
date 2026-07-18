@@ -10,6 +10,7 @@ import { PrescriptionEditor } from "@/components/doctor/prescription-editor";
 import { PublishedSchemaForm } from "@/components/candela/published-schema-form";
 import { IpdDischargeSummaryPanel } from "@/components/ipd-discharge-summary";
 import { useToast } from "@/components/ui/toast-provider";
+import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { getNurseOptionsAction, saveIpdTaskAction, updateIpdTaskStatusAction } from "@/app/actions/ipd-actions";
 import { listPatientDocumentsAction, type PatientDocumentListItem } from "@/app/actions/patient-document-actions";
 import type { IpdPatient } from "@/design-system/doctor-data";
@@ -407,7 +408,7 @@ export function IpdRoundWorkspace({
 
   const patientName = patient?.name ?? admission.patientId;
   const uhid = patient?.uhid;
-  const ageGender = patient ? `${patient.age}y · ${patient.gender}` : "";
+  const ageGender = patient ? `${resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y · ${patient.gender}` : "";
   const wardBed = `${admission.ward} · Bed ${admission.bed}`;
   const statusLabel = admission.status.replace(/_/g, " ");
 

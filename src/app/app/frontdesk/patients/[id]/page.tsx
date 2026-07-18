@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PatientDocumentsPanel } from "@/components/patient-documents";
 import { PatientConsentsPanel } from "@/components/patient-consents";
 import { PatientPrescriptionsPanel } from "@/components/frontdesk/patient-prescriptions-panel";
-import { formatStageStatus } from "@/lib/frontdesk-workflow";
+import { formatStageStatus, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { problemLabelForValue } from "@/lib/department-problems";
 import { ArrowLeft, CreditCard, Download, ListOrdered, Pencil, Printer, UserCog } from "lucide-react";
 import Link from "next/link";
@@ -142,7 +142,7 @@ export default function PatientRecordPage() {
         { label: patient.name },
       ]}
       title={patient.name}
-      meta={`${patient.uhid} · ${patient.age}y · ${patient.phone}`}
+      meta={`${patient.uhid} · ${resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y · ${patient.phone}`}
       actions={
         <>
           <Link href={`/app/frontdesk/patients/${patient.id}/edit`}>

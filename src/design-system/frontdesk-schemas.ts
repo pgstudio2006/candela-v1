@@ -113,6 +113,7 @@ export const REGISTRATION_SCHEMA: FormSchema = {
           ],
         },
         { id: "dob", type: "date", label: "Date of birth", placeholder: "dd-mm-yyyy" },
+        { id: "age", type: "number", label: "Age (if DOB unknown)", placeholder: "e.g. 35", hint: "Leave blank if Date of birth is filled" },
         {
           id: "appointmentCentre",
           type: "select",
@@ -120,6 +121,7 @@ export const REGISTRATION_SCHEMA: FormSchema = {
           defaultValue: "Navayu Gurgaon",
           options: APPOINTMENT_CENTRES,
         },
+
         {
           id: "country",
           type: "select",
