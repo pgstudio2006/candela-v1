@@ -713,9 +713,6 @@ export function mutateFulfillIndent(
 export function mutateDeleteDrug(state: PharmacyStateShape, operator: PharmacyStaff, id: string): PharmacyStateShape {
   const drug = state.drugs.find((d) => d.id === id);
   if (!drug) throw new ServerActionError("NOT_FOUND", "Drug not found.");
-  if (state.prescriptions.some((r) => r.lines.some((l) => l.drugId === id))) {
-    throw new ServerActionError("VALIDATION", "Cannot delete a drug referenced by prescriptions.");
-  }
   if (state.purchaseOrders.some((p) => p.lines.some((l) => l.drugId === id))) {
     throw new ServerActionError("VALIDATION", "Cannot delete a drug referenced by purchase orders.");
   }
