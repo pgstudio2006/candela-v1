@@ -87,18 +87,37 @@ function drawHLine(page: PDFPage, x1: number, x2: number, y: number) {
 }
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const words = pdfSafeText(text).split(/\s+/);
+  const safe = pdfSafeText(text).trim();
+  if (!safe) return [""];
+
+  const words = safe.split(/\s+/);
   const lines: string[] = [];
   let current = "";
-  for (const word of words) {
-    const test = current ? `${current} ${word}` : word;
-    if (font.widthOfTextAtSize(test, size) > maxWidth && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = test;
+
+  const pushLongWord = (word: string) => {
+    let chunk = "";
+    for (const ch of word) {
+      const candidate = chunk + ch;
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        chunk = candidate;
+      } else {
+        if (chunk) lines.push(chunk);
+        chunk = ch;
+      }
     }
+    return chunk;
+  };
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (current) lines.push(current);
+    current = font.widthOfTextAtSize(word, size) <= maxWidth ? word : pushLongWord(word);
   }
+
   if (current) lines.push(current);
   return lines.length ? lines : [""];
 }
@@ -175,10 +194,12 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
     date: PAGE.marginLeft,
     invoice: PAGE.marginLeft + 65,
     services: PAGE.marginLeft + 160,
-    total: PAGE.marginRight - 148,
-    paid: PAGE.marginRight - 78,
+    total: PAGE.marginRight - 130,
+    paid: PAGE.marginRight - 60,
     balance: PAGE.marginRight - 4,
   };
+  const maxAmountWidth = font.widthOfTextAtSize(formatInr(999999.99), FONT_SIZES.body) + 8;
+  const serviceMaxWidth = Math.max(60, colX.total - colX.services - 24 - maxAmountWidth);
 
   drawTableHeader(page, y, bold);
   drawText(page, "Date", colX.date + 4, y - 9, bold, FONT_SIZES.body);
@@ -204,7 +225,7 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
     totalBalance += receipt.balanceDue;
 
     const serviceLabels = receipt.lines.map((l) => l.label).join(" · ");
-    const serviceLines = wrapText(serviceLabels, font, FONT_SIZES.body, colX.total - colX.services - 14);
+    const serviceLines = wrapText(serviceLabels, font, FONT_SIZES.body, serviceMaxWidth);
     const rowLines = Math.max(1, serviceLines.length);
     const rowH = rowLines * LAYOUT.lineLeading + 6;
 
