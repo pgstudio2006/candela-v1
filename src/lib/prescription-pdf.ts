@@ -3,6 +3,7 @@ import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
 import { generateSainiPrescriptionPdf } from "@/lib/prescription-pdf-saini";
 import type { DocumentLayoutId } from "@/design-system/document-templates";
+import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import {
   COLORS,
   FONT,
@@ -70,7 +71,8 @@ export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Prom
   drawText(page, `Patient: ${patient.name}`, LAYOUT.marginLeft, currentY, bold, FONT.body);
   drawText(page, `UHID: ${patient.uhid}`, midX, currentY, bold, FONT.body);
   currentY -= 16;
-  drawText(page, `Age / Sex: ${patient.age}y / ${patient.gender}`, LAYOUT.marginLeft, currentY, font, FONT.body);
+  const resolvedAge = resolvePatientAge(patient.age, patient.dateOfBirth);
+  drawText(page, `Age / Sex: ${resolvedAge ? `${resolvedAge}y` : "—"} / ${patient.gender || "—"}`, LAYOUT.marginLeft, currentY, font, FONT.body);
   drawText(page, `Phone: ${patient.phone || "—"}`, midX, currentY, font, FONT.body);
   currentY -= 16;
   drawText(page, `Doctor: ${doctorName}`, LAYOUT.marginLeft, currentY, font, FONT.body);

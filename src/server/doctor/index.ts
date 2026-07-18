@@ -445,7 +445,8 @@ export async function skipConsultation(ctx: ServerContext, visitId: string) {
   await prisma.opdVisit.update({
     where: { id: visitId },
     data: {
-      token: nextToken,
+      stage: "completed",
+      token: null,
       routingNote,
       ...(needsAssignment ? { doctorId, doctorName: profile.name } : {}),
     },
@@ -463,7 +464,7 @@ export async function skipConsultation(ctx: ServerContext, visitId: string) {
     summary: `Dr. ${profile.name} skipped consultation for visit ${visitId}`,
   });
 
-  return { ok: true, token: nextToken };
+  return { ok: true };
 }
 
 export async function updateConsultation(

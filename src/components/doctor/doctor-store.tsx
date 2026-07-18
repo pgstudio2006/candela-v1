@@ -371,18 +371,17 @@ export function DoctorStoreProvider({ children }: { children: ReactNode }) {
           throw new Error(res.error);
         }
         syncDoctor((prev) => {
-          const maxToken = prev.visits.reduce((max, v) => Math.max(max, v.token ?? 0), 0);
           return {
             ...prev,
             visits: prev.visits.map((v) =>
               v.id === visitId
-                ? { ...v, token: maxToken + 1, routingNote: `Skipped by ${doctor.profile.name}` }
+                ? { ...v, stage: "completed", token: undefined, routingNote: `Skipped by ${doctor.profile.name}` }
                 : v,
             ),
           };
         });
         scheduleRefresh();
-        return { ok: true, token: res.data?.token as number | undefined };
+        return { ok: true };
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Something went wrong.";
         setError(msg);

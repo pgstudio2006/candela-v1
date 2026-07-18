@@ -151,6 +151,9 @@ export default function RegistrationPage() {
       const genderMap: Record<string, string> = { male: "M", female: "F", other: "O", prefer_not: "O" };
       values.gender = genderMap[lead.gender] ?? "O";
     }
+    if (lead.age != null && typeof lead.age === "number") {
+      values.age = lead.age;
+    }
     if (lead.dob && typeof lead.dob === "string") {
       values.dob = lead.dob;
     } else if (lead.age != null && typeof lead.age === "number") {

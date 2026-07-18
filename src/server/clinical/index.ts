@@ -608,6 +608,7 @@ export async function registerPatient(
         : Number(data.age ?? 0) > 0
           ? Number(data.age)
           : 0,
+      dateOfBirth: data.dob && String(data.dob).trim() ? new Date(String(data.dob)) : null,
       gender: String(data.gender ?? "O"),
       department: deptLabel(deptId),
       departmentId: deptId,
@@ -632,6 +633,7 @@ export async function registerPatient(
         : Number(data.age ?? 0) > 0
           ? Number(data.age)
           : 0,
+      dateOfBirth: data.dob && String(data.dob).trim() ? new Date(String(data.dob)) : null,
       gender: String(data.gender ?? "O"),
       department: deptLabel(deptId),
       departmentId: deptId,
@@ -1527,7 +1529,16 @@ export async function updatePatient(
       fullName: name,
       phone,
       email: String(normalized.email ?? "") || null,
-      age: normalized.dob ? ageFromDob(String(normalized.dob)) : existing.age,
+      age: normalized.dob
+        ? ageFromDob(String(normalized.dob))
+        : Number(normalized.age ?? 0) > 0
+          ? Number(normalized.age)
+          : existing.age,
+      dateOfBirth: normalized.dob && String(normalized.dob).trim()
+        ? new Date(String(normalized.dob))
+        : normalized.age
+          ? null
+          : existing.dateOfBirth,
       gender: String(normalized.gender ?? existing.gender ?? "O"),
       department: deptLabel(deptId),
       departmentId: deptId,
