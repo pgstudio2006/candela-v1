@@ -167,29 +167,24 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
   drawText(page, "Patient Invoice Summary", PAGE.marginLeft, y - 18, bold, FONT_SIZES.title);
   y -= 32;
 
-  drawText(page, `Generated: ${formatDateTime(new Date().toISOString())}`, PAGE.marginLeft, y, font, FONT_SIZES.small);
-  y -= 16;
+  const printDateTime = formatDateTime(new Date().toISOString());
+  const patientAddress = first.patientAddress || first.patientCity || "-";
 
   page.drawRectangle({
     x: PAGE.marginLeft,
-    y: y - 42,
+    y: y - 56,
     width: PAGE.marginRight - PAGE.marginLeft,
-    height: 42,
+    height: 56,
     borderWidth: 0.6,
     borderColor: COLORS.border,
     color: COLORS.white,
   });
   drawText(page, `Patient: ${first.patientName}`, PAGE.marginLeft + 8, y - 16, bold, FONT_SIZES.body);
-  drawText(page, `UHID: ${first.patientUhid}`, PAGE.marginLeft + 8, y - 30, font, FONT_SIZES.body);
-  drawText(
-    page,
-    `Phone: ${first.patientPhone}`,
-    PAGE.marginLeft + 260,
-    y - 30,
-    font,
-    FONT_SIZES.body,
-  );
-  y -= 56;
+  drawText(page, `UHID: ${first.patientUhid}`, PAGE.marginLeft + 260, y - 16, font, FONT_SIZES.body);
+  drawText(page, `Mobile: ${first.patientPhone}`, PAGE.marginLeft + 8, y - 30, font, FONT_SIZES.body);
+  drawText(page, `Print date: ${printDateTime}`, PAGE.marginLeft + 260, y - 30, font, FONT_SIZES.body);
+  drawText(page, `Address: ${patientAddress}`, PAGE.marginLeft + 8, y - 44, font, FONT_SIZES.body);
+  y -= 70;
 
   const colX = {
     date: PAGE.marginLeft,
