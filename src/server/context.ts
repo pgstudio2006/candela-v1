@@ -48,12 +48,17 @@ export async function getServerContext(): Promise<ServerContext> {
     }
   }
 
+  const currentUser = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { activeRole: { select: { key: true } } },
+  });
+
   return {
     userId: session.user.id,
     tenantId: session.user.tenantId,
     branchId: session.user.branchId,
     branchName: session.user.branchName ?? "",
-    role: session.user.role,
+    role: currentUser?.activeRole?.key ?? session.user.role,
     sessionToken: session.user.sessionToken,
   };
 }
