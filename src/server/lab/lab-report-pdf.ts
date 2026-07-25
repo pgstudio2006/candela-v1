@@ -1,5 +1,3 @@
-"use server";
-
 import { PDFDocument, PDFPage, StandardFonts, rgb, type Color } from "pdf-lib";
 import {
   LAB_RESULT_FLAG_LABELS,

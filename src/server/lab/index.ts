@@ -60,7 +60,7 @@ function matchesRange(
   return true;
 }
 
-export function evaluateLabResult(
+function evaluateLabResult(
   fieldMaster: LabFieldMaster,
   value: string,
   patient: { gender?: string | null; dateOfBirth?: Date | null; sampleType?: string },
