@@ -21,6 +21,7 @@ import type {
   LabReportCatalog,
   LabResultInput,
 } from "@/design-system/lab-data";
+import { useSession } from "@/components/candela/session-provider";
 import { isTransientSessionError, sleep } from "@/lib/session-retry";
 import {
   createContext,
@@ -61,6 +62,7 @@ type Store = LabSnapshot & {
 const Ctx = createContext<Store | null>(null);
 
 export function LabStoreProvider({ children }: { children: ReactNode }) {
+  const { session, authReady } = useSession();
   const [state, setState] = useState<LabSnapshot>({ fieldMasters: [], reportCatalogs: [], orders: [] });
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,10 +85,17 @@ export function LabStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!authReady || !session) return;
+
     let cancelled = false;
     const load = async (attempt = 0) => {
       try {
-        const res = await getLabSnapshotAction();
+        const res = await Promise.race([
+          getLabSnapshotAction(),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(() => reject(new Error("Laboratory workspace request timed out. Please retry.")), 15000);
+          }),
+        ]);
         if (cancelled) return;
         if (res.ok) {
           setState(res.data);
@@ -113,7 +122,7 @@ export function LabStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authReady, session]);
 
   const mutate = useCallback(
     async <T,>(fn: () => Promise<{ ok: boolean; data?: T; error?: string }>, message?: string): Promise<T> => {
