@@ -32,7 +32,7 @@ export const HEALTHCARE_STAFF_ROLES: { value: HealthcareStaffRole; label: string
   { value: "crm_executive", label: "CRM executive", moduleRole: "crm" },
   { value: "crm_manager", label: "CRM manager", moduleRole: "crm" },
   { value: "hr_executive", label: "HR executive", moduleRole: "hr" },
-  { value: "lab_technician", label: "Lab technician" },
+  { value: "lab_technician", label: "Lab technician", moduleRole: "laboratory" },
   { value: "billing_executive", label: "Billing executive", moduleRole: "frontdesk" },
   { value: "finance", label: "Finance", moduleRole: "admin" },
   { value: "finance_manager", label: "Finance manager", moduleRole: "admin" },
