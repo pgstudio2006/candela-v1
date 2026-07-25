@@ -122,7 +122,7 @@ async function seedAccessAndUsers() {
     })),
   });
 
-  const modules = ["admin", "frontdesk", "nurse", "doctor", "pharmacy", "counsellor", "crm", "hr"] as const;
+  const modules = ["admin", "frontdesk", "nurse", "doctor", "pharmacy", "laboratory", "counsellor", "crm", "hr"] as const;
   const permissionRows = modules.flatMap((module) => [
     {
       id: `perm_${module}_read`,

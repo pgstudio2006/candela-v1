@@ -22,6 +22,25 @@ function newStaffId() {
   return `st_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
+async function ensurePlatformRole(tenantId: string, roleKey: string) {
+  if (roleKey !== "laboratory") {
+    return db.role.findFirst({ where: { key: roleKey, tenantId } });
+  }
+
+  return db.role.upsert({
+    where: { tenantId_key: { tenantId, key: roleKey } },
+    update: {},
+    create: {
+      id: `role_${roleKey}`,
+      tenantId,
+      name: "LABORATORY Role",
+      key: roleKey,
+      module: "LABORATORY",
+      isSystem: true,
+    },
+  });
+}
+
 export { syncDoctorToDepartments } from "@/server/admin/doctor-department-sync";
 
 /**
@@ -170,9 +189,7 @@ export async function addStaffWithLogin(
       where: { email, tenantId: scope.tenantId },
     });
     const passwordHash = await hashPassword(initialPassword);
-    const role = await db.role.findFirst({
-      where: { key: roleKey, tenantId: scope.tenantId },
-    });
+    const role = await ensurePlatformRole(scope.tenantId, roleKey);
 
     if (!tenantUser) {
       const userId = `user_${staffId}`;
@@ -306,9 +323,7 @@ export async function resetStaffLoginPassword(
   const tenantUser = await db.user.findFirst({
     where: { email, tenantId: scope.tenantId },
   });
-  const role = await db.role.findFirst({
-    where: { key: roleKey, tenantId: scope.tenantId },
-  });
+  const role = await ensurePlatformRole(scope.tenantId, roleKey);
 
   if (!tenantUser) {
     const userId = `user_${staffId}`;
