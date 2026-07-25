@@ -4,6 +4,7 @@ import { PublishedSchemaForm } from "@/components/candela/published-schema-form"
 import { PatientSearchField } from "@/components/frontdesk/patient-search-field";
 import { AttioButton, Panel } from "@/components/frontdesk/ui";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
+import type { LabReportCatalog } from "@/design-system/lab-data";
 import type { PaymentScope } from "@/lib/billing-routing";
 import {
   formatPackagePrice,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/billing-packages";
 import { getVisitBillingAction } from "@/app/actions/clinical-actions";
 import { getIpdCartAction } from "@/app/actions/ipd-actions";
+import { listActiveLabCatalogsAction } from "@/app/actions/lab-actions";
 import { computeGstInvoice } from "@/lib/gst-invoicing";
 import type { BillingPackageLine, PaymentSplit } from "@/lib/opd-billing";
 import { resolveBillingDiscount } from "@/lib/opd-billing";
@@ -27,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Plus, Trash2, X, Search, Package as PackageIcon } from "lucide-react";
+import { Plus, Trash2, X, Search, Package as PackageIcon, FlaskConical } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
 
 const PAYMENT_MODES = [
@@ -81,21 +83,28 @@ export function OpdBillingForm({
   const [loading, setLoading] = useState(true);
   const [packageSearch, setPackageSearch] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
-  const [tab, setTab] = useState<"packages" | "services">("services");
+  const [labCatalogs, setLabCatalogs] = useState<LabReportCatalog[]>([]);
+  const [labLoading, setLabLoading] = useState(false);
+  const [labSearch, setLabSearch] = useState("");
+  const [selectedLabCatalogId, setSelectedLabCatalogId] = useState("");
+  const [selectedLabAmount, setSelectedLabAmount] = useState("");
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      const [pkgs, svcs] = await Promise.all([
+      const [pkgs, svcs, labs] = await Promise.all([
         fetchBillingPackagesFromAPI(branchId),
         fetchServiceChargesFromAPI(branchId),
+        listActiveLabCatalogsAction(),
       ]);
       setPackages(pkgs);
       setServices(svcs);
+      if (labs.ok) setLabCatalogs(labs.data ?? []);
       setLoading(false);
+      setLabLoading(false);
     };
-    loadData();
+    void loadData();
   }, [branchId]);
 
   const [lines, setLines] = useState<SelectedLine[]>([]);
@@ -131,6 +140,9 @@ export function OpdBillingForm({
     setExistingInvoice(null);
     setIsBalancePayment(false);
     setBillingMeta({});
+    setSelectedLabCatalogId("");
+    setSelectedLabAmount("");
+    setLabSearch("");
   }, [visit?.id]);
 
   const subtotal = lines.reduce((s, l) => s + l.amount * l.quantity, 0);
@@ -476,6 +488,94 @@ export function OpdBillingForm({
                 </div>
               </div>
 
+              <Panel title="Lab orders">
+                <div className="space-y-3">
+                  <p className="text-[12px] text-[var(--attio-text-secondary)]">
+                    Search lab catalogs, enter price, and add to the billing cart.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-[1fr_120px_100px]">
+                    <Select
+                      value={selectedLabCatalogId}
+                      disabled={Boolean(existingInvoice) || labLoading}
+                      onValueChange={(value) => {
+                        setSelectedLabCatalogId(value ?? "");
+                        setSelectedLabAmount("");
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-[13px]">
+                        <SelectValue placeholder={labLoading ? "Loading labs…" : "Select lab test…"} />
+                      </SelectTrigger>
+                      <SelectContent className="min-w-[320px]">
+                        <div className="sticky top-0 z-10 bg-popover px-2 py-2">
+                          <Input
+                            type="text"
+                            placeholder="Search lab tests..."
+                            value={labSearch}
+                            onChange={(e) => setLabSearch(e.target.value)}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            onKeyUp={(e) => e.stopPropagation()}
+                            className="h-8 text-[12px]"
+                          />
+                        </div>
+                        {labCatalogs
+                          .filter((c) =>
+                            c.name.toLowerCase().includes(labSearch.toLowerCase()) ||
+                            c.code.toLowerCase().includes(labSearch.toLowerCase())
+                          )
+                          .map((c) => (
+                            <SelectItem key={c.id} value={c.id} className="py-3">
+                              <div className="flex flex-col gap-0.5">
+                                <p className="text-[13px] font-medium leading-tight">{c.name}</p>
+                                <p className="text-[11px] text-[var(--attio-text-tertiary)]">{c.code}</p>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        {labCatalogs.filter((c) =>
+                          c.name.toLowerCase().includes(labSearch.toLowerCase()) ||
+                          c.code.toLowerCase().includes(labSearch.toLowerCase())
+                        ).length === 0 && (
+                          <p className="px-2 py-2 text-[12px] text-[var(--attio-text-tertiary)]">No lab tests match.</p>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      disabled={Boolean(existingInvoice) || !selectedLabCatalogId}
+                      value={selectedLabAmount}
+                      onChange={(e) => setSelectedLabAmount(e.target.value)}
+                      placeholder="Price ₹"
+                      className="h-9 text-[13px]"
+                    />
+                    <AttioButton
+                      variant="secondary"
+                      disabled={Boolean(existingInvoice) || !selectedLabCatalogId || !selectedLabAmount}
+                      onClick={() => {
+                        const catalog = labCatalogs.find((c) => c.id === selectedLabCatalogId);
+                        if (!catalog) return;
+                        const amount = Number(selectedLabAmount) || 0;
+                        setLines((prev) => [
+                          ...prev,
+                          {
+                            key: `lab_${catalog.id}_${Date.now()}`,
+                            packageId: `lab-${catalog.id}`,
+                            label: `Lab: ${catalog.name}`,
+                            amount,
+                            quantity: 1,
+                            category: "lab",
+                          },
+                        ]);
+                        setSelectedLabCatalogId("");
+                        setSelectedLabAmount("");
+                      }}
+                    >
+                      Add
+                    </AttioButton>
+                  </div>
+                </div>
+              </Panel>
+
               {lines.length > 0 && (
                 <Panel title="Selected packages">
                   <ul className="space-y-2">
@@ -486,7 +586,12 @@ export function OpdBillingForm({
                       >
                         <div>
                           <p className="text-[13px] font-medium">{line.label}</p>
-                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">{line.packageId}</p>
+                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                            {line.packageId}
+                            {line.category === "lab" && (
+                              <span className="ml-1.5 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">Lab</span>
+                            )}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-[11px]">Qty</Label>

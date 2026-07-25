@@ -101,6 +101,37 @@ export type IpdCartItem = {
   addedAt: string;
 };
 
+export type IpdAdvancePayment = {
+  id: string;
+  admissionId: string;
+  patientId: string;
+  amount: number;
+  receivedAmount: number;
+  pendingAmount: number;
+  mode: string;
+  splits?: { mode: string; amount: number }[] | null;
+  status: "received" | "pending" | "cancelled" | "refunded";
+  referenceNo?: string | null;
+  notes?: string | null;
+  receivedAt: string;
+  receivedBy?: string | null;
+};
+
+export type IpdRefundVoucher = {
+  id: string;
+  admissionId: string;
+  patientId: string;
+  invoiceId?: string | null;
+  amount: number;
+  mode: string;
+  status: "pending" | "approved" | "issued" | "cancelled";
+  approvedBy?: string | null;
+  requestedBy?: string | null;
+  referenceNo?: string | null;
+  notes?: string | null;
+  createdAt: string;
+};
+
 export type IpdAdmissionDetail = {
   id: string;
   visitId: string;
@@ -127,6 +158,11 @@ export type IpdAdmissionDetail = {
   balanceDue?: number | null;
   amountPaid?: number | null;
   billAmount?: number | null;
+  walletBalance?: number | null;
+  advancePayments: IpdAdvancePayment[];
+  refundVouchers: IpdRefundVoucher[];
+  refundAmount?: number | null;
+  finalInvoiceId?: string | null;
   dischargeSummary?: unknown;
   deathSummary?: unknown;
 };

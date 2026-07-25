@@ -29,6 +29,8 @@ export type PaymentSplit = {
 
 export type OpdReceiptPayload = {
   branchId?: string;
+  patientId?: string;
+  visitId?: string;
   invoiceNumber: string;
   issuedAt: string;
   patientName: string;

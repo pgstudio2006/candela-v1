@@ -1,6 +1,12 @@
 "use server";
 
-import type { IpdAdmissionInput, IpdAdmissionStatus, IpdCartItem } from "@/design-system/ipd-data";
+import type {
+  IpdAdmissionInput,
+  IpdAdmissionStatus,
+  IpdAdvancePayment,
+  IpdCartItem,
+  IpdRefundVoucher,
+} from "@/design-system/ipd-data";
 import { runAction, type ActionResult } from "@/server/action-result";
 import { requireAnyModule, requireModule } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
@@ -34,6 +40,16 @@ import {
   updateIpdBed,
   updateIpdWard,
   deleteIpdRoundConfig,
+  directDischargeIpdAdmission,
+  recordIpdAdvancePayment,
+  getIpdAdvancePayments,
+  getIpdWalletBalance,
+  previewIpdFinalBill,
+  createIpdRefundVoucher,
+  approveIpdRefundVoucher,
+  issueIpdRefundVoucher,
+  generateIpdFinalBillPdf,
+  sendIpdFinalBillOnWhatsApp,
   type DischargeSummaryPayload,
   type DeathSummaryPayload,
   type IpdSnapshot,
@@ -140,7 +156,7 @@ export async function deleteIpdBedAction(id: string) {
 
 export async function generateDischargeSummaryAction(id: string): Promise<ActionResult<DischargeSummaryPayload>> {
   return runAction(async () => {
-    const ctx = await requireModule("doctor");
+    const ctx = await requireAnyModule("doctor", "frontdesk", "admin");
     return generateDischargeSummary(ctx, id);
   });
 }
@@ -187,7 +203,7 @@ export async function updateIpdTaskStatusAction(taskId: string, status: "pending
 
 export async function saveDischargeSummaryAction(id: string, summary: DischargeSummaryPayload): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const ctx = await requireModule("doctor");
+    const ctx = await requireAnyModule("doctor", "frontdesk", "admin");
     return saveDischargeSummary(ctx, id, summary);
   });
 }
@@ -201,14 +217,14 @@ export async function markIpdReadyForDischargeAction(id: string): Promise<Action
 
 export async function generateDeathSummaryAction(id: string): Promise<ActionResult<DeathSummaryPayload>> {
   return runAction(async () => {
-    const ctx = await requireModule("doctor");
+    const ctx = await requireAnyModule("doctor", "frontdesk", "admin");
     return generateDeathSummary(ctx, id);
   });
 }
 
 export async function saveDeathSummaryAction(id: string, summary: DeathSummaryPayload): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const ctx = await requireModule("doctor");
+    const ctx = await requireAnyModule("doctor", "frontdesk", "admin");
     return saveDeathSummary(ctx, id, summary);
   });
 }
@@ -255,7 +271,7 @@ export async function generateIpdFinalBillAction(
     paymentSplits?: { mode: string; amount: number }[];
     discount?: number;
   },
-): Promise<ActionResult<{ visitId: string; invoiceNumber: string; total: number; amountPaid: number; balanceDue: number }>> {
+): Promise<ActionResult<{ visitId: string; invoiceId: string; invoiceNumber: string; total: number; amountPaid: number; balanceDue: number; refundAmount: number }>> {
   return runAction(async () => {
     const ctx = await requireModule("frontdesk");
     return generateIpdFinalBill(ctx, admissionId, input);
@@ -282,5 +298,92 @@ export async function deleteIpdRoundConfigAction(id: string) {
   return runAction(async () => {
     const ctx = await requireAnyModule("admin", "nurse");
     return deleteIpdRoundConfig(ctx, id);
+  });
+}
+
+export async function recordIpdAdvancePaymentAction(
+  admissionId: string,
+  input: Parameters<typeof recordIpdAdvancePayment>[2],
+): Promise<ActionResult<IpdAdvancePayment>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return recordIpdAdvancePayment(ctx, admissionId, input);
+  });
+}
+
+export async function getIpdAdvancePaymentsAction(admissionId: string): Promise<ActionResult<IpdAdvancePayment[]>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "admin");
+    return getIpdAdvancePayments(ctx, admissionId);
+  });
+}
+
+export async function getIpdWalletBalanceAction(admissionId: string): Promise<ActionResult<{ balance: number; received: number; issuedRefund: number }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "admin");
+    return getIpdWalletBalance(ctx, admissionId);
+  });
+}
+
+export async function createIpdRefundVoucherAction(
+  admissionId: string,
+  input: Parameters<typeof createIpdRefundVoucher>[2],
+): Promise<ActionResult<IpdRefundVoucher>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return createIpdRefundVoucher(ctx, admissionId, input);
+  });
+}
+
+export async function approveIpdRefundVoucherAction(voucherId: string): Promise<ActionResult<IpdRefundVoucher>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "admin");
+    return approveIpdRefundVoucher(ctx, voucherId);
+  });
+}
+
+export async function issueIpdRefundVoucherAction(
+  voucherId: string,
+  input?: { referenceNo?: string },
+): Promise<ActionResult<IpdRefundVoucher>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "admin");
+    return issueIpdRefundVoucher(ctx, voucherId, input);
+  });
+}
+
+export async function directDischargeIpdAdmissionAction(id: string): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "admin");
+    return directDischargeIpdAdmission(ctx, id);
+  });
+}
+
+export async function previewIpdFinalBillAction(
+  admissionId: string,
+  discount = 0,
+): Promise<ActionResult<{ subtotal: number; discount: number; taxAmount: number; total: number }>> {
+  return runAction(async () => {
+    const ctx = await requireModule("frontdesk");
+    return previewIpdFinalBill(ctx, admissionId, discount);
+  });
+}
+
+export async function generateIpdFinalBillPdfAction(
+  invoiceId: string,
+): Promise<ActionResult<{ docId: string; dataUrl: string; invoiceNumber: string }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "admin");
+    return generateIpdFinalBillPdf(ctx, invoiceId);
+  });
+}
+
+export async function sendIpdFinalBillWhatsAppAction(
+  invoiceId: string,
+  phone?: string,
+): Promise<ActionResult<{ ok: boolean; docId: string; detail?: string }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "admin");
+    return sendIpdFinalBillOnWhatsApp(ctx, invoiceId, phone);
   });
 }

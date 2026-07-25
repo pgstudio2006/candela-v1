@@ -10,12 +10,15 @@ import { PrescriptionEditor } from "@/components/doctor/prescription-editor";
 import { PublishedSchemaForm } from "@/components/candela/published-schema-form";
 import { IpdDischargeSummaryPanel } from "@/components/ipd-discharge-summary";
 import { useToast } from "@/components/ui/toast-provider";
+import { useSession } from "@/components/candela/session-provider";
 import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { getNurseOptionsAction, saveIpdTaskAction, updateIpdTaskStatusAction } from "@/app/actions/ipd-actions";
 import { listPatientDocumentsAction, type PatientDocumentListItem } from "@/app/actions/patient-document-actions";
+import { listLabOrdersAction } from "@/app/actions/lab-actions";
 import type { IpdPatient } from "@/design-system/doctor-data";
 import type { Patient } from "@/design-system/frontdesk-data";
 import type { PrescriptionLine } from "@/design-system/doctor-data";
+import type { LabOrder } from "@/design-system/lab-data";
 import type { IpdRoundRecord } from "@/server/doctor";
 import type { FormSchema } from "@/design-system/frontdesk-schemas";
 import {
@@ -31,7 +34,10 @@ import {
   User,
   UploadCloud,
   Eye,
+  Printer,
 } from "lucide-react";
+
+const PATAUDI_BRANCH_ID = "branch_pataudi";
 
 export type IpdRoundWorkspaceProps = {
   admission: IpdPatient;
@@ -253,6 +259,8 @@ export function IpdRoundWorkspace({
   onRefresh,
 }: IpdRoundWorkspaceProps) {
   const { toast } = useToast();
+  const { session } = useSession();
+  const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
   const [activeTab, setActiveTab] = useState("summary");
   const [roundValues, setRoundValues] = useState<Record<string, string | number | boolean>>({});
   const [roundFormKey, setRoundFormKey] = useState(0);
@@ -270,6 +278,8 @@ export function IpdRoundWorkspace({
 
   const [patientReports, setPatientReports] = useState<PatientDocumentListItem[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
+  const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
+  const [labOrdersLoading, setLabOrdersLoading] = useState(false);
 
   const vitals = useMemo(() => latestVitals(roundHistory), [roundHistory]);
   const doctorRounds = useMemo(
@@ -323,8 +333,19 @@ export function IpdRoundWorkspace({
     setReportsLoading(false);
   };
 
+  const loadLabOrders = async () => {
+    if (!patientId) return;
+    setLabOrdersLoading(true);
+    const res = await listLabOrdersAction(patientId);
+    if (res.ok) {
+      setLabOrders(res.data.filter((o) => !admission.id || o.admissionId === admission.id));
+    }
+    setLabOrdersLoading(false);
+  };
+
   useEffect(() => {
     void loadReports();
+    void loadLabOrders();
   }, [patientId]);
 
   const handleSaveRound = async (data: Record<string, string | number | boolean>) => {
@@ -406,6 +427,91 @@ export function IpdRoundWorkspace({
     }
   };
 
+  const printRoundSummary = () => {
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (!printWindow) return;
+    const html = `
+      <html>
+        <head>
+          <title>IPD Round Summary - ${patientName}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
+            .header h2 { margin: 0; font-size: 18px; }
+            .header p { margin: 4px 0 0; font-size: 12px; color: #444; }
+            .section { margin-bottom: 16px; }
+            .section-title { font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-bottom: 8px; font-size: 14px; }
+            .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+            .vitals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+            .vital { border: 1px solid #ccc; padding: 8px; text-align: center; font-size: 12px; }
+            ul { margin: 0; padding-left: 16px; font-size: 12px; }
+            li { margin-bottom: 2px; }
+            .footer { margin-top: 24px; font-size: 11px; color: #555; text-align: right; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h2>IPD Round Summary</h2>
+            <p>${patientName} · ${wardBed} · ${statusLabel} · UHID: ${uhid ?? "—"}</p>
+          </div>
+          <div class="vitals">
+            <div class="vital"><strong>BP</strong><br/>${vitals.bp ?? "—"}</div>
+            <div class="vital"><strong>Pulse</strong><br/>${vitals.pulse ?? "—"}</div>
+            <div class="vital"><strong>SpO₂</strong><br/>${vitals.spo2 ?? "—"}</div>
+            <div class="vital"><strong>Temp</strong><br/>${vitals.temp ?? "—"}</div>
+          </div>
+          <div class="section">
+            <div class="section-title">Diagnosis</div>
+            <p style="font-size:12px;margin:0">${admission.diagnosis}</p>
+          </div>
+          <div class="section">
+            <div class="section-title">Current Plan</div>
+            <p style="font-size:12px;margin:0">${latestPlan(roundHistory)}</p>
+          </div>
+          <div class="section">
+            <div class="section-title">Progress Notes</div>
+            <ul>
+              ${doctorRounds.slice(0, 5).map((r) => `<li><strong>${formatDateTime(r.at)}</strong> — ${r.content.replace(/</g, "&lt;")}</li>`).join("")}
+            </ul>
+          </div>
+          <div class="section">
+            <div class="section-title">Medication Chart</div>
+            <ul>
+              ${medicines.map((m) => `<li>${m.replace(/</g, "&lt;")}</li>`).join("") || "<li>No medications</li>"}
+            </ul>
+          </div>
+          <div class="section">
+            <div class="section-title">Lab Orders</div>
+            <ul>
+              ${labs.map((l) => `<li>${l.replace(/</g, "&lt;")}</li>`).join("") || "<li>No lab orders</li>"}
+            </ul>
+          </div>
+          <div class="section">
+            <div class="section-title">Imaging Orders</div>
+            <ul>
+              ${imaging.map((i) => `<li>${i.replace(/</g, "&lt;")}</li>`).join("") || "<li>No imaging orders</li>"}
+            </ul>
+          </div>
+          <div class="section">
+            <div class="section-title">Tasks</div>
+            <ul>
+              ${tasks.map((t) => `<li>${t.text.replace(/</g, "&lt;")} · ${t.assignee || "Unassigned"} · ${t.status}</li>`).join("") || "<li>No tasks</li>"}
+            </ul>
+          </div>
+          <div class="footer">Printed on ${new Date().toLocaleString("en-IN")}</div>
+        </body>
+      </html>
+    `;
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   const patientName = patient?.name ?? admission.patientId;
   const uhid = patient?.uhid;
   const ageGender = patient ? `${resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y · ${patient.gender}` : "";
@@ -452,6 +558,12 @@ export function IpdRoundWorkspace({
               <span className="text-[10px] uppercase text-[var(--attio-text-tertiary)]">Admitted</span>
               <span className="text-[13px] font-medium text-[var(--attio-text)]">{formatDateTime(admission.admittedAt)}</span>
             </div>
+            {isPataudi && (
+              <AttioButton variant="secondary" className="gap-1.5" onClick={() => void printRoundSummary()}>
+                <Printer className="size-4" />
+                Print round summary
+              </AttioButton>
+            )}
           </div>
         </div>
 
@@ -682,6 +794,55 @@ export function IpdRoundWorkspace({
               </ul>
             )}
           </Panel>
+          <Panel
+            title="Lab order results"
+            action={
+              patientId ? (
+                <AttioButton variant="secondary" className="h-7 gap-1.5 text-[11px]" onClick={() => void loadLabOrders()} disabled={labOrdersLoading}>
+                  <FlaskConical className="size-3.5" />
+                  {labOrdersLoading ? "Loading…" : "Refresh"}
+                </AttioButton>
+              ) : undefined
+            }
+          >
+            {labOrdersLoading ? (
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">Loading lab orders…</p>
+            ) : labOrders.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-[var(--attio-text-tertiary)]">No lab orders found for this admission.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--attio-border-subtle)]">
+                {labOrders.map((order) => (
+                  <li key={order.id} className="py-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[13px] font-medium text-[var(--attio-text)]">
+                        {new Date(order.orderedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      </p>
+                      <StatusBadge label={order.status} variant={order.status === "completed" ? "success" : "neutral"} />
+                    </div>
+                    <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                      {order.items.map((i) => i.label).join(" · ")}
+                    </p>
+                    {order.status === "completed" && order.items.some((i) => i.results.length > 0) && (
+                      <ul className="mt-2 space-y-1">
+                        {order.items.flatMap((item) =>
+                          item.results.map((r) => (
+                            <li key={`${item.id}_${r.fieldMasterId ?? r.id}`} className="text-[12px]">
+                              <span className="font-medium">{r.fieldMaster?.name ?? r.fieldMasterId}</span>: {r.value}
+                              {r.fieldMaster?.unit ? ` ${r.fieldMaster.unit}` : ""}
+                              {r.flag && r.flag !== "normal" && (
+                                <span className="ml-1 text-[10px] text-amber-600">({r.flag})</span>
+                              )}
+                            </li>
+                          )),
+                        )}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+
           <Panel
             title="Uploaded reports"
             action={

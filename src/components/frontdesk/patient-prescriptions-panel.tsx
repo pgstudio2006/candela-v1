@@ -2,12 +2,16 @@
 
 import { getPatientConsultationsAction } from "@/app/actions/clinical-actions";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { useSession } from "@/components/candela/session-provider";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
 import { formatConsultDate } from "@/lib/doctor-records";
 import { generatePrescriptionPdf, printPdfBytes } from "@/lib/prescription-pdf";
+import { savePdfAsPatientDocument } from "@/lib/patient-documents";
 import { Printer } from "lucide-react";
 import { useEffect, useState } from "react";
+
+const PATAUDI_BRANCH_ID = "branch_pataudi";
 
 type PatientPrescriptionsPanelProps = {
   patient: Patient;
@@ -15,6 +19,8 @@ type PatientPrescriptionsPanelProps = {
 };
 
 export function PatientPrescriptionsPanel({ patient, visits }: PatientPrescriptionsPanelProps) {
+  const { session } = useSession();
+  const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
   const [consultations, setConsultations] = useState<ConsultationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [printingVisitId, setPrintingVisitId] = useState<string | null>(null);
@@ -96,6 +102,16 @@ export function PatientPrescriptionsPanel({ patient, visits }: PatientPrescripti
                             layout: "dr-sunil-saini-letterhead",
                           });
                           printPdfBytes(pdfBytes, "Dr. Sunil Saini Prescription");
+                          if (isPataudi) {
+                            const date = new Date().toISOString().slice(0, 10);
+                            await savePdfAsPatientDocument(
+                              patient.id,
+                              "prescription",
+                              `prescription-${patient.uhid ?? patient.id}-${date}.pdf`,
+                              pdfBytes,
+                              { visitId: visit.id, label: `Prescription · ${visit.doctorName} · ${date}` },
+                            );
+                          }
                         } catch (error) {
                           console.error("Could not generate prescription PDF", error);
                         } finally {

@@ -7,6 +7,8 @@ export type BillingPackageLine = {
   amount: number;
   quantity: number;
   description?: string;
+  category?: string;
+  gstRatePercent?: number;
 };
 
 export type PaymentSplit = {

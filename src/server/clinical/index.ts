@@ -950,6 +950,8 @@ export async function processBilling(
           label: line.label,
           amount: line.amount,
           quantity: line.quantity,
+          category: line.category,
+          gstRatePercent: line.gstRatePercent,
         })),
         paymentSplits: buildInvoicePaymentSplits(
           serviceInvoiceAmount,

@@ -22,9 +22,10 @@ import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 type IpdServiceCartPanelProps = {
   admission: IpdAdmissionDetail;
   onChange?: () => void;
+  onGenerateFinalBill?: () => void;
 };
 
-export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanelProps) {
+export function IpdServiceCartPanel({ admission, onChange, onGenerateFinalBill }: IpdServiceCartPanelProps) {
   const { toast } = useToast();
   const [services, setServices] = useState<BillingPackage[]>([]);
   const [packages, setPackages] = useState<BillingPackage[]>([]);
@@ -106,7 +107,11 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
       toast("Add services to the cart before billing", "error");
       return;
     }
-    router.push(`/app/frontdesk/ipd-billing?visit=${admission.visitId}`);
+    if (onGenerateFinalBill) {
+      onGenerateFinalBill();
+    } else {
+      router.push(`/app/frontdesk/ipd-billing?visit=${admission.visitId}`);
+    }
   };
 
   const filteredServices = services.filter(
@@ -268,6 +273,10 @@ export function IpdServiceCartPanel({ admission, onChange }: IpdServiceCartPanel
                 <div className="flex items-center justify-between text-[13px] font-medium">
                   <span>Cart total (excl. GST)</span>
                   <span>₹{cartTotal.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-md bg-[var(--attio-surface)] px-3 py-2 text-[12px]">
+                  <span className="text-[var(--attio-text-secondary)]">Advance wallet balance</span>
+                  <span className="font-medium tabular-nums">₹{(admission.walletBalance ?? 0).toLocaleString("en-IN")}</span>
                 </div>
                 <AttioButton
                   variant="primary"

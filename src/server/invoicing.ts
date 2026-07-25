@@ -182,7 +182,7 @@ export async function createVisitInvoice(
   return { invoiceId, invoiceNumber, status: balance > 0 ? "partial" : input.collected > 0 ? "paid" : "pending" };
 }
 
-const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "cheque", "wallet", "other"]);
+const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "cheque", "wallet", "advance", "other"]);
 
 export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoiceId?: string): Promise<OpdReceiptPayload> {
   if (invoiceId) {
@@ -359,6 +359,8 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
 
   const base = {
     branchId: ctx.branchId,
+    patientId: patient.id,
+    visitId,
     invoiceNumber: receiptInvoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
     issuedAt: (receiptInvoice?.createdAt ?? visit.updatedAt ?? new Date()).toISOString(),
     patientName: patientDisplayName(patient),

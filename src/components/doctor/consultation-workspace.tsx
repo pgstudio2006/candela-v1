@@ -8,7 +8,8 @@ import { useDoctorFormSchema } from "@/components/doctor/use-doctor-form-schema"
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useSession } from "@/components/candela/session-provider";
-import type { ConsultationCartItem, TreatmentMode } from "@/design-system/doctor-data";
+import type { ConsultationCartItem, ConsultationRecord, TreatmentMode } from "@/design-system/doctor-data";
+import type { LabOrder } from "@/design-system/lab-data";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
 import { isRedFlagVisit, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import {
@@ -17,12 +18,15 @@ import {
   type BillingPackage,
 } from "@/lib/billing-packages";
 import { generatePrescriptionPdf, printPdfBytes } from "@/lib/prescription-pdf";
+import { savePdfAsPatientDocument } from "@/lib/patient-documents";
 import type { DocumentTemplate } from "@/design-system/document-templates";
 import { cn } from "@/lib/utils";
 import { validateFormValues } from "@/lib/schema-registry";
 import { useToast } from "@/components/ui/toast-provider";
-import { getNurseScoresAction } from "@/app/actions/clinical-actions";
+import { getNurseScoresAction, getPatientConsultationsAction } from "@/app/actions/clinical-actions";
 import { getIpdWardsAction } from "@/app/actions/ipd-actions";
+import { listLabOrdersAction } from "@/app/actions/lab-actions";
+import { LabOrderButton } from "@/components/lab/lab-order-modal";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
 import {
   Select,
@@ -55,6 +59,7 @@ const TABS = [
   { id: "treatment", label: "Treatment" },
   { id: "prescription", label: "Prescription" },
   { id: "handoff", label: "Handoff" },
+  { id: "history", label: "History" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -125,6 +130,9 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [handoffSaved, setHandoffSaved] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [historyConsultations, setHistoryConsultations] = useState<ConsultationRecord[]>([]);
+  const [historyLabOrders, setHistoryLabOrders] = useState<LabOrder[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [cart, setCart] = useState<ConsultationCartItem[]>([]);
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.amount * i.quantity, 0), [cart]);
   const [serviceSearch, setServiceSearch] = useState("");
@@ -209,6 +217,21 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
 
   const consult = getConsultation(visitId);
   const scribeLang = consult?.scribeLanguage ?? "en";
+
+  useEffect(() => {
+    if (tab !== "history" || !patient?.id) {
+      setHistoryLoading(false);
+      return;
+    }
+    setHistoryLoading(true);
+    Promise.all([
+      getPatientConsultationsAction(patient.id),
+      listLabOrdersAction(patient.id),
+    ]).then(([consultRes, labRes]) => {
+      if (consultRes.ok) setHistoryConsultations(consultRes.data.filter((c) => c.visitId !== visitId));
+      if (labRes.ok) setHistoryLabOrders(labRes.data.filter((o) => o.visitId !== visitId));
+    }).finally(() => setHistoryLoading(false));
+  }, [tab, patient?.id, visitId]);
 
   const persistScribeDebounced = useMemo(
     () =>
@@ -307,6 +330,16 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
         layout: selectedTemplate?.layout ?? "navayu-letterhead",
       });
       printPdfBytes(pdfBytes, "Prescription");
+      if (isPataudi) {
+        const date = new Date().toISOString().slice(0, 10);
+        await savePdfAsPatientDocument(
+          patient.id,
+          "prescription",
+          `prescription-${patient.uhid ?? patient.id}-${date}.pdf`,
+          pdfBytes,
+          { visitId: visit.id, label: `Prescription · ${visit.doctorName} · ${date}` },
+        );
+      }
     } catch (error) {
       toast("Could not generate prescription PDF", "error");
     }
@@ -407,6 +440,16 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 Print prescription
               </AttioButton>
             </>
+          )}
+          {!completed && (
+            <LabOrderButton
+              patientId={patient.id}
+              patientName={patient.name}
+              visitId={visit.id}
+              admissionId={visit.ipdAdmissionId}
+              source={treatmentMode === "ipd" ? "ipd" : "opd"}
+              onCreated={(orderId) => toast(`Lab order ${orderId} created`, "success")}
+            />
           )}
           {!completed && (
             <AttioButton variant="primary" className="gap-1.5" onClick={() => finishConsult()} disabled={completing}>
@@ -1091,6 +1134,79 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
           </Panel>
         </div>
       </div>
+      )}
+
+      {tab === "history" && (
+        <div className={CONSULT_SIDEBAR_SPLIT}>
+          <Panel title="Previous prescriptions">
+            {historyLoading ? (
+              <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading...</p>
+            ) : historyConsultations.length === 0 ? (
+              <p className="text-[13px] text-[var(--attio-text-tertiary)]">No previous prescriptions found.</p>
+            ) : (
+              <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+                {historyConsultations.map((c) => (
+                  <div key={c.visitId} className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
+                    <p className="text-[12px] font-medium text-[var(--attio-text-secondary)]">
+                      {new Date(c.completedAt ?? c.startedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                    </p>
+                    <p className="text-[11px] text-[var(--attio-text-tertiary)]">{c.prescription.length} medicine(s)</p>
+                    {c.prescription.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {c.prescription.map((line) => (
+                          <li key={line.id} className="text-[12px]">
+                            <span className="font-medium">{line.drug}</span> {line.dose} · {line.frequency} ·{" "}
+                            {line.duration ?? `${line.days} days`}
+                            {line.instructions ? ` · ${line.instructions}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {c.doctorAdvice && <p className="mt-2 text-[11px] text-[var(--attio-text-tertiary)]">Advice: {c.doctorAdvice}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Previous lab reports">
+            {historyLoading ? (
+              <p className="text-[13px] text-[var(--attio-text-tertiary)]">Loading...</p>
+            ) : historyLabOrders.length === 0 ? (
+              <p className="text-[13px] text-[var(--attio-text-tertiary)]">No previous lab reports found.</p>
+            ) : (
+              <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+                {historyLabOrders.map((order) => (
+                  <div key={order.id} className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12px] font-medium text-[var(--attio-text-secondary)]">
+                        {new Date(order.orderedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      </p>
+                      <StatusBadge label={order.status} variant={order.status === "completed" ? "success" : "neutral"} />
+                    </div>
+                    <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                      {order.items.map((i) => i.label).join(" · ")}
+                    </p>
+                    {order.status === "completed" && order.items.some((i) => i.results.length > 0) && (
+                      <ul className="mt-2 space-y-1">
+                        {order.items.flatMap((item) =>
+                          item.results.map((r) => (
+                            <li key={`${item.id}_${r.fieldMasterId ?? r.id}`} className="text-[12px]">
+                              <span className="font-medium">{r.fieldMaster?.name ?? r.fieldMasterId}</span>: {r.value}
+                              {r.flag && r.flag !== "normal" && (
+                                <span className="ml-1 text-[10px] text-amber-600">({r.flag})</span>
+                              )}
+                            </li>
+                          )),
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
       )}
     </PageChrome>
   );

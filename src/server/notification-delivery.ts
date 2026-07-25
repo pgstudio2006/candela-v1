@@ -245,6 +245,97 @@ export async function deliverWhatsApp(
   return { ok: true, provider: "whatsapp-cloud-api", detail: `Message ID: ${messageId}` };
 }
 
+function normalizePhone(phone: string): { e164: string; noPlus: string } {
+  const digits = phone.replace(/\D/g, "");
+  let noPlus = digits.startsWith("91") && digits.length === 12 ? digits : digits.length === 10 ? `91${digits}` : digits;
+  if (noPlus.startsWith("+")) noPlus = noPlus.slice(1);
+  return { e164: `+${noPlus}`, noPlus };
+}
+
+/** WhatsApp document (PDF) via Twilio or Meta Cloud API */
+export async function deliverWhatsAppDocument(
+  recipient: string,
+  documentUrl: string,
+  filename: string,
+  caption: string,
+): Promise<DeliveryResult> {
+  const provider = process.env.WHATSAPP_PROVIDER || (process.env.TWILIO_WHATSAPP_FROM ? "twilio" : "meta");
+
+  if (provider === "twilio") {
+    const sid = process.env.TWILIO_ACCOUNT_SID;
+    const token = process.env.TWILIO_AUTH_TOKEN;
+    const from = process.env.TWILIO_WHATSAPP_FROM;
+    if (!sid || !token || !from) {
+      if (demoMode()) {
+        console.info("[notifications:demo:whatsapp:twilio]", recipient, documentUrl, caption.slice(0, 80));
+        return { ok: true, provider: "demo", detail: "Twilio WhatsApp not configured — logged only" };
+      }
+      return { ok: false, provider: "twilio", detail: "Twilio WhatsApp env vars missing" };
+    }
+    const { e164 } = normalizePhone(recipient);
+    const to = `whatsapp:${e164}`;
+    const auth = Buffer.from(`${sid}:${token}`).toString("base64");
+    const body = new URLSearchParams({
+      To: to,
+      From: from,
+      Body: caption,
+      MediaUrl: documentUrl,
+    }).toString();
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return { ok: false, provider: "twilio", detail: err.slice(0, 200) };
+    }
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, provider: "twilio", detail: `Message SID: ${data.sid ?? "unknown"}` };
+  }
+
+  const token = process.env.WHATSAPP_API_TOKEN;
+  let baseUrl = process.env.WHATSAPP_API_BASE_URL ?? "https://graph.facebook.com/v21.0";
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (baseUrl.includes("telecrm.in") || baseUrl.includes("/waca")) {
+    baseUrl = "https://graph.facebook.com/v21.0";
+  }
+
+  if (!token) {
+    if (demoMode()) {
+      console.info("[notifications:demo:whatsapp:meta]", recipient, documentUrl, caption.slice(0, 80));
+      return { ok: true, provider: "demo", detail: "WHATSAPP_API_TOKEN not set — logged only" };
+    }
+    return { ok: false, provider: "whatsapp-cloud-api", detail: "WHATSAPP_API_TOKEN not configured" };
+  }
+  if (!phoneNumberId) {
+    return { ok: false, provider: "whatsapp-cloud-api", detail: "WHATSAPP_PHONE_NUMBER_ID is required" };
+  }
+
+  const { noPlus } = normalizePhone(recipient);
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: noPlus,
+    type: "document",
+    document: { link: documentUrl, filename, caption },
+  };
+
+  const res = await fetch(`${baseUrl}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    return { ok: false, provider: "whatsapp-cloud-api", detail: err.slice(0, 300) };
+  }
+  const data = await res.json().catch(() => ({}));
+  return { ok: true, provider: "whatsapp-cloud-api", detail: `Message ID: ${data?.messages?.[0]?.id ?? "unknown"}` };
+}
+
 export async function deliverNotification(n: QueuedNotification): Promise<DeliveryResult> {
   switch (n.channel as NotificationChannel) {
     case "email":

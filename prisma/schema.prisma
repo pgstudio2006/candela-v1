@@ -16,6 +16,7 @@ enum CandelaModule {
   COUNSELLOR
   CRM
   HR
+  LABORATORY
 }
 
 enum UserStatus {
@@ -132,6 +133,11 @@ model Branch {
   whatsappTemplates WhatsAppTemplate[]
   whatsappLogs      WhatsAppLog[]
   emergencyReferrals EmergencyReferral[]
+  labFieldMasters    LabFieldMaster[]
+  labReportCatalogs  LabReportCatalog[]
+  labOrders          LabOrder[]
+  ipdAdvancePayments IpdAdvancePayment[]
+  ipdRefundVouchers  IpdRefundVoucher[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -270,6 +276,8 @@ model Patient {
   opdVisits       OpdVisit[]
   visits          Visit[]
   ipdAdmissions   IpdAdmission[]
+  ipdAdvancePayments IpdAdvancePayment[]
+  ipdRefundVouchers  IpdRefundVoucher[]
   queues          Queue[]
   consents        Consent[]
   counsellorLogs  CounsellorSession[]
@@ -279,6 +287,7 @@ model Patient {
   documents       PatientDocument[]
   emergencyReferrals EmergencyReferral[]
   emergencyRecords EmergencyPatient[]
+  labOrders        LabOrder[]
   assignedCounsellorId String?
   assignedCounsellorName String?
   leadSourceId    String?
@@ -420,6 +429,7 @@ model Visit {
   invoices           Invoice[]
   documents          PatientDocument[]
   emergencyReferrals EmergencyReferral[]
+  labOrders          LabOrder[]
 
   @@index([tenantId, branchId, stage])
 }
@@ -1176,6 +1186,7 @@ model Invoice {
   totalAmount     Decimal       @default(0)
   amountPaid      Decimal       @default(0)
   balanceAmount   Decimal       @default(0)
+  refundAmount    Decimal       @default(0)
   paymentScope    String?
   dueDate         DateTime?
   notes           String?
@@ -1187,6 +1198,7 @@ model Invoice {
   visit           Visit?        @relation(fields: [visitId], references: [id], onDelete: SetNull)
   lines           InvoiceLine[]
   payments        Payment[]
+  refundVouchers  IpdRefundVoucher[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([branchId, status])
@@ -2007,10 +2019,66 @@ model IpdAdmission {
   patient            Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   ward               IpdWard  @relation(fields: [wardId], references: [id], onDelete: Cascade)
   bed                IpdBed   @relation(fields: [bedId], references: [id], onDelete: Cascade)
+  labOrders          LabOrder[]
+  advances           IpdAdvancePayment[]
+  refundVouchers     IpdRefundVoucher[]
 
   @@index([tenantId, branchId, status])
   @@index([branchId, wardId, bedId])
   @@index([branchId, patientId])
+}
+
+model IpdAdvancePayment {
+  id             String       @id
+  tenantId       String
+  branchId       String
+  admissionId    String
+  patientId      String
+  visitId        String?
+  amount         Decimal
+  receivedAmount Decimal      @default(0)
+  pendingAmount  Decimal      @default(0)
+  mode           String       // "cash", "card", "upi", "split", "due", "pending"
+  splits         Json?        // [{ mode: string, amount: number }]
+  status         String       @default("received") // received, pending, cancelled, refunded
+  referenceNo    String?
+  notes          String?
+  receivedAt     DateTime     @default(now())
+  receivedBy     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  admission      IpdAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  patient        Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId, admissionId])
+  @@index([patientId])
+}
+
+model IpdRefundVoucher {
+  id            String       @id
+  tenantId      String
+  branchId      String
+  admissionId   String
+  patientId     String
+  invoiceId     String?
+  amount        Decimal
+  mode          String
+  status        String       @default("pending") // pending, approved, issued, cancelled
+  approvedBy    String?
+  requestedBy   String?
+  referenceNo   String?
+  notes         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  admission     IpdAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  invoice       Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  branch        Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId, admissionId])
+  @@index([patientId])
+  @@index([invoiceId])
 }
 
 model IpdRoundConfig {
@@ -2138,4 +2206,156 @@ model WhatsAppLog {
   @@index([branchId, createdAt])
   @@index([branchId, trigger, status])
   @@index([messageId])
+}
+
+model LabFieldMaster {
+  id               String          @id @default(cuid())
+  tenantId         String
+  branchId         String
+  code             String
+  name             String
+  unit             String?
+  dataType         String          // numeric | text | select | boolean | note
+  sampleTypes      String[]        @default([])
+  options          Json?           // for select/multi data types
+  defaultNote      String?
+  active           Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  ranges           LabFieldRange[]
+  reportFields     LabReportCatalogField[]
+  results          LabReportResult[]
+  branch           Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, branchId, code])
+  @@index([tenantId, branchId, active])
+}
+
+model LabFieldRange {
+  id              String       @id @default(cuid())
+  fieldMasterId   String
+  gender          String?      // M | F | O | all
+  ageMin          Int?
+  ageMax          Int?
+  ageUnit         String       @default("years") // years | months | days
+  sampleType      String?
+  condition       String?      // free-text qualifier (e.g., "fasting")
+  low             Float?
+  high            Float?
+  criticalLow     Float?
+  criticalHigh    Float?
+  displayLabel    String?      // e.g. "Adult Male (Fasting)"
+  isDefault       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  fieldMaster     LabFieldMaster @relation(fields: [fieldMasterId], references: [id], onDelete: Cascade)
+
+  @@index([fieldMasterId, isDefault])
+}
+
+model LabReportCatalog {
+  id           String                  @id @default(cuid())
+  tenantId     String
+  branchId     String
+  code         String
+  name         String
+  description  String?
+  sampleType   String?
+  headerNote   String?
+  footerNote   String?
+  active       Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  fields       LabReportCatalogField[]
+  orderItems   LabOrderItem[]
+  branch       Branch                  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, branchId, code])
+  @@index([tenantId, branchId, active])
+}
+
+model LabReportCatalogField {
+  id              String           @id @default(cuid())
+  reportCatalogId String
+  fieldMasterId   String
+  section         String?          // sub-header / panel name
+  sortOrder       Int              @default(0)
+  isVisible       Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  reportCatalog   LabReportCatalog @relation(fields: [reportCatalogId], references: [id], onDelete: Cascade)
+  fieldMaster     LabFieldMaster   @relation(fields: [fieldMasterId], references: [id], onDelete: Cascade)
+
+  @@unique([reportCatalogId, fieldMasterId])
+  @@index([reportCatalogId, sortOrder])
+}
+
+model LabOrder {
+  id                String        @id @default(cuid())
+  tenantId          String
+  branchId          String
+  patientId         String
+  visitId           String?
+  admissionId       String?
+  orderedBy         String        // userId
+  orderedByName     String?
+  source            String        // opd | ipd | emergency | direct
+  status            String        // ordered | sample_collected | in_progress | completed | cancelled
+  orderedAt         DateTime      @default(now())
+  sampleCollectedAt DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  cancelReason      String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  items             LabOrderItem[]
+  branch            Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  patient           Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visit             Visit?        @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  admission         IpdAdmission? @relation(fields: [admissionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, branchId, status])
+  @@index([patientId, status])
+  @@index([visitId, status])
+  @@index([admissionId, status])
+}
+
+model LabOrderItem {
+  id                String           @id @default(cuid())
+  labOrderId        String
+  reportCatalogId   String
+  serviceId         String?          // optional link to ServiceCharge
+  label             String
+  sampleType        String?
+  status            String           // ordered | sample_collected | in_progress | completed
+  sampleCollectedAt DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  labOrder          LabOrder         @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  reportCatalog     LabReportCatalog @relation(fields: [reportCatalogId], references: [id], onDelete: Cascade)
+  results           LabReportResult[]
+
+  @@index([labOrderId, status])
+  @@index([reportCatalogId])
+}
+
+model LabReportResult {
+  id              String       @id @default(cuid())
+  labOrderItemId  String
+  labOrderId      String
+  fieldMasterId   String
+  value           String
+  numericValue    Float?
+  flag            String?      // normal | low | high | critical_low | critical_high
+  note            String?
+  recordedAt      DateTime     @default(now())
+  recordedBy      String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  labOrderItem    LabOrderItem @relation(fields: [labOrderItemId], references: [id], onDelete: Cascade)
+  fieldMaster     LabFieldMaster @relation(fields: [fieldMasterId], references: [id], onDelete: Cascade)
+
+  @@index([labOrderItemId, fieldMasterId])
+  @@index([labOrderId, fieldMasterId])
 }

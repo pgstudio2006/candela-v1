@@ -1,0 +1,243 @@
+"use server";
+
+import { prisma } from "@/lib/prisma";
+import { runAction, type ActionResult } from "@/server/action-result";
+import { requireAnyModule, requireModule } from "@/server/auth";
+import { branchScope } from "@/server/tenancy";
+import {
+  cancelLabOrder,
+  collectLabOrderSample,
+  createLabOrder,
+  deleteFieldMaster,
+  deleteReportCatalog,
+  generateLabOrderReportPdf,
+  generatePatientLabReportPdf,
+  getFieldMaster,
+  getLabOrder,
+  getReportCatalog,
+  listFieldMasters,
+  listLabOrders,
+  listReportCatalogs,
+  markLabOrderComplete,
+  markLabOrderItemComplete,
+  saveLabResults,
+  sendLabReportOnWhatsApp,
+  upsertFieldMaster,
+  upsertReportCatalog,
+  type LabSnapshot,
+} from "@/server/lab";
+import type {
+  LabFieldMaster,
+  LabOrder,
+  LabOrderInput,
+  LabReportCatalog,
+  LabResultInput,
+} from "@/design-system/lab-data";
+
+export async function listFieldMastersAction(): Promise<ActionResult<LabFieldMaster[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return listFieldMasters(ctx);
+  });
+}
+
+export async function getFieldMasterAction(id: string): Promise<ActionResult<LabFieldMaster | null>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return getFieldMaster(ctx, id);
+  });
+}
+
+export async function upsertFieldMasterAction(
+  input: Parameters<typeof upsertFieldMaster>[1],
+): Promise<ActionResult<LabFieldMaster>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return upsertFieldMaster(ctx, input);
+  });
+}
+
+export async function deleteFieldMasterAction(id: string): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return deleteFieldMaster(ctx, id);
+  });
+}
+
+export async function listReportCatalogsAction(): Promise<ActionResult<LabReportCatalog[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return listReportCatalogs(ctx);
+  });
+}
+
+export async function getReportCatalogAction(id: string): Promise<ActionResult<LabReportCatalog | null>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return getReportCatalog(ctx, id);
+  });
+}
+
+export async function upsertReportCatalogAction(
+  input: Parameters<typeof upsertReportCatalog>[1],
+): Promise<ActionResult<LabReportCatalog>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return upsertReportCatalog(ctx, input);
+  });
+}
+
+export async function deleteReportCatalogAction(id: string): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return deleteReportCatalog(ctx, id);
+  });
+}
+
+export async function listLabOrdersAction(patientId?: string): Promise<ActionResult<LabOrder[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return listLabOrders(ctx, patientId);
+  });
+}
+
+export async function getLabOrderAction(id: string): Promise<ActionResult<LabOrder | null>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return getLabOrder(ctx, id);
+  });
+}
+
+export async function createLabOrderAction(input: LabOrderInput): Promise<ActionResult<LabOrder>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return createLabOrder(ctx, input);
+  });
+}
+
+export async function collectLabOrderSampleAction(
+  orderId: string,
+  itemIds?: string[],
+): Promise<ActionResult<LabOrder>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return collectLabOrderSample(ctx, orderId, itemIds);
+  });
+}
+
+export async function saveLabResultsAction(
+  orderId: string,
+  results: LabResultInput[],
+): Promise<ActionResult<LabOrder>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return saveLabResults(ctx, orderId, results);
+  });
+}
+
+export async function markLabOrderItemCompleteAction(itemId: string): Promise<ActionResult<LabOrder>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return markLabOrderItemComplete(ctx, itemId);
+  });
+}
+
+export async function markLabOrderCompleteAction(orderId: string): Promise<ActionResult<LabOrder>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return markLabOrderComplete(ctx, orderId);
+  });
+}
+
+export async function cancelLabOrderAction(orderId: string, reason?: string): Promise<ActionResult<LabOrder>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return cancelLabOrder(ctx, orderId, reason);
+  });
+}
+
+export async function getLabSnapshotAction(): Promise<ActionResult<LabSnapshot>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    const [fieldMasters, reportCatalogs, orders] = await Promise.all([
+      listFieldMasters(ctx),
+      listReportCatalogs(ctx),
+      listLabOrders(ctx),
+    ]);
+    return { fieldMasters, reportCatalogs, orders };
+  });
+}
+
+export async function listActiveLabCatalogsAction(): Promise<ActionResult<LabReportCatalog[]>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "doctor", "laboratory", "admin");
+    return listReportCatalogs(ctx).then((rows) => rows.filter((c) => c.active));
+  });
+}
+
+export async function createLabOrderFromModuleAction(
+  input: LabOrderInput,
+): Promise<ActionResult<LabOrder>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "doctor", "laboratory", "admin");
+    return createLabOrder(ctx, input);
+  });
+}
+
+export async function generateLabReportPdfAction(orderId: string): Promise<ActionResult<{ dataUrl: string }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("laboratory", "doctor", "frontdesk", "admin");
+    const bytes = await generateLabOrderReportPdf(ctx, orderId);
+    const dataUrl = `data:application/pdf;base64,${Buffer.from(bytes).toString("base64")}`;
+    return { dataUrl };
+  });
+}
+
+export async function generatePatientLabReportPdfAction(patientId: string): Promise<ActionResult<{ dataUrl: string }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("laboratory", "doctor", "frontdesk", "admin");
+    const bytes = await generatePatientLabReportPdf(ctx, patientId);
+    const dataUrl = `data:application/pdf;base64,${Buffer.from(bytes).toString("base64")}`;
+    return { dataUrl };
+  });
+}
+
+export async function sendLabReportOnWhatsAppAction(
+  orderId: string,
+  phone?: string,
+): Promise<ActionResult<{ ok: boolean; docId: string; detail?: string }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("laboratory", "doctor", "frontdesk", "admin");
+    return sendLabReportOnWhatsApp(ctx, orderId, phone);
+  });
+}
+
+export async function searchLabPatientsAction(query: string): Promise<
+  ActionResult<{ id: string; name: string; uhid: string; phone: string; age?: number; gender?: string }[]>
+> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    const q = query.trim();
+    const rows = await prisma.patient.findMany({
+      where: {
+        ...branchScope(ctx),
+        OR: [
+          { fullName: { contains: q, mode: "insensitive" } },
+          { uhid: { contains: q, mode: "insensitive" } },
+          { phone: { contains: q } },
+        ],
+      },
+      take: 20,
+      orderBy: { fullName: "asc" },
+      select: { id: true, name: true, uhid: true, phone: true, age: true, gender: true },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name ?? "",
+      uhid: r.uhid,
+      phone: r.phone,
+      age: r.age ?? undefined,
+      gender: r.gender ?? undefined,
+    }));
+  });
+}

@@ -15,7 +15,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import { getVisitForBillingAction } from "@/app/actions/clinical-actions";
-
+import { LabOrderButton } from "@/components/lab/lab-order-modal";
 type BillingMode = "opd" | "ipd";
 
 export type BillingWorkspaceProps = {
@@ -301,6 +301,24 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
                 </ul>
               )}
             </Panel>
+
+            {selectedPatient && (
+              <Panel title="Laboratory">
+                <p className="text-[13px] text-[var(--attio-text-secondary)]">
+                  {selectedVisit ? "Order tests for this visit." : "Order tests for this patient."}
+                </p>
+                <div className="mt-2">
+                  <LabOrderButton
+                    patientId={selectedPatient.id}
+                    patientName={selectedPatient.name}
+                    visitId={selectedVisit?.id}
+                    admissionId={selectedVisit?.ipdAdmissionId}
+                    source={selectedVisit && isVisitIpd(selectedVisit) ? "ipd" : selectedVisit ? "opd" : "direct"}
+                    onCreated={(orderId) => toast(`Lab order ${orderId} created`, "success")}
+                  />
+                </div>
+              </Panel>
+            )}
 
             <Panel title="Routing guide">
               <p className="text-[13px] text-[var(--attio-text-secondary)]">{routingGuideText}</p>
