@@ -213,7 +213,13 @@ function serializeOrder(row: Record<string, unknown> & { patient?: Record<string
     patientUhid: row.patient ? String(row.patient.uhid ?? "") : undefined,
     patientGender: row.patient ? (String(row.patient.gender ?? "") || null) : null,
     patientDateOfBirth: row.patient ? (row.patient.dateOfBirth ? new Date(String(row.patient.dateOfBirth)).toISOString() : null) : null,
-    patientAge: row.patient && row.patient.age != null ? Number(row.patient.age) : null,
+    patientAge: row.patient
+      ? (row.patient.age != null
+          ? Number(row.patient.age)
+          : row.patient.dateOfBirth
+            ? Math.floor((Date.now() - new Date(String(row.patient.dateOfBirth)).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+            : null)
+      : null,
     visitId: row.visitId ? String(row.visitId) : undefined,
     admissionId: row.admissionId ? String(row.admissionId) : undefined,
     orderedBy: String(row.orderedBy),

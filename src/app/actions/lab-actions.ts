@@ -237,15 +237,21 @@ export async function searchLabPatientsAction(query: string): Promise<
       orderBy: { fullName: "asc" },
       select: { id: true, name: true, uhid: true, phone: true, age: true, dateOfBirth: true, gender: true },
     });
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name ?? "",
-      uhid: r.uhid,
-      phone: r.phone,
-      age: r.age ?? undefined,
-      dateOfBirth: r.dateOfBirth ? r.dateOfBirth.toISOString() : undefined,
-      gender: r.gender ?? undefined,
-    }));
+    return rows.map((r) => {
+      let age = r.age ?? undefined;
+      if (age == null && r.dateOfBirth) {
+        age = Math.floor((Date.now() - new Date(r.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+      }
+      return {
+        id: r.id,
+        name: r.name ?? "",
+        uhid: r.uhid,
+        phone: r.phone,
+        age,
+        dateOfBirth: r.dateOfBirth ? r.dateOfBirth.toISOString() : undefined,
+        gender: r.gender ?? undefined,
+      };
+    });
   });
 }
 

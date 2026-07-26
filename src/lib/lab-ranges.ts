@@ -54,7 +54,8 @@ export function getApplicableRange(
   recordedAt: Date,
   sampleType?: string,
 ): LabFieldRange | undefined {
-  const age = resolveAge(patient, recordedAt) ?? { years: 0, months: 0, days: 0 };
+  const age = resolveAge(patient, recordedAt);
+  if (!age) return undefined;
   const ranges = fieldMaster.ranges
     .filter((r) => matchesRange(r, patient.gender, age, sampleType))
     .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
