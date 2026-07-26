@@ -220,7 +220,7 @@ async function resolveDoctorAndAssignee(
 }
 
 export async function importNavayuCsv(ctx: ServerContext, filePath?: string) {
-  const resolvedPath = filePath ?? path.resolve(process.cwd(), NAVAYU_CSV_FILENAME);
+  const resolvedPath = filePath ?? path.join(/*turbopackIgnore: true*/ process.cwd(), NAVAYU_CSV_FILENAME);
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(`CSV file not found: ${resolvedPath}`);
   }
