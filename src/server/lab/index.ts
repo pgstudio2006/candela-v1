@@ -70,7 +70,11 @@ function evaluateLabResult(
     .filter((r) => matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType))
     .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
 
-  const range = ranges[0] ?? fieldMaster.ranges.find((r) => r.isDefault);
+  const range =
+    ranges[0] ??
+    fieldMaster.ranges.find(
+      (r) => r.isDefault && matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType),
+    );
   if (!range) return { flag: undefined, numericValue, displayValue };
 
   let flag: LabResultFlag | undefined = "normal";

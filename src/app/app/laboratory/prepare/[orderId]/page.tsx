@@ -7,7 +7,7 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LAB_ITEM_STATUS_LABELS, LAB_ORDER_STATUS_LABELS, LAB_RESULT_FLAG_LABELS, type LabResultFlag } from "@/design-system/lab-data";
-import { getApplicableRange, formatReferenceRange } from "@/lib/lab-ranges";
+import { getApplicableRange, formatReferenceRange, resolveAge } from "@/lib/lab-ranges";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Check, FlaskConical } from "lucide-react";
 import Link from "next/link";
@@ -200,14 +200,18 @@ export default function PrepareLabReportPage() {
               {(item.reportCatalog?.fields ?? []).filter((f) => f.isVisible).map((f) => {
                 const key = `${item.id}_${f.fieldMasterId}`;
                 const flag = getFlag(item.id, f.fieldMasterId);
+                const patientCtx = { gender: order.patientGender, dateOfBirth: order.patientDateOfBirth, age: order.patientAge };
+                const patientAge = resolveAge(patientCtx, new Date());
                 const range = f.fieldMaster
                   ? getApplicableRange(
                       f.fieldMaster,
-                      { gender: order.patientGender, dateOfBirth: order.patientDateOfBirth, age: order.patientAge },
+                      patientCtx,
                       new Date(),
                       item.sampleType,
                     )
                   : undefined;
+                // Flag whether this is a default-fallback range (age unknown)
+                const isDefaultFallback = range?.isDefault && patientAge == null;
                 const rangeText = formatReferenceRange(range, f.fieldMaster?.unit);
                 return (
                   <div key={key} className={cn("space-y-1 rounded-lg border p-3", flag && flag !== "normal" ? "border-amber-200 bg-amber-50/30" : "border-transparent")}>
@@ -229,6 +233,7 @@ export default function PrepareLabReportPage() {
                     </div>
                     <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                       Range: {rangeText}
+                      {isDefaultFallback && <span className="ml-1 italic opacity-70">(default — age unknown)</span>}
                     </p>
                     {f.fieldMaster?.dataType === "select" && Array.isArray(f.fieldMaster.options) ? (
                       <select
