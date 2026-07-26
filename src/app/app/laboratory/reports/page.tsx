@@ -6,12 +6,13 @@ import { AttioButton, DataTable, Panel } from "@/components/frontdesk/ui";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
 import { Textarea } from "@/components/ui/textarea";
 import type { LabReportCatalog, LabReportCatalogField } from "@/design-system/lab-data";
 import { cn } from "@/lib/utils";
@@ -241,14 +242,36 @@ export default function LabReportCatalogPage() {
                   <div key={idx} className="grid items-end gap-2 rounded-lg border border-[var(--attio-border-subtle)] p-2 md:grid-cols-12">
                     <div className="md:col-span-4">
                       <Label className="text-[11px]">Field</Label>
-                      <Select value={f.fieldMasterId} onValueChange={(v) => { if (v) updateField(idx, { fieldMasterId: v }); }}>
-                        <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {fieldMasters.filter((fm) => fm.active).map((fm) => (
-                            <SelectItem key={fm.id} value={fm.id}>{fm.name} ({fm.code})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {(() => {
+                        const selectedMaster = fieldMasters.find((fm) => fm.id === f.fieldMasterId);
+                        return (
+                          <Command
+                            value={f.fieldMasterId || undefined}
+                            onValueChange={(v) => { if (v) updateField(idx, { fieldMasterId: v }); }}
+                            className="rounded-md border"
+                          >
+                            <CommandInput
+                              placeholder={selectedMaster ? `${selectedMaster.name} (${selectedMaster.code ?? ""})` : "Search field..."}
+                            />
+                            <CommandList className="max-h-40">
+                              <CommandEmpty className="py-2 text-[11px]">No field found.</CommandEmpty>
+                              <CommandGroup>
+                                {fieldMasters.filter((fm) => fm.active).map((fm) => (
+                                  <CommandItem
+                                    key={fm.id}
+                                    value={fm.id}
+                                    keywords={[fm.name, fm.code ?? ""]}
+                                    onSelect={() => updateField(idx, { fieldMasterId: fm.id })}
+                                    className="text-[12px]"
+                                  >
+                                    {fm.name} {fm.code ? `(${fm.code})` : ""}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        );
+                      })()}
                     </div>
                     <div className="md:col-span-3">
                       <Label className="text-[11px]">Section</Label>
