@@ -7,7 +7,7 @@ import { branchScope } from "@/server/tenancy";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
 import { serializeForClient } from "@/server/serialize";
-import { resolveAge, matchesRange } from "@/lib/lab-ranges";
+import { getApplicableRange, parseNumber } from "@/lib/lab-ranges";
 import { buildLabReportPdfBytes, bytesToDataUrl, type LabReportTemplateSpec } from "./lab-report-pdf";
 import { deliverWhatsAppDocument } from "@/server/notification-delivery";
 import type {
@@ -34,13 +34,6 @@ export type LabSnapshot = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseNumber(value: string): number | null {
-  const v = value.replace(/,/g, "").trim();
-  if (v === "" || v === "-" || v.toLowerCase() === "nil") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 function evaluateLabResult(
   fieldMaster: LabFieldMaster,
   value: string,
@@ -66,16 +59,7 @@ function evaluateLabResult(
     return { flag: undefined, numericValue: null, displayValue };
   }
 
-  const age = resolveAge(patient, recordedAt);
-  const ranges = fieldMaster.ranges
-    .filter((r) => matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType, patient.pregnancy))
-    .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
-
-  const range =
-    ranges[0] ??
-    fieldMaster.ranges.find(
-      (r) => r.isDefault && matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType, patient.pregnancy),
-    );
+  const range = getApplicableRange(fieldMaster, patient, recordedAt, patient.sampleType);
   if (!range) return { flag: undefined, numericValue, displayValue };
 
   let flag: LabResultFlag | undefined = "normal";

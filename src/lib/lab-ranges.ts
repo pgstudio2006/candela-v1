@@ -1,5 +1,13 @@
 import type { LabFieldMaster, LabFieldRange } from "@/design-system/lab-data";
 
+export function normalizeGender(value?: string | null): "M" | "F" | "O" | "all" {
+  const raw = (value ?? "").toString().trim().toLowerCase();
+  if (raw === "male" || raw === "m" || raw === "boy" || raw === "b") return "M";
+  if (raw === "female" || raw === "f" || raw === "girl" || raw === "g") return "F";
+  if (raw === "other" || raw === "o" || raw === "transgender") return "O";
+  return "all";
+}
+
 export function parseNumber(value: string): number | null {
   const v = value.replace(/,/g, "").trim();
   if (v === "" || v === "-" || v.toLowerCase() === "nil") return null;
@@ -40,7 +48,9 @@ export function matchesRange(
   sampleType?: string,
   pregnancy?: boolean,
 ): boolean {
-  if (range.gender && range.gender !== "all" && range.gender !== (gender ?? "")) return false;
+  const rangeGender = normalizeGender(range.gender);
+  const patientGender = normalizeGender(gender);
+  if (rangeGender !== "all" && rangeGender !== patientGender) return false;
   const ageUnit = range.ageUnit ?? "years";
   const ageValue = ageUnit === "years" ? age.years : ageUnit === "months" ? age.months : age.days;
   if (range.ageMin != null && ageValue < range.ageMin) return false;
@@ -50,6 +60,15 @@ export function matchesRange(
   return true;
 }
 
+export function rangeSpecificity(range: LabFieldRange): number {
+  let score = 0;
+  if (normalizeGender(range.gender) !== "all") score += 3;
+  if (range.ageMin != null || range.ageMax != null) score += 2;
+  if (range.sampleType && range.sampleType.trim()) score += 1;
+  if (range.pregnancy != null) score += 1;
+  return score;
+}
+
 export function getApplicableRange(
   fieldMaster: LabFieldMaster,
   patient: { gender?: string | null; dateOfBirth?: Date | string | null; age?: number | null; pregnancy?: boolean },
@@ -57,14 +76,14 @@ export function getApplicableRange(
   sampleType?: string,
 ): LabFieldRange | undefined {
   const age = resolveAge(patient, recordedAt);
-  if (!age) return undefined;
-  const ranges = fieldMaster.ranges
-    .filter((r) => matchesRange(r, patient.gender, age, sampleType, patient.pregnancy))
-    .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
-  const defaultRange = fieldMaster.ranges.find(
-    (r) => r.isDefault && matchesRange(r, patient.gender, age, sampleType, patient.pregnancy),
-  );
-  return ranges[0] ?? defaultRange;
+  const matching = fieldMaster.ranges.filter((r) => matchesRange(r, patient.gender, age, sampleType, patient.pregnancy));
+  const sorted = matching.sort((a, b) => {
+    const specDiff = rangeSpecificity(b) - rangeSpecificity(a);
+    if (specDiff !== 0) return specDiff;
+    // Among equally specific ranges, prefer non-default (intentionally specific) over default
+    return (a.isDefault ? 1 : 0) - (b.isDefault ? 1 : 0);
+  });
+  return sorted[0] ?? undefined;
 }
 
 export function formatReferenceRange(range: LabFieldRange | undefined, unit?: string | null): string {
