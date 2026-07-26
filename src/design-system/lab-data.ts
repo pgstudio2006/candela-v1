@@ -67,6 +67,7 @@ export type LabFieldRange = {
   ageMax?: number;
   ageUnit: "years" | "months" | "days";
   sampleType?: string;
+  pregnancy?: boolean;
   condition?: string;
   low?: number;
   high?: number;
@@ -165,11 +166,13 @@ export type LabOrder = {
   patientGender?: string | null;
   patientDateOfBirth?: string | null;
   patientAge?: number | null;
+  patientBloodGroup?: string | null;
   visitId?: string;
   admissionId?: string;
   orderedBy: string;
   orderedByName?: string;
   source: "opd" | "ipd" | "emergency" | "direct";
+  pregnancy: boolean;
   status: LabOrderStatus;
   orderedAt: string;
   sampleCollectedAt?: string;
@@ -196,6 +199,18 @@ export type LabResultInput = {
   note?: string;
 };
 
+export type LabTemplateOverlayField = {
+  id: string;
+  key: string;
+  label: string;
+  x: number; // percentage of page width (0-100)
+  y: number; // percentage of page height from top (0-100)
+  width: number; // percentage
+  height: number; // percentage
+  fontSize?: number;
+  align?: "left" | "center" | "right";
+};
+
 export type LabReportTemplate = {
   id: string;
   tenantId: string;
@@ -207,6 +222,7 @@ export type LabReportTemplate = {
   marginBottom: number;
   marginLeft: number;
   marginRight: number;
+  overlayFields: LabTemplateOverlayField[];
   isDefault: boolean;
   active: boolean;
   createdAt: string;

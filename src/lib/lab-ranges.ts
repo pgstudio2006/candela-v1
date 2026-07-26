@@ -14,99 +14,57 @@ export function parseDob(value?: Date | string | null): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d;
 }
 
-export function ageAt(
-  dateOfBirth: Date | undefined,
-  at: Date,
-): { years: number; months: number; days: number } {
+export function ageAt(dateOfBirth: Date | undefined, at: Date): { years: number; months: number; days: number } {
   if (!dateOfBirth) return { years: 0, months: 0, days: 0 };
   const end = at.getTime();
   const start = dateOfBirth.getTime();
-  const totalDays = Math.floor((end - start) / (1000 * 60 * 60 * 24));
-  return {
-    years: Math.floor(totalDays / 365.25),
-    months: Math.floor(totalDays / 30.44),
-    days: totalDays,
-  };
+  const days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+  return { years: Math.floor(days / 365.25), months: Math.floor(days / 30.44), days };
 }
 
-/**
- * Resolves a patient's age object from whichever data is available.
- * Priority: integer `age` field → computed from `dateOfBirth`.
- * Returns `undefined` when neither is available.
- * When only the integer `age` is available, months and days are approximated
- * so that range matching on `ageUnit: "months"` or `"days"` still works correctly.
- */
 export function resolveAge(
   patient: { dateOfBirth?: Date | string | null; age?: number | null },
   at: Date,
 ): { years: number; months: number; days: number } | undefined {
-  // Prefer stored integer age (entered at registration)
-  if (patient.age != null && Number.isFinite(patient.age) && patient.age >= 0) {
-    const ageYears = Math.floor(patient.age);
-    return {
-      years: ageYears,
-      months: Math.round(ageYears * 12),
-      days: Math.round(ageYears * 365.25),
-    };
+  if (patient.age != null && Number.isFinite(patient.age)) {
+    return { years: Math.floor(patient.age), months: 0, days: 0 };
   }
-  // Fall back to computed age from date of birth
   const dob = parseDob(patient.dateOfBirth);
   return dob ? ageAt(dob, at) : undefined;
 }
 
-/**
- * Returns true if this range applies for the given patient attributes.
- * IMPORTANT: When `age` is `undefined` (patient age unknown), ranges with
- * explicit ageMin or ageMax bounds are SKIPPED.  We never fall back to
- * age = 0 which would wrongly match a "Newborn" range.
- */
 export function matchesRange(
   range: LabFieldRange,
   gender?: string | null,
-  age?: { years: number; months: number; days: number } | null,
+  age: { years: number; months: number; days: number } = { years: 0, months: 0, days: 0 },
   sampleType?: string,
+  pregnancy?: boolean,
 ): boolean {
   if (range.gender && range.gender !== "all" && range.gender !== (gender ?? "")) return false;
-
-  if (age != null) {
-    const ageUnit = range.ageUnit ?? "years";
-    const ageValue =
-      ageUnit === "years" ? age.years : ageUnit === "months" ? age.months : age.days;
-    if (range.ageMin != null && ageValue < range.ageMin) return false;
-    if (range.ageMax != null && ageValue > range.ageMax) return false;
-  } else {
-    // Age is unknown — skip any range that has age bounds
-    if (range.ageMin != null || range.ageMax != null) return false;
-  }
-
+  const ageUnit = range.ageUnit ?? "years";
+  const ageValue = ageUnit === "years" ? age.years : ageUnit === "months" ? age.months : age.days;
+  if (range.ageMin != null && ageValue < range.ageMin) return false;
+  if (range.ageMax != null && ageValue > range.ageMax) return false;
   if (sampleType && range.sampleType && range.sampleType !== sampleType) return false;
+  if (range.pregnancy != null && range.pregnancy !== Boolean(pregnancy)) return false;
   return true;
 }
 
-/**
- * Returns the most applicable reference range for a field, given the patient context.
- * Falls back to the `isDefault` range when no age-specific range matches.
- */
 export function getApplicableRange(
   fieldMaster: LabFieldMaster,
-  patient: { gender?: string | null; dateOfBirth?: Date | string | null; age?: number | null },
+  patient: { gender?: string | null; dateOfBirth?: Date | string | null; age?: number | null; pregnancy?: boolean },
   recordedAt: Date,
   sampleType?: string,
 ): LabFieldRange | undefined {
   const age = resolveAge(patient, recordedAt);
-  const matched = fieldMaster.ranges
-    .filter((r) => matchesRange(r, patient.gender, age, sampleType))
-    // Prefer isDefault among matched ranges
-    .sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
-
-  if (matched.length > 0) return matched[0];
-  // No range matched — only fall back to a default range if that default
-  // itself passes the non-age filters (gender/sampleType) and, crucially,
-  // does not require an age we do not have. This stops "Newborn" from
-  // appearing for patients whose age is unknown.
-  return fieldMaster.ranges.find(
-    (r) => r.isDefault && matchesRange(r, patient.gender, age, sampleType),
+  if (!age) return undefined;
+  const ranges = fieldMaster.ranges
+    .filter((r) => matchesRange(r, patient.gender, age, sampleType, patient.pregnancy))
+    .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
+  const defaultRange = fieldMaster.ranges.find(
+    (r) => r.isDefault && matchesRange(r, patient.gender, age, sampleType, patient.pregnancy),
   );
+  return ranges[0] ?? defaultRange;
 }
 
 export function formatReferenceRange(range: LabFieldRange | undefined, unit?: string | null): string {

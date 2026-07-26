@@ -164,6 +164,7 @@ export default function LabFieldsMasterPage() {
           ageMax: r.ageMax != null ? Number(r.ageMax) : undefined,
           ageUnit: r.ageUnit ?? "years",
           sampleType: r.sampleType?.trim() || undefined,
+          pregnancy: r.pregnancy,
           condition: r.condition?.trim() || undefined,
           low: r.low != null ? Number(r.low) : undefined,
           high: r.high != null ? Number(r.high) : undefined,
@@ -320,6 +321,20 @@ export default function LabFieldsMasterPage() {
                     <div className="md:col-span-2">
                       <Label className="text-[11px]">Sample type</Label>
                       <Input value={r.sampleType ?? ""} onChange={(e) => updateRange(idx, { sampleType: e.target.value })} className="h-8 text-[12px]" placeholder="e.g. Serum" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label className="text-[11px]">Pregnancy</Label>
+                      <Select
+                        value={r.pregnancy == null ? "" : String(r.pregnancy)}
+                        onValueChange={(v) => updateRange(idx, { pregnancy: v === "" ? undefined : v === "true" })}
+                      >
+                        <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Any</SelectItem>
+                          <SelectItem value="true">Pregnant only</SelectItem>
+                          <SelectItem value="false">Non-pregnant only</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="md:col-span-2">
                       <Label className="text-[11px]">Condition</Label>

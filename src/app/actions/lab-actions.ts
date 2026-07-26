@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { runAction, type ActionResult } from "@/server/action-result";
 import { requireAnyModule, requireModule } from "@/server/auth";
 import { branchScope } from "@/server/tenancy";
+import { ServerActionError } from "@/server/errors";
 import {
   cancelLabOrder,
   collectLabOrderSample,
@@ -138,6 +139,32 @@ export async function saveLabResultsAction(
   return runAction(async () => {
     const ctx = await requireModule("laboratory");
     return saveLabResults(ctx, orderId, results);
+  });
+}
+
+export async function saveLabOrderMetadataAction(
+  orderId: string,
+  input: { pregnancy?: boolean; bloodGroup?: string },
+): Promise<ActionResult<LabOrder>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    const order = await getLabOrder(ctx, orderId);
+    if (!order) throw new ServerActionError("NOT_FOUND", "Order not found.");
+    await prisma.$transaction(async (tx) => {
+      await tx.labOrder.update({
+        where: { id: orderId },
+        data: { pregnancy: input.pregnancy ?? false },
+      });
+      if (input.bloodGroup !== undefined) {
+        await tx.patient.update({
+          where: { id: order.patientId },
+          data: { bloodGroup: input.bloodGroup.trim() || null },
+        });
+      }
+    });
+    const updated = await getLabOrder(ctx, orderId);
+    if (!updated) throw new ServerActionError("INTERNAL_ERROR", "Failed to reload order.");
+    return updated;
   });
 }
 

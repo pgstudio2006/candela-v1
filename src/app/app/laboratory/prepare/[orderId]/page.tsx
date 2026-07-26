@@ -7,7 +7,7 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LAB_ITEM_STATUS_LABELS, LAB_ORDER_STATUS_LABELS, LAB_RESULT_FLAG_LABELS, type LabResultFlag } from "@/design-system/lab-data";
-import { getApplicableRange, formatReferenceRange, resolveAge } from "@/lib/lab-ranges";
+import { getApplicableRange, formatReferenceRange } from "@/lib/lab-ranges";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Check, FlaskConical } from "lucide-react";
 import Link from "next/link";
@@ -17,11 +17,14 @@ import { useEffect, useMemo, useState } from "react";
 export default function PrepareLabReportPage() {
   const params = useParams();
   const orderId = String(params.orderId ?? "");
-  const { getOrder, reloadOrder, collectSample, saveResults, markItemComplete } = useLabStore();
+  const { getOrder, reloadOrder, collectSample, saveResults, saveLabOrderMetadata, markItemComplete } = useLabStore();
 
   const [order, setOrder] = useState(getOrder(orderId));
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [pregnancy, setPregnancy] = useState(order?.pregnancy ?? false);
+  const [bloodGroup, setBloodGroup] = useState(order?.patientBloodGroup ?? "");
+  const [savingMeta, setSavingMeta] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -50,6 +53,35 @@ export default function PrepareLabReportPage() {
   useEffect(() => {
     void load();
   }, [orderId]);
+
+  useEffect(() => {
+    if (order) {
+      setPregnancy(order.pregnancy);
+      setBloodGroup(order.patientBloodGroup ?? "");
+    }
+  }, [order?.pregnancy, order?.patientBloodGroup]);
+
+  useEffect(() => {
+    if (!order) return;
+    const samePregnancy = pregnancy === order.pregnancy;
+    const sameBloodGroup = (bloodGroup || "") === (order.patientBloodGroup || "");
+    if (samePregnancy && sameBloodGroup) return;
+    const t = setTimeout(async () => {
+      setSavingMeta(true);
+      try {
+        const o = await saveLabOrderMetadata(orderId, {
+          pregnancy,
+          bloodGroup: bloodGroup.trim() || undefined,
+        });
+        setOrder(o);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to save details");
+      } finally {
+        setSavingMeta(false);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [order, pregnancy, bloodGroup, orderId, saveLabOrderMetadata]);
 
   const fieldsToFill = useMemo(() => {
     const list: { itemId: string; fieldMasterId: string; label: string; unit?: string; dataType: string; section?: string; valueKey: string }[] = [];
@@ -166,6 +198,36 @@ export default function PrepareLabReportPage() {
           <span className="ml-2 font-medium">
             {order.patientName} ({order.patientUhid}) · {order.patientAge != null ? `${order.patientAge}Y` : "—"} / {order.patientGender?.toUpperCase() ?? "—"}
           </span>
+          {order.patientGender?.toLowerCase() === "female" && (
+            <label className="ml-3 inline-flex items-center gap-1.5 text-[12px]">
+              <input
+                type="checkbox"
+                checked={pregnancy}
+                onChange={(e) => setPregnancy(e.target.checked)}
+                className="size-3.5 rounded border-[var(--attio-border)]"
+              />
+              Pregnant
+            </label>
+          )}
+          <span className="ml-3 inline-flex items-center gap-1.5 text-[12px]">
+            <span className="text-[var(--attio-text-tertiary)]">Blood group</span>
+            <select
+              value={bloodGroup}
+              onChange={(e) => setBloodGroup(e.target.value)}
+              className="h-7 rounded border bg-transparent px-1 text-[12px]"
+            >
+              <option value="">—</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
+          </span>
+          {savingMeta && <span className="ml-2 text-[10px] text-[var(--attio-text-tertiary)]">Saving...</span>}
         </div>
       </div>
 
@@ -200,18 +262,14 @@ export default function PrepareLabReportPage() {
               {(item.reportCatalog?.fields ?? []).filter((f) => f.isVisible).map((f) => {
                 const key = `${item.id}_${f.fieldMasterId}`;
                 const flag = getFlag(item.id, f.fieldMasterId);
-                const patientCtx = { gender: order.patientGender, dateOfBirth: order.patientDateOfBirth, age: order.patientAge };
-                const patientAge = resolveAge(patientCtx, new Date());
                 const range = f.fieldMaster
                   ? getApplicableRange(
                       f.fieldMaster,
-                      patientCtx,
+                      { gender: order.patientGender, dateOfBirth: order.patientDateOfBirth, age: order.patientAge, pregnancy: order.pregnancy },
                       new Date(),
                       item.sampleType,
                     )
                   : undefined;
-                // Flag whether this is a default-fallback range (age unknown)
-                const isDefaultFallback = range?.isDefault && patientAge == null;
                 const rangeText = formatReferenceRange(range, f.fieldMaster?.unit);
                 return (
                   <div key={key} className={cn("space-y-1 rounded-lg border p-3", flag && flag !== "normal" ? "border-amber-200 bg-amber-50/30" : "border-transparent")}>
@@ -233,7 +291,6 @@ export default function PrepareLabReportPage() {
                     </div>
                     <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                       Range: {rangeText}
-                      {isDefaultFallback && <span className="ml-1 italic opacity-70">(default — age unknown)</span>}
                     </p>
                     {f.fieldMaster?.dataType === "select" && Array.isArray(f.fieldMaster.options) ? (
                       <select

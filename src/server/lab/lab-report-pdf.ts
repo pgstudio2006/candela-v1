@@ -5,6 +5,7 @@ import {
   type LabFieldMaster,
   type LabOrder,
   type LabResultFlag,
+  type LabTemplateOverlayField,
 } from "@/design-system/lab-data";
 import {
   resolveAge,
@@ -25,6 +26,7 @@ export type LabReportPdfPatient = {
   gender?: string | null;
   dateOfBirth?: Date | string | null;
   age?: number | null;
+  bloodGroup?: string | null;
 };
 
 export type LabReportTemplateSpec = {
@@ -34,6 +36,7 @@ export type LabReportTemplateSpec = {
   marginBottom: number;
   marginLeft: number;
   marginRight: number;
+  overlayFields: LabTemplateOverlayField[];
 };
 
 function dataUrlToBytes(dataUrl: string): Uint8Array | undefined {
@@ -47,7 +50,7 @@ function dataUrlToBytes(dataUrl: string): Uint8Array | undefined {
 function evaluateLabResultFlag(
   fieldMaster: LabFieldMaster,
   value: string,
-  patient: { gender?: string | null; dateOfBirth?: Date | string | null; age?: number | null; sampleType?: string },
+  patient: { gender?: string | null; dateOfBirth?: Date | string | null; age?: number | null; sampleType?: string; pregnancy?: boolean },
   recordedAt: Date,
 ): LabResultFlag | undefined {
   const numericValue = parseNumber(value);
@@ -117,6 +120,66 @@ function measureHeight(text: string, font: any, size: number, maxWidth: number, 
   return lines.length * lineHeight;
 }
 
+function overlayFieldValue(
+  field: LabTemplateOverlayField,
+  patient: LabReportPdfPatient,
+  order?: LabOrder,
+): string {
+  const value = (() => {
+    switch (field.key) {
+      case "patientName":
+        return patient.name;
+      case "uhid":
+      case "uhidNo":
+        return patient.uhid;
+      case "phone":
+      case "mobileNo":
+        return patient.phone ?? "";
+      case "bloodGroup":
+        return patient.bloodGroup ?? "";
+      case "ageGender": {
+        const age = resolveAge(patient, new Date());
+        const gender = patient.gender?.toUpperCase() ?? "—";
+        const pregnant = patient.gender?.toLowerCase() === "female" && order?.pregnancy ? " (Pregnant)" : "";
+        return `${formatAge(age)} / ${gender}${pregnant}`;
+      }
+      case "collectionTime":
+        return order?.sampleCollectedAt ? dateLabel(order.sampleCollectedAt) : "";
+      case "reportingTime":
+        return order?.completedAt ? dateLabel(order.completedAt) : dateLabel(new Date().toISOString());
+      case "sampleId":
+      case "orderId":
+        return order?.id ?? "";
+      default:
+        return "";
+    }
+  })();
+  if (!field.label) return value;
+  return value ? `${field.label}: ${value}` : field.label;
+}
+
+function drawOverlayFields(
+  page: PDFPage,
+  fields: LabTemplateOverlayField[],
+  patient: LabReportPdfPatient,
+  order: LabOrder | undefined,
+  font: any,
+) {
+  for (const field of fields) {
+    const text = overlayFieldValue(field, patient, order);
+    if (!text && field.key !== "ageGender") continue;
+    const fontSize = field.fontSize ?? 9;
+    const x = (field.x / 100) * PAGE_WIDTH;
+    const yTop = PAGE_HEIGHT - (field.y / 100) * PAGE_HEIGHT;
+    const maxWidth = Math.max(20, (field.width / 100) * PAGE_WIDTH);
+    const textWidth = font.widthOfTextAtSize(text, fontSize);
+    let drawX = x;
+    if (field.align === "center") drawX = x + maxWidth / 2 - textWidth / 2;
+    if (field.align === "right") drawX = x + maxWidth - textWidth;
+    drawWrapped(page, text, drawX, yTop - fontSize * 0.2, maxWidth, fontSize, font, fontSize * 1.2, rgb(0.1, 0.1, 0.1));
+  }
+}
+
 function dateLabel(dateStr?: string): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
@@ -168,15 +231,18 @@ export async function buildLabReportPdfBytes(
   const usableWidth = PAGE_WIDTH - marginLeft - marginRight;
   const rightX = PAGE_WIDTH - marginRight;
 
-  function newPage(): PDFPage {
+  function newPage(orderForOverlay?: LabOrder): PDFPage {
     const p = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     if (embeddedTemplate) {
       p.drawPage(embeddedTemplate, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
     }
+    if (template?.overlayFields?.length) {
+      drawOverlayFields(p, template.overlayFields, patient, orderForOverlay, normalFont);
+    }
     return p;
   }
 
-  let page = newPage();
+  let page = newPage(orders[0]);
   let y = top;
 
   // Header
@@ -225,7 +291,7 @@ export async function buildLabReportPdfBytes(
   for (const order of orders) {
     // Order header
     if (y < bottom + 60) {
-      page = newPage();
+      page = newPage(order);
       y = top;
     }
     const tests = order.items.map((i) => i.label).join(", ");
@@ -248,7 +314,7 @@ export async function buildLabReportPdfBytes(
 
     for (const item of order.items) {
       if (y < bottom + 60) {
-        page = newPage();
+        page = newPage(order);
         y = top;
       }
       page.drawText(`${item.label}${item.sampleType ? ` · ${item.sampleType}` : ""}`, {
@@ -285,13 +351,13 @@ export async function buildLabReportPdfBytes(
             flag = evaluateLabResultFlag(
               field.fieldMaster,
               value,
-              { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age, sampleType: item.sampleType },
+              { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age, sampleType: item.sampleType, pregnancy: order.pregnancy },
               recordedAt,
             );
           }
           const range = getApplicableRange(
             field.fieldMaster,
-            { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age },
+            { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age, pregnancy: order.pregnancy },
             result ? new Date(result.recordedAt) : recordedAt,
             item.sampleType,
           );
@@ -311,7 +377,7 @@ export async function buildLabReportPdfBytes(
           const rowHeight = Math.max(...cellHeights, lineHeight) + rowPadding;
 
           if (y - rowHeight < bottom) {
-            page = newPage();
+            page = newPage(order);
             y = top - 18;
             page.drawLine({ start: { x: marginLeft, y: y + 16 }, end: { x: rightX, y: y + 16 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
             for (let i = 0; i < headers.length; i++) {

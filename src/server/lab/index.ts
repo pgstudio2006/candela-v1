@@ -21,6 +21,7 @@ import type {
   LabResultFlag,
   LabResultInput,
   LabReportTemplate,
+  LabTemplateOverlayField,
 } from "@/design-system/lab-data";
 
 export type LabSnapshot = {
@@ -43,7 +44,7 @@ function parseNumber(value: string): number | null {
 function evaluateLabResult(
   fieldMaster: LabFieldMaster,
   value: string,
-  patient: { gender?: string | null; dateOfBirth?: Date | null; age?: number | null; sampleType?: string },
+  patient: { gender?: string | null; dateOfBirth?: Date | null; age?: number | null; sampleType?: string; pregnancy?: boolean },
   recordedAt: Date,
 ): { flag: LabResultFlag | undefined; numericValue: number | null; displayValue: string } {
   const numericValue = parseNumber(value);
@@ -67,13 +68,13 @@ function evaluateLabResult(
 
   const age = resolveAge(patient, recordedAt);
   const ranges = fieldMaster.ranges
-    .filter((r) => matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType))
+    .filter((r) => matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType, patient.pregnancy))
     .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
 
   const range =
     ranges[0] ??
     fieldMaster.ranges.find(
-      (r) => r.isDefault && matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType),
+      (r) => r.isDefault && matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType, patient.pregnancy),
     );
   if (!range) return { flag: undefined, numericValue, displayValue };
 
@@ -120,6 +121,7 @@ function serializeFieldRange(row: Record<string, unknown>): LabFieldRange {
     ageMax: row.ageMax != null ? Number(row.ageMax) : undefined,
     ageUnit: String(row.ageUnit ?? "years") as LabFieldRange["ageUnit"],
     sampleType: row.sampleType ? String(row.sampleType) : undefined,
+    pregnancy: row.pregnancy != null ? Boolean(row.pregnancy) : undefined,
     condition: row.condition ? String(row.condition) : undefined,
     low: row.low != null ? Number(row.low) : undefined,
     high: row.high != null ? Number(row.high) : undefined,
@@ -224,11 +226,13 @@ function serializeOrder(row: Record<string, unknown> & { patient?: Record<string
             ? Math.floor((Date.now() - new Date(String(row.patient.dateOfBirth)).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
             : null)
       : null,
+    patientBloodGroup: row.patient ? (row.patient.bloodGroup ? String(row.patient.bloodGroup) : null) : null,
     visitId: row.visitId ? String(row.visitId) : undefined,
     admissionId: row.admissionId ? String(row.admissionId) : undefined,
     orderedBy: String(row.orderedBy),
     orderedByName: row.orderedByName ? String(row.orderedByName) : undefined,
     source: String(row.source) as LabOrder["source"],
+    pregnancy: row.pregnancy != null ? Boolean(row.pregnancy) : false,
     status: String(row.status) as LabOrder["status"],
     orderedAt: row.orderedAt ? new Date(String(row.orderedAt)).toISOString() : new Date().toISOString(),
     sampleCollectedAt: row.sampleCollectedAt ? new Date(String(row.sampleCollectedAt)).toISOString() : undefined,
@@ -314,6 +318,7 @@ export async function upsertFieldMaster(ctx: ServerContext, input: FieldMasterIn
             ageMax: r.ageMax ?? null,
             ageUnit: r.ageUnit ?? "years",
             sampleType: r.sampleType?.trim() ?? null,
+            pregnancy: r.pregnancy ?? null,
             condition: r.condition?.trim() ?? null,
             low: r.low ?? null,
             high: r.high ?? null,
@@ -438,7 +443,7 @@ export async function listLabOrders(ctx: ServerContext, patientId?: string): Pro
   const rows = await prisma.labOrder.findMany({
     where: { ...scope, ...(patientId ? { patientId } : {}) },
     include: {
-      patient: { select: { name: true, fullName: true, uhid: true, gender: true, age: true, dateOfBirth: true } },
+      patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -456,7 +461,7 @@ export async function getLabOrder(ctx: ServerContext, id: string): Promise<LabOr
   const row = await prisma.labOrder.findFirst({
     where: { id, ...scope },
     include: {
-      patient: { select: { name: true, fullName: true, uhid: true, gender: true, age: true, dateOfBirth: true } },
+      patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -511,7 +516,7 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
       },
     },
     include: {
-      patient: { select: { name: true, fullName: true, uhid: true, gender: true, age: true, dateOfBirth: true } },
+      patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
       items: {
         include: {
           reportCatalog: { include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } } },
@@ -592,6 +597,7 @@ export async function saveLabResults(
           dateOfBirth: patient?.dateOfBirth,
           age: patient?.age ?? undefined,
           sampleType: item.sampleType,
+          pregnancy: order.pregnancy,
         },
         recordedAt,
       );
@@ -664,7 +670,7 @@ async function attachLabReportToPatientProfile(ctx: ServerContext, order: LabOrd
   const scope = branchScope(ctx);
   const patient = await prisma.patient.findFirst({
     where: { id: order.patientId, ...scope },
-    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true },
+    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true },
   });
   if (!patient) return;
 
@@ -677,6 +683,7 @@ async function attachLabReportToPatientProfile(ctx: ServerContext, order: LabOrd
       gender: patient.gender,
       age: patient.age,
       dateOfBirth: patient.dateOfBirth,
+      bloodGroup: patient.bloodGroup,
     },
     [order],
     template,
@@ -723,12 +730,12 @@ export async function generateLabOrderReportPdf(ctx: ServerContext, orderId: str
   if (!order) throw new ServerActionError("NOT_FOUND", "Order not found.");
   const patient = await prisma.patient.findFirst({
     where: { id: order.patientId, ...branchScope(ctx) },
-    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true },
+    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true },
   });
   if (!patient) throw new ServerActionError("NOT_FOUND", "Patient not found.");
   const template = await getDefaultLabReportTemplateForPdf(ctx);
   return buildLabReportPdfBytes(
-    { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth },
+    { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth, bloodGroup: patient.bloodGroup },
     [order],
     template,
   );
@@ -737,13 +744,13 @@ export async function generateLabOrderReportPdf(ctx: ServerContext, orderId: str
 export async function generatePatientLabReportPdf(ctx: ServerContext, patientId: string): Promise<Uint8Array> {
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, ...branchScope(ctx) },
-    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true },
+    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true },
   });
   if (!patient) throw new ServerActionError("NOT_FOUND", "Patient not found.");
   const rows = await prisma.labOrder.findMany({
     where: { patientId, ...branchScope(ctx) },
     include: {
-      patient: { select: { name: true, fullName: true, uhid: true, gender: true, age: true, dateOfBirth: true } },
+      patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -757,7 +764,7 @@ export async function generatePatientLabReportPdf(ctx: ServerContext, patientId:
   const orders = serializeForClient(rows.map((r) => serializeOrder(r as unknown as Record<string, unknown> & { patient?: Record<string, unknown>; items?: unknown[] }))) as LabOrder[];
   const template = await getDefaultLabReportTemplateForPdf(ctx);
   return buildLabReportPdfBytes(
-    { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth },
+    { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth, bloodGroup: patient.bloodGroup },
     orders,
     template,
   );
@@ -772,7 +779,7 @@ export async function sendLabReportOnWhatsApp(
   if (!order) throw new ServerActionError("NOT_FOUND", "Order not found.");
   const patient = await prisma.patient.findFirst({
     where: { id: order.patientId, ...branchScope(ctx) },
-    select: { name: true, fullName: true, phone: true, gender: true, age: true, dateOfBirth: true },
+    select: { name: true, fullName: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true },
   });
   if (!patient) throw new ServerActionError("NOT_FOUND", "Patient not found.");
   const phone = recipientPhone?.trim() || patient.phone;
@@ -780,7 +787,7 @@ export async function sendLabReportOnWhatsApp(
 
   const template = await getDefaultLabReportTemplateForPdf(ctx);
   const pdfBytes = await buildLabReportPdfBytes(
-    { name: patient.name ?? patient.fullName ?? "Patient", uhid: "", phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth },
+    { name: patient.name ?? patient.fullName ?? "Patient", uhid: "", phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth, bloodGroup: patient.bloodGroup },
     [order],
     template,
   );
@@ -852,6 +859,7 @@ function toLabReportTemplateSpec(template: LabReportTemplate): LabReportTemplate
     marginBottom: template.marginBottom,
     marginLeft: template.marginLeft,
     marginRight: template.marginRight,
+    overlayFields: template.overlayFields ?? [],
   };
 }
 
@@ -886,6 +894,7 @@ export async function upsertLabReportTemplate(
     marginBottom?: number;
     marginLeft?: number;
     marginRight?: number;
+    overlayFields?: unknown;
     isDefault?: boolean;
     active?: boolean;
   },
@@ -901,6 +910,7 @@ export async function upsertLabReportTemplate(
     marginBottom: input.marginBottom ?? 50,
     marginLeft: input.marginLeft ?? 50,
     marginRight: input.marginRight ?? 50,
+    overlayFields: input.overlayFields === undefined ? Prisma.JsonNull : (input.overlayFields as Prisma.InputJsonValue),
     isDefault: input.isDefault ?? false,
     active: input.active ?? true,
   };

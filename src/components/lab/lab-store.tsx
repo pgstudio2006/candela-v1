@@ -11,6 +11,7 @@ import {
   markLabOrderCompleteAction,
   markLabOrderItemCompleteAction,
   saveLabResultsAction,
+  saveLabOrderMetadataAction,
   upsertFieldMasterAction,
   upsertReportCatalogAction,
 } from "@/app/actions/lab-actions";
@@ -53,6 +54,7 @@ type Store = LabSnapshot & {
   createOrder: (input: LabOrderInput) => Promise<LabOrder>;
   collectSample: (orderId: string, itemIds?: string[]) => Promise<LabOrder>;
   saveResults: (orderId: string, results: LabResultInput[]) => Promise<LabOrder>;
+  saveLabOrderMetadata: (orderId: string, input: Parameters<typeof saveLabOrderMetadataAction>[1]) => Promise<LabOrder>;
   markItemComplete: (itemId: string) => Promise<LabOrder>;
   markOrderComplete: (orderId: string) => Promise<LabOrder>;
   cancelOrder: (orderId: string, reason?: string) => Promise<LabOrder>;
@@ -150,6 +152,7 @@ export function LabStoreProvider({ children }: { children: ReactNode }) {
       createOrder: (input) => mutate(() => createLabOrderAction(input), "Failed to create order"),
       collectSample: (orderId, itemIds) => mutate(() => collectLabOrderSampleAction(orderId, itemIds), "Failed to collect sample"),
       saveResults: (orderId, results) => mutate(() => saveLabResultsAction(orderId, results), "Failed to save results"),
+      saveLabOrderMetadata: (orderId, input) => mutate(() => saveLabOrderMetadataAction(orderId, input), "Failed to save order metadata"),
       markItemComplete: (itemId) => mutate(() => markLabOrderItemCompleteAction(itemId), "Failed to complete item"),
       markOrderComplete: (orderId) => mutate(() => markLabOrderCompleteAction(orderId), "Failed to complete order"),
       cancelOrder: (orderId, reason) => mutate(() => cancelLabOrderAction(orderId, reason), "Failed to cancel order"),

@@ -43,6 +43,7 @@ export default function LabReportCatalogPage() {
   const { reportCatalogs, fieldMasters, saveReportCatalog, deleteReportCatalog } = useLabStore();
   const [editing, setEditing] = useState<ReportForm | null>(null);
   const [saving, setSaving] = useState(false);
+  const [openFieldIdx, setOpenFieldIdx] = useState<number | null>(null);
 
   const columns = [
     { key: "code", label: "Code" },
@@ -252,23 +253,29 @@ export default function LabReportCatalogPage() {
                           >
                             <CommandInput
                               placeholder={selectedMaster ? `${selectedMaster.name} (${selectedMaster.code ?? ""})` : "Search field..."}
+                              onFocus={() => setOpenFieldIdx(idx)}
                             />
-                            <CommandList className="max-h-40">
-                              <CommandEmpty className="py-2 text-[11px]">No field found.</CommandEmpty>
-                              <CommandGroup>
-                                {fieldMasters.filter((fm) => fm.active).map((fm) => (
-                                  <CommandItem
-                                    key={fm.id}
-                                    value={fm.id}
-                                    keywords={[fm.name, fm.code ?? ""]}
-                                    onSelect={() => updateField(idx, { fieldMasterId: fm.id })}
-                                    className="text-[12px]"
-                                  >
-                                    {fm.name} {fm.code ? `(${fm.code})` : ""}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
+                            {openFieldIdx === idx && (
+                              <CommandList className="max-h-40">
+                                <CommandEmpty className="py-2 text-[11px]">No field found.</CommandEmpty>
+                                <CommandGroup>
+                                  {fieldMasters.filter((fm) => fm.active).map((fm) => (
+                                    <CommandItem
+                                      key={fm.id}
+                                      value={fm.id}
+                                      keywords={[fm.name, fm.code ?? ""]}
+                                      onSelect={() => {
+                                        updateField(idx, { fieldMasterId: fm.id });
+                                        setOpenFieldIdx(null);
+                                      }}
+                                      className="text-[12px]"
+                                    >
+                                      {fm.name} {fm.code ? `(${fm.code})` : ""}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            )}
                           </Command>
                         );
                       })()}

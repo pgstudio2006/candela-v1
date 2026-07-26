@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { Panel, AttioButton } from "@/components/frontdesk/ui";
 import { Input } from "@/components/ui/input";
@@ -11,9 +11,9 @@ import {
   deleteLabReportTemplateAction,
   setDefaultLabReportTemplateAction,
 } from "@/app/actions/lab-actions";
-import type { LabReportTemplate } from "@/design-system/lab-data";
+import type { LabReportTemplate, LabTemplateOverlayField } from "@/design-system/lab-data";
 import { cn } from "@/lib/utils";
-import { FileText, Star, Trash2, Upload, X } from "lucide-react";
+import { FileText, Plus, Star, Trash2, Upload, X } from "lucide-react";
 
 type MarginForm = {
   top: string;
@@ -21,6 +21,17 @@ type MarginForm = {
   left: string;
   right: string;
 };
+
+const OVERLAY_FIELD_OPTIONS = [
+  { key: "uhid", label: "UHID No." },
+  { key: "patientName", label: "Patient Name" },
+  { key: "ageGender", label: "Age / Gender" },
+  { key: "bloodGroup", label: "Blood Group" },
+  { key: "mobileNo", label: "Mobile No." },
+  { key: "collectionTime", label: "Collection Time" },
+  { key: "reportingTime", label: "Reporting Time" },
+  { key: "sampleId", label: "Sample ID" },
+];
 
 function parseMargin(v: string) {
   const n = Number(v);
@@ -47,6 +58,7 @@ export default function LabSettingsPage() {
   const [fileName, setFileName] = useState("");
   const [mimeType, setMimeType] = useState("");
   const [margins, setMargins] = useState<MarginForm>(toMarginForm());
+  const [overlayFields, setOverlayFields] = useState<LabTemplateOverlayField[]>([]);
   const [isDefault, setIsDefault] = useState(false);
 
   const [preview, setPreview] = useState<LabReportTemplate | null>(null);
@@ -76,6 +88,7 @@ export default function LabSettingsPage() {
     setFileName("");
     setMimeType("");
     setMargins(toMarginForm());
+    setOverlayFields([]);
     setIsDefault(false);
   }
 
@@ -91,9 +104,55 @@ export default function LabSettingsPage() {
       left: String(t.marginLeft),
       right: String(t.marginRight),
     });
+    setOverlayFields(Array.isArray(t.overlayFields) ? t.overlayFields : []);
     setIsDefault(t.isDefault);
     setPreview(t);
   }
+
+  function addOverlayField() {
+    const key = OVERLAY_FIELD_OPTIONS[0].key;
+    setOverlayFields((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        key,
+        label: OVERLAY_FIELD_OPTIONS[0].label,
+        x: 5,
+        y: 5,
+        width: 25,
+        height: 5,
+        fontSize: 9,
+        align: "left" as const,
+      },
+    ]);
+  }
+
+  function removeOverlayField(idx: number) {
+    setOverlayFields((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function updateOverlayField(idx: number, patch: Partial<LabTemplateOverlayField>) {
+    setOverlayFields((prev) => prev.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+  }
+
+  function updateOverlayKey(idx: number, key: string) {
+    const option = OVERLAY_FIELD_OPTIONS.find((o) => o.key === key);
+    updateOverlayField(idx, { key, label: option?.label ?? key });
+  }
+
+  const activePreview = useMemo(() => {
+    if (!preview) return null;
+    if (!editingId || editingId !== preview.id) return preview;
+    return {
+      ...preview,
+      name,
+      marginTop: parseMargin(margins.top),
+      marginBottom: parseMargin(margins.bottom),
+      marginLeft: parseMargin(margins.left),
+      marginRight: parseMargin(margins.right),
+      overlayFields,
+    };
+  }, [preview, editingId, name, margins, overlayFields]);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -122,6 +181,7 @@ export default function LabSettingsPage() {
           marginBottom: parseMargin(margins.bottom),
           marginLeft: parseMargin(margins.left),
           marginRight: parseMargin(margins.right),
+          overlayFields,
           isDefault,
         },
         editingId ?? undefined,
@@ -219,6 +279,101 @@ export default function LabSettingsPage() {
                 Set as default template
               </label>
 
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[12px]">Header overlay fields</Label>
+                  <AttioButton type="button" variant="secondary" onClick={addOverlayField}>
+                    <Plus className="mr-1 size-3.5" />
+                    Add field
+                  </AttioButton>
+                </div>
+                {overlayFields.length === 0 && (
+                  <p className="text-[11px] text-[var(--attio-text-tertiary)]">No overlay fields configured.</p>
+                )}
+                <div className="space-y-2">
+                  {overlayFields.map((field, idx) => (
+                    <div key={field.id} className="rounded border p-2 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={field.key}
+                          onChange={(e) => updateOverlayKey(idx, e.target.value)}
+                          className="h-8 rounded border bg-transparent px-2 text-[12px]"
+                        >
+                          {OVERLAY_FIELD_OPTIONS.map((o) => (
+                            <option key={o.key} value={o.key}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Input
+                          value={field.label}
+                          onChange={(e) => updateOverlayField(idx, { label: e.target.value })}
+                          placeholder="Label"
+                          className="h-8 text-[12px]"
+                        />
+                        <AttioButton
+                          type="button"
+                          variant="ghost"
+                          className="!px-1.5 text-red-600"
+                          onClick={() => removeOverlayField(idx)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </AttioButton>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { k: "x", label: "X %" },
+                          { k: "y", label: "Y %" },
+                          { k: "width", label: "W %" },
+                          { k: "height", label: "H %" },
+                        ].map(({ k, label }) => (
+                          <div key={k} className="space-y-0.5">
+                            <Label className="text-[10px] text-[var(--attio-text-tertiary)]">{label}</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min={0}
+                              max={k === "x" || k === "y" ? 100 : undefined}
+                              value={String((field as any)[k] ?? "")}
+                              onChange={(e) =>
+                                updateOverlayField(idx, { [k]: Number(e.target.value) } as Partial<LabTemplateOverlayField>)
+                              }
+                              className="h-8 text-[12px]"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] text-[var(--attio-text-tertiary)]">Font size</Label>
+                          <Input
+                            type="number"
+                            min={6}
+                            value={field.fontSize ?? 9}
+                            onChange={(e) => updateOverlayField(idx, { fontSize: Number(e.target.value) })}
+                            className="h-8 text-[12px]"
+                          />
+                        </div>
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] text-[var(--attio-text-tertiary)]">Align</Label>
+                          <select
+                            value={field.align ?? "left"}
+                            onChange={(e) =>
+                              updateOverlayField(idx, { align: e.target.value as LabTemplateOverlayField["align"] })
+                            }
+                            className="h-8 w-full rounded border bg-transparent px-2 text-[12px]"
+                          >
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-2 pt-2">
                 <AttioButton type="submit" disabled={isPending || !name.trim() || (!fileData && !editingId)}>
                   {editingId ? "Update" : "Upload"}
@@ -281,26 +436,44 @@ export default function LabSettingsPage() {
 
         <div className="lg:col-span-2">
           <Panel title="Preview">
-            {preview ? (
+            {activePreview ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-[13px] font-medium">{preview.name}</p>
+                  <p className="text-[13px] font-medium">{activePreview.name}</p>
                   <AttioButton variant="ghost" className="!px-2" onClick={() => setPreview(null)}>
                     <X className="size-3.5" />
                   </AttioButton>
                 </div>
-                {isPdf(preview) ? (
+                {isPdf(activePreview) ? (
                   <div className="relative h-[600px] w-full overflow-hidden rounded-lg border bg-[var(--attio-surface)]">
-                    <iframe src={preview.fileData} className="h-full w-full" title={preview.name} />
+                    <iframe src={activePreview.fileData} className="h-full w-full" title={activePreview.name} />
                     <div
-                      className="pointer-events-none absolute inset-0 border-2 border-dashed border-red-400/60"
+                      className="pointer-events-none absolute border-2 border-dashed border-red-400/60"
                       style={{
-                        top: preview.marginTop,
-                        bottom: preview.marginBottom,
-                        left: preview.marginLeft,
-                        right: preview.marginRight,
+                        top: activePreview.marginTop,
+                        bottom: activePreview.marginBottom,
+                        left: activePreview.marginLeft,
+                        right: activePreview.marginRight,
                       }}
                     />
+                    {(activePreview.overlayFields ?? []).map((field) => (
+                      <div
+                        key={field.id}
+                        className="pointer-events-none absolute border border-dashed border-emerald-500/70 bg-emerald-500/10 p-1 text-[10px] text-emerald-800"
+                        style={{
+                          left: `${field.x}%`,
+                          top: `${field.y}%`,
+                          width: `${field.width}%`,
+                          height: `${field.height}%`,
+                          fontSize: `${field.fontSize ?? 9}px`,
+                          textAlign: field.align ?? "left",
+                          overflow: "hidden",
+                        }}
+                        title={`${field.label} (${field.key})`}
+                      >
+                        {field.label}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="rounded-lg border p-6 text-center">
@@ -308,8 +481,8 @@ export default function LabSettingsPage() {
                       DOC/DOCX preview is not available. The template will be stored and used as default when supported.
                     </p>
                     <a
-                      href={preview.fileData}
-                      download={preview.name}
+                      href={activePreview.fileData}
+                      download={activePreview.name}
                       className="mt-2 inline-block text-[13px] font-medium text-[var(--attio-text)] underline"
                     >
                       Download file

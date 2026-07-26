@@ -258,6 +258,7 @@ model Patient {
   age             Int?
   dateOfBirth     DateTime?
   gender          String?
+  bloodGroup      String?
   department      String?
   departmentId    String?
   departmentLabel String?
@@ -2240,6 +2241,7 @@ model LabFieldRange {
   ageMax          Int?
   ageUnit         String       @default("years") // years | months | days
   sampleType      String?
+  pregnancy       Boolean?     // true = pregnant only, false = non-pregnant only, null = any
   condition       String?      // free-text qualifier (e.g., "fasting")
   low             Float?
   high            Float?
@@ -2302,6 +2304,7 @@ model LabOrder {
   orderedByName     String?
   source            String        // opd | ipd | emergency | direct
   status            String        // ordered | sample_collected | in_progress | completed | cancelled
+  pregnancy         Boolean       @default(false) // female pregnancy status for range matching
   orderedAt         DateTime      @default(now())
   sampleCollectedAt DateTime?
   completedAt       DateTime?
@@ -2362,21 +2365,22 @@ model LabReportResult {
 }
 
 model LabReportTemplate {
-  id            String   @id @default(cuid())
-  tenantId      String
-  branchId      String
-  name          String
-  fileData      String   // base64 data URL of the uploaded PDF
-  mimeType      String   // application/pdf | application/msword etc
-  marginTop     Float    @default(50)
-  marginBottom  Float    @default(50)
-  marginLeft    Float    @default(50)
-  marginRight   Float    @default(50)
-  isDefault     Boolean  @default(false)
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  tenantId       String
+  branchId       String
+  name           String
+  fileData       String   // base64 data URL of the uploaded PDF
+  mimeType       String   // application/pdf | application/msword etc
+  marginTop      Float    @default(50)
+  marginBottom   Float    @default(50)
+  marginLeft     Float    @default(50)
+  marginRight    Float    @default(50)
+  overlayFields  Json?    @default("[]") // positioned header fields for visual template editor
+  isDefault      Boolean  @default(false)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, branchId, name])
   @@index([tenantId, branchId, active])
