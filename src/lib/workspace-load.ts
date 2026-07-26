@@ -12,6 +12,15 @@ export function isRetryableWorkspaceError(error: unknown): boolean {
   const { code, message } = parseActionError(error);
   if (code === "INTERNAL_ERROR") {
     const lower = message.toLowerCase();
+    // Schema is out of date — no amount of client retries will fix it.
+    if (
+      lower.includes("out of date") ||
+      lower.includes("prisma db push") ||
+      lower.includes("database table missing") ||
+      lower.includes("database column missing")
+    ) {
+      return false;
+    }
     return (
       lower.includes("schema") ||
       lower.includes("database") ||
