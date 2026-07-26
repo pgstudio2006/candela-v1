@@ -31,7 +31,10 @@ export async function resolveEffectiveRoleForUser(
   if (!user) return "frontdesk";
 
   const fallbackRole =
-    user.activeRole?.key ?? user.userRoles[0]?.role.key ?? "frontdesk";
+    user.activeRole?.key ??
+    user.userRoles.find((ur) => ur.role.key === "laboratory")?.role.key ??
+    user.userRoles[0]?.role.key ??
+    "frontdesk";
 
   if (!user.email) return fallbackRole;
 

@@ -49,10 +49,17 @@ export async function getServerContext(): Promise<ServerContext> {
     }
   }
 
-  const effectiveRole = await resolveEffectiveRoleForUser(
-    session.user.id,
-    session.user.branchId,
-  );
+  let effectiveRole = session.user.role;
+  try {
+    effectiveRole = await resolveEffectiveRoleForUser(
+      session.user.id,
+      session.user.branchId,
+    );
+  } catch (err) {
+    // Role resolution failed (DB transient or schema issue). Keep the JWT role
+    // so the page can load and surface a user-facing error instead of 500.
+    console.error("[getServerContext] resolveEffectiveRoleForUser failed, falling back to JWT role:", err);
+  }
 
   return {
     userId: session.user.id,
