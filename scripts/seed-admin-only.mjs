@@ -18,7 +18,7 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "admin@navayu.in").trim().toLowe
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Candela@Admin2026";
 const TENANT_SLUG = (process.env.TENANT_SLUG ?? "navayu").trim().toLowerCase();
 
-const MODULES = ["admin", "frontdesk", "nurse", "doctor", "pharmacy", "counsellor", "crm", "hr"];
+const MODULES = ["admin", "frontdesk", "nurse", "doctor", "pharmacy", "laboratory", "counsellor", "crm", "hr"];
 
 async function main() {
   const existingTenant = await prisma.tenant.findFirst({ where: { slug: TENANT_SLUG } });

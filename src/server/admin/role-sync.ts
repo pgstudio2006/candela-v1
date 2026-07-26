@@ -36,30 +36,24 @@ export async function resolveEffectiveRoleForUser(
   if (!user.email) return fallbackRole;
 
   const staff = await db.adminStaff.findUnique({
-    where: { email: user.email },
+    where: { email: user.email.toLowerCase() },
     select: { role: true },
   });
 
-  const targetRoleKey = staff?.role
-    ? moduleRoleForStaffRole(staff.role as HealthcareStaffRole)
+  const rawStaffRole = staff?.role?.trim().toLowerCase();
+  let targetRoleKey = rawStaffRole
+    ? moduleRoleForStaffRole(rawStaffRole as HealthcareStaffRole)
     : undefined;
+
+  if (!targetRoleKey && rawStaffRole && /lab|laboratory/.test(rawStaffRole)) {
+    targetRoleKey = "laboratory";
+  }
 
   if (!targetRoleKey || user.activeRole?.key === targetRoleKey) {
     return fallbackRole;
   }
 
-  const role = await db.role.upsert({
-    where: { tenantId_key: { tenantId: user.tenantId, key: targetRoleKey } },
-    update: {},
-    create: {
-      id: `role_${targetRoleKey}_${user.tenantId}`,
-      tenantId: user.tenantId,
-      name: `${targetRoleKey.toUpperCase()} Role`,
-      key: targetRoleKey,
-      module: targetRoleKey.toUpperCase() as any,
-      isSystem: true,
-    },
-  });
+  const role = await ensureRoleWithPermissions(user.tenantId, targetRoleKey);
 
   await db.user.update({
     where: { id: user.id },
@@ -83,4 +77,41 @@ export async function resolveEffectiveRoleForUser(
   });
 
   return targetRoleKey;
+}
+
+async function ensureRoleWithPermissions(tenantId: string, roleKey: string) {
+  const moduleName = roleKey.toUpperCase();
+  const role = await db.role.upsert({
+    where: { tenantId_key: { tenantId, key: roleKey } },
+    update: {},
+    create: {
+      id: `role_${roleKey}_${tenantId}`,
+      tenantId,
+      name: `${moduleName} Role`,
+      key: roleKey,
+      module: moduleName as any,
+      isSystem: true,
+    },
+  });
+
+  const readPermId = `perm_${roleKey}_read`;
+  const writePermId = `perm_${roleKey}_write`;
+
+  await db.permission.createMany({
+    data: [
+      { id: readPermId, module: moduleName as any, action: "read", description: `${roleKey} read` },
+      { id: writePermId, module: moduleName as any, action: "write", description: `${roleKey} write` },
+    ],
+    skipDuplicates: true,
+  });
+
+  await db.rolePermission.createMany({
+    data: [
+      { roleId: role.id, permissionId: readPermId },
+      { roleId: role.id, permissionId: writePermId },
+    ],
+    skipDuplicates: true,
+  });
+
+  return role;
 }
