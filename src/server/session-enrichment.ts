@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { resolveEffectiveRoleForUser } from "@/server/admin/role-sync";
 import { ensureRevenueSeeded } from "@/server/revenue/bootstrap";
 
 export type CompatSession = {
@@ -26,31 +27,10 @@ export async function enrichCompatSession(session: CompatSession): Promise<Compa
       where: { email, tenant: { slug: session.tenant } },
       select: { id: true, tenantId: true, activeRole: { select: { key: true } } },
     });
-    if (user?.activeRole?.key) enriched.role = user.activeRole.key;
-
-    if (!user?.activeRole?.key && user) {
-      const staff = await prisma.adminStaff.findUnique({ where: { email }, select: { role: true } });
-      if (staff?.role === "lab_technician") {
-        const laboratoryRole = await prisma.role.upsert({
-          where: { tenantId_key: { tenantId: user.tenantId, key: "laboratory" } },
-          update: {},
-          create: {
-            id: `role_laboratory_${user.tenantId}`,
-            tenantId: user.tenantId,
-            name: "LABORATORY Role",
-            key: "laboratory",
-            module: "LABORATORY",
-            isSystem: true,
-          },
-        });
-        await prisma.user.update({ where: { id: user.id }, data: { activeRoleId: laboratoryRole.id } });
-        await prisma.userRole.upsert({
-          where: { userId_roleId_branchId: { userId: user.id, roleId: laboratoryRole.id, branchId: session.branchId } },
-          update: {},
-          create: { userId: user.id, roleId: laboratoryRole.id, branchId: session.branchId },
-        });
-        enriched.role = "laboratory";
-      }
+    if (user) {
+      enriched.role = await resolveEffectiveRoleForUser(user.id, session.branchId);
+    } else if (session.role) {
+      enriched.role = session.role;
     }
 
     if (enriched.role === "pharmacy" && !enriched.pharmacyOperatorId) {

@@ -302,7 +302,7 @@ export default function PatientRecordPage() {
               {patientVisits.map((v) => (
                 <li key={v.id} className="flex items-center justify-between rounded-lg border border-[var(--attio-border-subtle)] p-3 text-[13px]">
                   <div>
-                    <p className="font-medium">{v.doctorName || "Unassigned"}</p>
+                    <p className="font-medium">{v.doctorName || formatStageStatus(v.stage)}</p>
                     <p className="text-[var(--attio-text-tertiary)]">Token #{v.token ?? "—"} · {formatStageStatus(v.stage)}</p>
                   </div>
                   <StatusBadge label={v.billing} variant={v.billing === "paid" ? "success" : "warning"} />

@@ -12,9 +12,12 @@ import { useToast } from "@/components/ui/toast-provider";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
+import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 import { getVisitForBillingAction } from "@/app/actions/clinical-actions";
+import { getIpdAdmissionAction } from "@/app/actions/ipd-actions";
+import { IpdWalletPanel } from "@/components/frontdesk/ipd-wallet-panel";
 import { LabOrderButton } from "@/components/lab/lab-order-modal";
 type BillingMode = "opd" | "ipd";
 
@@ -63,6 +66,33 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
   const [selectedPatient, setSelectedPatient] = useState<Patient | undefined>(activePatient);
   const [directVisit, setDirectVisit] = useState<Visit | undefined>(undefined);
   const [directPatient, setDirectPatient] = useState<Patient | undefined>(undefined);
+  const [ipdAdmission, setIpdAdmission] = useState<IpdAdmissionDetail | null>(null);
+
+  const refreshIpdAdmission = useCallback(
+    async (admissionId?: string) => {
+      if (!admissionId) {
+        setIpdAdmission(null);
+        return;
+      }
+      const res = await getIpdAdmissionAction(admissionId);
+      if (res.ok && res.data) {
+        setIpdAdmission(res.data as IpdAdmissionDetail);
+      } else {
+        setIpdAdmission(null);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (mode !== "ipd") {
+      setIpdAdmission(null);
+      return;
+    }
+    const visit = directVisit ?? (selectedVisitId ? getVisit(selectedVisitId) : undefined);
+    const admissionId = visit?.ipdAdmissionId;
+    void refreshIpdAdmission(admissionId);
+  }, [mode, selectedVisitId, directVisit, getVisit, refreshIpdAdmission]);
 
   useEffect(() => {
     if (visitParam) setSelectedVisitId(visitParam);
@@ -318,6 +348,15 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
                   />
                 </div>
               </Panel>
+            )}
+
+            {mode === "ipd" && ipdAdmission && (
+              <IpdWalletPanel
+                admission={ipdAdmission}
+                onChange={() => {
+                  void refreshIpdAdmission(ipdAdmission.id);
+                }}
+              />
             )}
 
             <Panel title="Routing guide">

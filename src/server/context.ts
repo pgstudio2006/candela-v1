@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import { resolveEffectiveRoleForUser } from "@/server/admin/role-sync";
 import { ServerActionError } from "@/server/errors";
 
 export type ServerContext = {
@@ -48,17 +49,17 @@ export async function getServerContext(): Promise<ServerContext> {
     }
   }
 
-  const currentUser = await db.user.findUnique({
-    where: { id: session.user.id },
-    select: { activeRole: { select: { key: true } } },
-  });
+  const effectiveRole = await resolveEffectiveRoleForUser(
+    session.user.id,
+    session.user.branchId,
+  );
 
   return {
     userId: session.user.id,
     tenantId: session.user.tenantId,
     branchId: session.user.branchId,
     branchName: session.user.branchName ?? "",
-    role: currentUser?.activeRole?.key ?? session.user.role,
+    role: effectiveRole,
     sessionToken: session.user.sessionToken,
   };
 }

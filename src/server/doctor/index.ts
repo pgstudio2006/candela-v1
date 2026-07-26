@@ -959,6 +959,7 @@ export async function saveIpdRound(
     `A: ${note.assessment || ""}`,
     `P: ${note.plan || ""}`,
     note.medicines ? `Medicines:\n${note.medicines}` : "",
+    note.discontinuedMedicines ? `Discontinued medicines:\n${note.discontinuedMedicines}` : "",
     note.labReports ? `Lab reports:\n${note.labReports}` : "",
     note.radiologyReports ? `Radiology reports:\n${note.radiologyReports}` : "",
     note.progress ? `Progress: ${note.progress}` : "",

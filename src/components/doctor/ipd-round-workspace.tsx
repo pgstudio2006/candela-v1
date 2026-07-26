@@ -131,24 +131,56 @@ function latestProgress(rounds: IpdRoundRecord[]): string {
 }
 
 function extractMedicines(rounds: IpdRoundRecord[]): string[] {
-  const out = new Set<string>();
-  for (const round of rounds) {
-    const text = typeof round.data?.medicines === "string" ? (round.data.medicines as string) : "";
-    if (text) {
-      text.split("\n").forEach((line) => {
-        const trimmed = line.trim();
-        if (trimmed) out.add(trimmed);
-      });
-    }
+  const chronological = [...rounds].sort(
+    (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime(),
+  );
+  const discontinued = new Set<string>();
+  const active = new Map<string, string>();
+
+  const collectDiscontinued = (source?: string) => {
+    if (!source) return;
+    source.split("\n").forEach((line) => {
+      const drug = parseMedicineLine(line.trim()).drug?.trim().toLowerCase();
+      if (drug) discontinued.add(drug);
+    });
+  };
+
+  const processMedicineLines = (source?: string) => {
+    if (!source) return;
+    source.split("\n").forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      const drug = parseMedicineLine(trimmed).drug?.trim().toLowerCase();
+      if (!drug) return;
+      if (discontinued.has(drug)) {
+        active.delete(drug);
+        return;
+      }
+      active.set(drug, trimmed);
+    });
+  };
+
+  for (const round of chronological) {
+    collectDiscontinued(
+      typeof round.data?.discontinuedMedicines === "string"
+        ? (round.data.discontinuedMedicines as string)
+        : undefined,
+    );
+    const contentDiscontinued = round.content.match(
+      /Discontinued medicines:\s*([\s\S]*?)(?:\n\n|$)/i,
+    );
+    if (contentDiscontinued?.[1]) collectDiscontinued(contentDiscontinued[1]);
+
+    processMedicineLines(
+      typeof round.data?.medicines === "string"
+        ? (round.data.medicines as string)
+        : undefined,
+    );
     const contentMatch = round.content.match(/Medicines:\s*([\s\S]*?)(?:\n\n|$)/i);
-    if (contentMatch?.[1]) {
-      contentMatch[1].split("\n").forEach((line) => {
-        const trimmed = line.trim();
-        if (trimmed) out.add(trimmed);
-      });
-    }
+    if (contentMatch?.[1]) processMedicineLines(contentMatch[1]);
   }
-  return [...out];
+
+  return [...active.values()];
 }
 
 function extractLabs(rounds: IpdRoundRecord[]): string[] {
@@ -370,6 +402,15 @@ export function IpdRoundWorkspace({
     await onSaveRound({ medicines: formatMedicinesText(lines) }, lines);
     toast("Medication ordered and sent to pharmacy", "success");
     setMedicationLines([]);
+    setOrderSaving(false);
+    await onRefresh();
+  };
+
+  const handleDiscontinueMedicine = async (med: string) => {
+    if (!confirm(`Discontinue ${parseMedicineLine(med).drug || med}?`)) return;
+    setOrderSaving(true);
+    await onSaveRound({ discontinuedMedicines: med });
+    toast("Medication discontinued", "success");
     setOrderSaving(false);
     await onRefresh();
   };
@@ -745,9 +786,20 @@ export function IpdRoundWorkspace({
                   const parsed = parseMedicineLine(med);
                   return (
                     <li key={i} className="rounded-lg border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] p-3">
-                      <div className="mb-2 flex items-center gap-2 text-[13px] font-medium text-[var(--attio-text)]">
-                        <Pill className="size-4 text-[var(--attio-accent)]" />
-                        {parsed.drug || med}
+                      <div className="mb-2 flex items-center justify-between gap-2 text-[13px] font-medium text-[var(--attio-text)]">
+                        <div className="flex items-center gap-2">
+                          <Pill className="size-4 text-[var(--attio-accent)]" />
+                          {parsed.drug || med}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleDiscontinueMedicine(med)}
+                          disabled={orderSaving}
+                          className="text-[11px] font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                          title="Discontinue"
+                        >
+                          Discontinue
+                        </button>
                       </div>
                       {parsed.drug && (
                         <div className="grid grid-cols-2 gap-2 text-[12px] text-[var(--attio-text-secondary)]">

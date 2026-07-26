@@ -306,21 +306,31 @@ export default function FrontdeskIpdPage() {
     }, 250);
   };
 
+  const escapeHtml = (value: string | number | null | undefined) => {
+    const s = String(value ?? "");
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  };
+
   const printFileStickers = () => {
     if (!selectedAdmission) return;
     const printWindow = window.open("", "_blank", "width=800,height=600");
     if (!printWindow) return toast("Could not open print window", "error");
     const sticker = `
       <div class="sticker">
-        <div class="name">${selectedAdmission.patientName}</div>
-        <div class="uhid">${selectedAdmission.uhid ?? ""}</div>
-        <div class="meta">${selectedAdmission.ward} · Bed ${selectedAdmission.bed}</div>
+        <div class="name">${escapeHtml(selectedAdmission.patientName)}</div>
+        <div class="uhid">${escapeHtml(selectedAdmission.uhid) ?? ""}</div>
+        <div class="meta">${escapeHtml(selectedAdmission.ward)} · Bed ${escapeHtml(selectedAdmission.bed)}</div>
         <div class="date">${new Date(selectedAdmission.admittedAt).toLocaleDateString("en-IN")}</div>
       </div>
     `;
     printWindow.document.write(`
       <html>
-        <head><title>File stickers - ${selectedAdmission.patientName}</title>
+        <head><title>File stickers - ${escapeHtml(selectedAdmission.patientName)}</title>
           <style>
             body{font-family:system-ui,sans-serif;padding:12px;}
             .sticker{width:48%;height:120px;border:1px dashed #333;padding:12px;margin:1%;display:inline-block;box-sizing:border-box;vertical-align:top;}
@@ -347,7 +357,7 @@ export default function FrontdeskIpdPage() {
     if (!printWindow) return toast("Could not open print window", "error");
     printWindow.document.write(`
       <html>
-        <head><title>Room plate - ${selectedAdmission.patientName}</title>
+        <head><title>Room plate - ${escapeHtml(selectedAdmission.patientName)}</title>
           <style>
             body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
             .plate{width:90%;height:60vh;border:2px solid #111;padding:32px;text-align:center;}
@@ -360,10 +370,10 @@ export default function FrontdeskIpdPage() {
         </head>
         <body>
           <div class="plate">
-            <div class="ward">${selectedAdmission.ward}</div>
-            <div class="bed">Bed ${selectedAdmission.bed}</div>
-            <div class="name">${selectedAdmission.patientName}</div>
-            <div class="doctor">${selectedAdmission.doctorName}</div>
+            <div class="ward">${escapeHtml(selectedAdmission.ward) ?? "—"}</div>
+            <div class="bed">Bed ${escapeHtml(selectedAdmission.bed) ?? "—"}</div>
+            <div class="name">${escapeHtml(selectedAdmission.patientName) ?? "—"}</div>
+            <div class="doctor">${escapeHtml(selectedAdmission.doctorName) ?? "—"}</div>
             <div class="date">Admitted ${new Date(selectedAdmission.admittedAt).toLocaleDateString("en-IN")}</div>
           </div>
         </body>
@@ -381,24 +391,24 @@ export default function FrontdeskIpdPage() {
     if (!selectedAdmission) return;
     const printWindow = window.open("", "_blank", "width=800,height=600");
     if (!printWindow) return toast("Could not open print window", "error");
-    const f = (label: string, value: string) => `<div class="section"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+    const f = (label: string, value: string) => `<div class="section"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(value)}</div></div>`;
     printWindow.document.write(`
       <html>
-        <head><title>IPD file - ${selectedAdmission.patientName}</title>
+        <head><title>IPD file - ${escapeHtml(selectedAdmission.patientName)}</title>
           <style>body{font-family:system-ui,sans-serif;padding:24px;color:#111;}h1{font-size:18px;margin:0 0 8px;}.meta{color:#555;font-size:12px;margin-bottom:16px;}.section{margin-bottom:12px;}.label{font-weight:600;font-size:12px;color:#444;}.value{font-size:12px;white-space:pre-wrap;}</style>
         </head>
         <body>
           <h1>IPD File Overview</h1>
-          <div class="meta">${selectedAdmission.patientName} · ${selectedAdmission.uhid ?? ""} · ${selectedAdmission.ward} Bed ${selectedAdmission.bed}</div>
+          <div class="meta">${escapeHtml(selectedAdmission.patientName)} · ${escapeHtml(selectedAdmission.uhid) ?? ""} · ${escapeHtml(selectedAdmission.ward)} Bed ${escapeHtml(selectedAdmission.bed)}</div>
           ${f("Admission date", new Date(selectedAdmission.admittedAt).toLocaleString("en-IN"))}
-          ${f("Patient type", selectedAdmission.patientType)}
-          ${f("Billing mode", selectedAdmission.billingMode)}
-          ${f("Attending doctor", selectedAdmission.doctorName)}
-          ${f("Diagnosis", selectedAdmission.diagnosis)}
+          ${f("Patient type", selectedAdmission.patientType ?? "—")}
+          ${f("Billing mode", selectedAdmission.billingMode ?? "—")}
+          ${f("Attending doctor", selectedAdmission.doctorName ?? "—")}
+          ${f("Diagnosis", selectedAdmission.diagnosis ?? "—")}
           ${f("Phone", selectedAdmission.phone ?? "—")}
           ${f("Age / Gender", `${selectedAdmission.age ?? "—"} / ${selectedAdmission.gender ?? "—"}`)}
           ${f("Expected discharge", selectedAdmission.expectedDischarge ?? "—")}
-          ${f("Status", selectedAdmission.status)}
+          ${f("Status", selectedAdmission.status ?? "—")}
         </body>
       </html>
     `);
@@ -664,22 +674,20 @@ export default function FrontdeskIpdPage() {
                           </AttioButton>
                         </div>
 
-                        {isPataudi && (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printFileStickers}>
-                              <Printer className="size-3" />
-                              File stickers
-                            </AttioButton>
-                            <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printRoomPlate}>
-                              <Printer className="size-3" />
-                              Room plate
-                            </AttioButton>
-                            <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printIpdFileOverview}>
-                              <Printer className="size-3" />
-                              IPD file
-                            </AttioButton>
-                          </div>
-                        )}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printFileStickers}>
+                            <Printer className="size-3" />
+                            File stickers
+                          </AttioButton>
+                          <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printRoomPlate}>
+                            <Printer className="size-3" />
+                            Room plate
+                          </AttioButton>
+                          <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printIpdFileOverview}>
+                            <Printer className="size-3" />
+                            IPD file
+                          </AttioButton>
+                        </div>
 
                         {selectedAdmission.status === "discharged" && (
                           <StatusBadge label="Discharged" variant="success" />

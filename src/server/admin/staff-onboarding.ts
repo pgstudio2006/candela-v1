@@ -31,7 +31,7 @@ async function ensurePlatformRole(tenantId: string, roleKey: string) {
     where: { tenantId_key: { tenantId, key: roleKey } },
     update: {},
     create: {
-      id: `role_${roleKey}`,
+      id: `role_${roleKey}_${tenantId}`,
       tenantId,
       name: "LABORATORY Role",
       key: roleKey,

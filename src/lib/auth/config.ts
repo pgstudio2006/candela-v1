@@ -3,6 +3,7 @@ import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { resolveEffectiveRoleForUser } from "@/server/admin/role-sync";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -96,6 +97,11 @@ export const authConfig = {
             ? await db.branch.findUnique({ where: { id: effectiveBranchId } })
             : user.branch;
 
+        const effectiveRole = await resolveEffectiveRoleForUser(
+          user.id,
+          effectiveBranchId ?? user.branchId ?? "",
+        );
+
         return {
           id: user.id,
           name: user.name,
@@ -105,7 +111,7 @@ export const authConfig = {
           tenantName: user.tenant.name,
           branchId: effectiveBranchId ?? "",
           branchName: branchRecord?.name ?? "",
-          role: roleKeyFromUser(user),
+          role: effectiveRole,
           sessionToken,
         };
       },
