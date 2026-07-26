@@ -164,6 +164,7 @@ export type LabOrder = {
   patientUhid?: string;
   patientGender?: string | null;
   patientDateOfBirth?: string | null;
+  patientAge?: number | null;
   visitId?: string;
   admissionId?: string;
   orderedBy: string;
@@ -193,4 +194,21 @@ export type LabResultInput = {
   fieldMasterId: string;
   value: string;
   note?: string;
+};
+
+export type LabReportTemplate = {
+  id: string;
+  tenantId: string;
+  branchId: string;
+  name: string;
+  fileData: string;
+  mimeType: string;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+  isDefault: boolean;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
 };

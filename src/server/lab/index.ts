@@ -7,7 +7,8 @@ import { branchScope } from "@/server/tenancy";
 import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
 import { serializeForClient } from "@/server/serialize";
-import { buildLabReportPdfBytes, bytesToDataUrl } from "./lab-report-pdf";
+import { resolveAge, matchesRange } from "@/lib/lab-ranges";
+import { buildLabReportPdfBytes, bytesToDataUrl, type LabReportTemplateSpec } from "./lab-report-pdf";
 import { deliverWhatsAppDocument } from "@/server/notification-delivery";
 import type {
   LabDataType,
@@ -19,6 +20,7 @@ import type {
   LabReportResult,
   LabResultFlag,
   LabResultInput,
+  LabReportTemplate,
 } from "@/design-system/lab-data";
 
 export type LabSnapshot = {
@@ -38,32 +40,10 @@ function parseNumber(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function ageAt(dateOfBirth: Date | null | undefined, at: Date): { years: number; months: number; days: number } {
-  const end = at.getTime();
-  const start = dateOfBirth ? new Date(dateOfBirth).getTime() : at.getTime();
-  const days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
-  return { years: Math.floor(days / 365.25), months: Math.floor(days / 30.44), days };
-}
-
-function matchesRange(
-  range: LabFieldRange,
-  gender?: string | null,
-  age: { years: number; months: number; days: number } = { years: 0, months: 0, days: 0 },
-  sampleType?: string,
-): boolean {
-  if (range.gender && range.gender !== "all" && range.gender !== (gender ?? "")) return false;
-  const ageUnit = range.ageUnit ?? "years";
-  const ageValue = ageUnit === "years" ? age.years : ageUnit === "months" ? age.months : age.days;
-  if (range.ageMin != null && ageValue < range.ageMin) return false;
-  if (range.ageMax != null && ageValue > range.ageMax) return false;
-  if (sampleType && range.sampleType && range.sampleType !== sampleType) return false;
-  return true;
-}
-
 function evaluateLabResult(
   fieldMaster: LabFieldMaster,
   value: string,
-  patient: { gender?: string | null; dateOfBirth?: Date | null; sampleType?: string },
+  patient: { gender?: string | null; dateOfBirth?: Date | null; age?: number | null; sampleType?: string },
   recordedAt: Date,
 ): { flag: LabResultFlag | undefined; numericValue: number | null; displayValue: string } {
   const numericValue = parseNumber(value);
@@ -85,7 +65,7 @@ function evaluateLabResult(
     return { flag: undefined, numericValue: null, displayValue };
   }
 
-  const age = patient.dateOfBirth ? ageAt(patient.dateOfBirth, recordedAt) : { years: 0, months: 0, days: 0 };
+  const age = resolveAge(patient, recordedAt);
   const ranges = fieldMaster.ranges
     .filter((r) => matchesRange(r as LabFieldRange, patient.gender, age, patient.sampleType))
     .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
@@ -233,6 +213,13 @@ function serializeOrder(row: Record<string, unknown> & { patient?: Record<string
     patientUhid: row.patient ? String(row.patient.uhid ?? "") : undefined,
     patientGender: row.patient ? (String(row.patient.gender ?? "") || null) : null,
     patientDateOfBirth: row.patient ? (row.patient.dateOfBirth ? new Date(String(row.patient.dateOfBirth)).toISOString() : null) : null,
+    patientAge: row.patient
+      ? (row.patient.age != null
+          ? Number(row.patient.age)
+          : row.patient.dateOfBirth
+            ? Math.floor((Date.now() - new Date(String(row.patient.dateOfBirth)).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+            : null)
+      : null,
     visitId: row.visitId ? String(row.visitId) : undefined,
     admissionId: row.admissionId ? String(row.admissionId) : undefined,
     orderedBy: String(row.orderedBy),
@@ -447,7 +434,7 @@ export async function listLabOrders(ctx: ServerContext, patientId?: string): Pro
   const rows = await prisma.labOrder.findMany({
     where: { ...scope, ...(patientId ? { patientId } : {}) },
     include: {
-      patient: { select: { name: true, fullName: true, uhid: true, gender: true, dateOfBirth: true } },
+      patient: { select: { name: true, fullName: true, uhid: true, gender: true, age: true, dateOfBirth: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -465,7 +452,7 @@ export async function getLabOrder(ctx: ServerContext, id: string): Promise<LabOr
   const row = await prisma.labOrder.findFirst({
     where: { id, ...scope },
     include: {
-      patient: { select: { name: true, fullName: true, uhid: true, gender: true, dateOfBirth: true } },
+      patient: { select: { name: true, fullName: true, uhid: true, gender: true, age: true, dateOfBirth: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -520,7 +507,7 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
       },
     },
     include: {
-      patient: { select: { name: true, fullName: true, uhid: true, gender: true, dateOfBirth: true } },
+      patient: { select: { name: true, fullName: true, uhid: true, gender: true, age: true, dateOfBirth: true } },
       items: {
         include: {
           reportCatalog: { include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } } },
@@ -582,7 +569,7 @@ export async function saveLabResults(
 
   const patient = await prisma.patient.findFirst({
     where: { id: order.patientId, ...scope },
-    select: { name: true, gender: true, dateOfBirth: true },
+    select: { name: true, gender: true, age: true, dateOfBirth: true },
   });
   const recordedAt = new Date();
 
@@ -599,6 +586,7 @@ export async function saveLabResults(
         {
           gender: patient?.gender,
           dateOfBirth: patient?.dateOfBirth,
+          age: patient?.age ?? undefined,
           sampleType: item.sampleType,
         },
         recordedAt,
@@ -672,19 +660,22 @@ async function attachLabReportToPatientProfile(ctx: ServerContext, order: LabOrd
   const scope = branchScope(ctx);
   const patient = await prisma.patient.findFirst({
     where: { id: order.patientId, ...scope },
-    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, dateOfBirth: true },
+    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true },
   });
   if (!patient) return;
 
+  const template = await getDefaultLabReportTemplateForPdf(ctx);
   const pdfBytes = await buildLabReportPdfBytes(
     {
       name: patient.name ?? patient.fullName ?? "Patient",
       uhid: patient.uhid,
       phone: patient.phone,
       gender: patient.gender,
+      age: patient.age,
       dateOfBirth: patient.dateOfBirth,
     },
     [order],
+    template,
   );
   const dataUrl = bytesToDataUrl(pdfBytes, `lab-report-${order.id}.pdf`);
 
@@ -728,25 +719,27 @@ export async function generateLabOrderReportPdf(ctx: ServerContext, orderId: str
   if (!order) throw new ServerActionError("NOT_FOUND", "Order not found.");
   const patient = await prisma.patient.findFirst({
     where: { id: order.patientId, ...branchScope(ctx) },
-    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, dateOfBirth: true },
+    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true },
   });
   if (!patient) throw new ServerActionError("NOT_FOUND", "Patient not found.");
+  const template = await getDefaultLabReportTemplateForPdf(ctx);
   return buildLabReportPdfBytes(
-    { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, dateOfBirth: patient.dateOfBirth },
+    { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth },
     [order],
+    template,
   );
 }
 
 export async function generatePatientLabReportPdf(ctx: ServerContext, patientId: string): Promise<Uint8Array> {
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, ...branchScope(ctx) },
-    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, dateOfBirth: true },
+    select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true },
   });
   if (!patient) throw new ServerActionError("NOT_FOUND", "Patient not found.");
   const rows = await prisma.labOrder.findMany({
     where: { patientId, ...branchScope(ctx) },
     include: {
-      patient: { select: { name: true, fullName: true, uhid: true, gender: true, dateOfBirth: true } },
+      patient: { select: { name: true, fullName: true, uhid: true, gender: true, age: true, dateOfBirth: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -758,9 +751,11 @@ export async function generatePatientLabReportPdf(ctx: ServerContext, patientId:
     orderBy: { createdAt: "desc" },
   });
   const orders = serializeForClient(rows.map((r) => serializeOrder(r as unknown as Record<string, unknown> & { patient?: Record<string, unknown>; items?: unknown[] }))) as LabOrder[];
+  const template = await getDefaultLabReportTemplateForPdf(ctx);
   return buildLabReportPdfBytes(
-    { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, dateOfBirth: patient.dateOfBirth },
+    { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth },
     orders,
+    template,
   );
 }
 
@@ -773,15 +768,17 @@ export async function sendLabReportOnWhatsApp(
   if (!order) throw new ServerActionError("NOT_FOUND", "Order not found.");
   const patient = await prisma.patient.findFirst({
     where: { id: order.patientId, ...branchScope(ctx) },
-    select: { name: true, fullName: true, phone: true, gender: true, dateOfBirth: true },
+    select: { name: true, fullName: true, phone: true, gender: true, age: true, dateOfBirth: true },
   });
   if (!patient) throw new ServerActionError("NOT_FOUND", "Patient not found.");
   const phone = recipientPhone?.trim() || patient.phone;
   if (!phone) throw new ServerActionError("VALIDATION", "Patient phone number is missing.");
 
+  const template = await getDefaultLabReportTemplateForPdf(ctx);
   const pdfBytes = await buildLabReportPdfBytes(
-    { name: patient.name ?? patient.fullName ?? "Patient", uhid: "", phone, gender: patient.gender, dateOfBirth: patient.dateOfBirth },
+    { name: patient.name ?? patient.fullName ?? "Patient", uhid: "", phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth },
     [order],
+    template,
   );
   const dataUrl = bytesToDataUrl(pdfBytes, `lab-report-${order.id}.pdf`);
   const docId = createId("doc");
@@ -837,4 +834,104 @@ function assertBranchAccess(ctx: ServerContext, branchId?: string | null) {
   if (branchId && branchId !== ctx.branchId) {
     throw new ServerActionError("FORBIDDEN", "Cross-branch access denied.");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Report templates
+// ---------------------------------------------------------------------------
+
+function toLabReportTemplateSpec(template: LabReportTemplate): LabReportTemplateSpec {
+  return {
+    fileData: template.fileData,
+    mimeType: template.mimeType,
+    marginTop: template.marginTop,
+    marginBottom: template.marginBottom,
+    marginLeft: template.marginLeft,
+    marginRight: template.marginRight,
+  };
+}
+
+async function getDefaultLabReportTemplateForPdf(ctx: ServerContext): Promise<LabReportTemplateSpec | undefined> {
+  const template = await getDefaultLabReportTemplate(ctx);
+  return template ? toLabReportTemplateSpec(template) : undefined;
+}
+
+export async function listLabReportTemplates(ctx: ServerContext): Promise<LabReportTemplate[]> {
+  const rows = await prisma.labReportTemplate.findMany({
+    where: { ...branchScope(ctx), active: true },
+    orderBy: { createdAt: "desc" },
+  });
+  return serializeForClient(rows) as unknown as LabReportTemplate[];
+}
+
+export async function getDefaultLabReportTemplate(ctx: ServerContext): Promise<LabReportTemplate | null> {
+  const scope = branchScope(ctx);
+  const row =
+    (await prisma.labReportTemplate.findFirst({ where: { ...scope, isDefault: true, active: true } })) ??
+    (await prisma.labReportTemplate.findFirst({ where: { ...scope, active: true }, orderBy: { createdAt: "desc" } }));
+  return row ? (serializeForClient(row) as unknown as LabReportTemplate) : null;
+}
+
+export async function upsertLabReportTemplate(
+  ctx: ServerContext,
+  input: {
+    name: string;
+    fileData: string;
+    mimeType: string;
+    marginTop?: number;
+    marginBottom?: number;
+    marginLeft?: number;
+    marginRight?: number;
+    isDefault?: boolean;
+    active?: boolean;
+  },
+  id?: string,
+): Promise<LabReportTemplate> {
+  const scope = branchScope(ctx);
+  const data = {
+    ...scope,
+    name: input.name.trim(),
+    fileData: input.fileData,
+    mimeType: input.mimeType,
+    marginTop: input.marginTop ?? 50,
+    marginBottom: input.marginBottom ?? 50,
+    marginLeft: input.marginLeft ?? 50,
+    marginRight: input.marginRight ?? 50,
+    isDefault: input.isDefault ?? false,
+    active: input.active ?? true,
+  };
+
+  const row = await prisma.$transaction(async (tx) => {
+    if (data.isDefault) {
+      await tx.labReportTemplate.updateMany({ where: scope, data: { isDefault: false } });
+    }
+    if (id) {
+      return tx.labReportTemplate.upsert({
+        where: { id },
+        update: data,
+        create: { id, ...data },
+      });
+    }
+    return tx.labReportTemplate.create({ data });
+  });
+  return serializeForClient(row) as unknown as LabReportTemplate;
+}
+
+export async function deleteLabReportTemplate(ctx: ServerContext, id: string): Promise<void> {
+  const scope = branchScope(ctx);
+  const count = await prisma.labReportTemplate.deleteMany({ where: { id, ...scope } });
+  if (count.count === 0) throw new ServerActionError("NOT_FOUND", "Template not found.");
+}
+
+export async function setDefaultLabReportTemplate(ctx: ServerContext, id: string): Promise<LabReportTemplate> {
+  const scope = branchScope(ctx);
+  const row = await prisma.$transaction(async (tx) => {
+    await tx.labReportTemplate.updateMany({ where: scope, data: { isDefault: false } });
+    return tx.labReportTemplate.update({
+      where: { id },
+      data: { isDefault: true },
+    });
+  });
+  assertBranchAccess(ctx, row.branchId);
+  return serializeForClient(row) as unknown as LabReportTemplate;
 }

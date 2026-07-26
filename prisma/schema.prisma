@@ -132,6 +132,7 @@ model Branch {
   slots             Slot[]
   whatsappTemplates WhatsAppTemplate[]
   whatsappLogs      WhatsAppLog[]
+  labReportTemplates LabReportTemplate[]
   emergencyReferrals EmergencyReferral[]
   labFieldMasters    LabFieldMaster[]
   labReportCatalogs  LabReportCatalog[]
@@ -2358,4 +2359,26 @@ model LabReportResult {
 
   @@index([labOrderItemId, fieldMasterId])
   @@index([labOrderId, fieldMasterId])
+}
+
+model LabReportTemplate {
+  id            String   @id @default(cuid())
+  tenantId      String
+  branchId      String
+  name          String
+  fileData      String   // base64 data URL of the uploaded PDF
+  mimeType      String   // application/pdf | application/msword etc
+  marginTop     Float    @default(50)
+  marginBottom  Float    @default(50)
+  marginLeft    Float    @default(50)
+  marginRight   Float    @default(50)
+  isDefault     Boolean  @default(false)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, branchId, name])
+  @@index([tenantId, branchId, active])
+  @@index([tenantId, branchId, isDefault])
 }

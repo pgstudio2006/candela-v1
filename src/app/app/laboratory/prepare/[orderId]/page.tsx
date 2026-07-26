@@ -163,7 +163,9 @@ export default function PrepareLabReportPage() {
         </div>
         <div className="rounded-lg border px-3 py-2">
           <span className="text-[var(--attio-text-tertiary)]">Patient</span>
-          <span className="ml-2 font-medium">{order.patientName} ({order.patientUhid})</span>
+          <span className="ml-2 font-medium">
+            {order.patientName} ({order.patientUhid}) · {order.patientAge != null ? `${order.patientAge}Y` : "—"} / {order.patientGender?.toUpperCase() ?? "—"}
+          </span>
         </div>
       </div>
 
@@ -201,7 +203,7 @@ export default function PrepareLabReportPage() {
                 const range = f.fieldMaster
                   ? getApplicableRange(
                       f.fieldMaster,
-                      { gender: order.patientGender, dateOfBirth: order.patientDateOfBirth },
+                      { gender: order.patientGender, dateOfBirth: order.patientDateOfBirth, age: order.patientAge },
                       new Date(),
                       item.sampleType,
                     )

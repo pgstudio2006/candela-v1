@@ -99,7 +99,7 @@ export default function LabOrdersPage() {
         patient: (
           <div>
             <p className="font-medium">{o.patientName ?? "Unknown"}</p>
-            <p className="text-[11px] text-[var(--attio-text-tertiary)]">{o.patientUhid}</p>
+            <p className="text-[11px] text-[var(--attio-text-tertiary)]">{o.patientUhid} · {o.patientAge != null ? `${o.patientAge}Y` : "—"} / {o.patientGender?.toUpperCase() ?? "—"}</p>
           </div>
         ),
         tests: (
@@ -163,6 +163,7 @@ export default function LabOrdersPage() {
                     <div className="text-[13px]">
                       <span className="font-medium">{selectedPatient.name}</span>
                       <span className="ml-2 text-[var(--attio-text-tertiary)]">{selectedPatient.uhid}</span>
+                      <span className="ml-2 text-[var(--attio-text-tertiary)]">· {selectedPatient.age != null ? `${selectedPatient.age}Y` : "—"} / {selectedPatient.gender?.toUpperCase() ?? "—"}</span>
                     </div>
                     <button onClick={() => setSelectedPatient(null)}><X className="size-3.5" /></button>
                   </div>
@@ -183,7 +184,7 @@ export default function LabOrdersPage() {
                         onClick={() => { setSelectedPatient(p); setPatientResults([]); }}
                         className="flex w-full items-center justify-between px-3 py-2 text-left text-[12px] hover:bg-[var(--attio-surface)]"
                       >
-                        <span>{p.name} <span className="text-[var(--attio-text-tertiary)]">{p.uhid}</span></span>
+                        <span>{p.name} <span className="text-[var(--attio-text-tertiary)]">{p.uhid} · {p.age != null ? `${p.age}Y` : "—"} / {p.gender?.toUpperCase() ?? "—"}</span></span>
                         <span className="text-[var(--attio-text-tertiary)]">{p.phone}</span>
                       </button>
                     ))}

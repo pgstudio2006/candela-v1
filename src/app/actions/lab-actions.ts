@@ -24,6 +24,11 @@ import {
   sendLabReportOnWhatsApp,
   upsertFieldMaster,
   upsertReportCatalog,
+  listLabReportTemplates,
+  getDefaultLabReportTemplate,
+  upsertLabReportTemplate,
+  deleteLabReportTemplate,
+  setDefaultLabReportTemplate,
   type LabSnapshot,
 } from "@/server/lab";
 import type {
@@ -31,6 +36,7 @@ import type {
   LabOrder,
   LabOrderInput,
   LabReportCatalog,
+  LabReportTemplate,
   LabResultInput,
 } from "@/design-system/lab-data";
 
@@ -229,15 +235,60 @@ export async function searchLabPatientsAction(query: string): Promise<
       },
       take: 20,
       orderBy: { fullName: "asc" },
-      select: { id: true, name: true, uhid: true, phone: true, age: true, gender: true },
+      select: { id: true, name: true, uhid: true, phone: true, age: true, dateOfBirth: true, gender: true },
     });
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name ?? "",
-      uhid: r.uhid,
-      phone: r.phone,
-      age: r.age ?? undefined,
-      gender: r.gender ?? undefined,
-    }));
+    return rows.map((r) => {
+      let age = r.age ?? undefined;
+      if (age == null && r.dateOfBirth) {
+        age = Math.floor((Date.now() - new Date(r.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+      }
+      return {
+        id: r.id,
+        name: r.name ?? "",
+        uhid: r.uhid,
+        phone: r.phone,
+        age,
+        dateOfBirth: r.dateOfBirth ? r.dateOfBirth.toISOString() : undefined,
+        gender: r.gender ?? undefined,
+      };
+    });
+  });
+}
+
+export async function listLabReportTemplatesAction(): Promise<ActionResult<LabReportTemplate[]>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return listLabReportTemplates(ctx);
+  });
+}
+
+export async function getDefaultLabReportTemplateAction(): Promise<ActionResult<LabReportTemplate | null>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return getDefaultLabReportTemplate(ctx);
+  });
+}
+
+export async function upsertLabReportTemplateAction(
+  input: Parameters<typeof upsertLabReportTemplate>[1],
+  id?: string,
+): Promise<ActionResult<LabReportTemplate>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return upsertLabReportTemplate(ctx, input, id);
+  });
+}
+
+export async function deleteLabReportTemplateAction(id: string): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return deleteLabReportTemplate(ctx, id);
+  });
+}
+
+export async function setDefaultLabReportTemplateAction(id: string): Promise<ActionResult<LabReportTemplate>> {
+  return runAction(async () => {
+    const ctx = await requireModule("laboratory");
+    return setDefaultLabReportTemplate(ctx, id);
   });
 }

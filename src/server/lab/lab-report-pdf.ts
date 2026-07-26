@@ -3,17 +3,20 @@ import {
   LAB_RESULT_FLAG_LABELS,
   type LabDataType,
   type LabFieldMaster,
-  type LabFieldRange,
   type LabOrder,
   type LabResultFlag,
 } from "@/design-system/lab-data";
+import {
+  resolveAge,
+  getApplicableRange,
+  formatReferenceRange,
+  formatAge,
+  parseNumber,
+} from "@/lib/lab-ranges";
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
 const MARGIN = 50;
-const TOP = PAGE_HEIGHT - MARGIN;
-const BOTTOM = MARGIN;
-const USABLE_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 export type LabReportPdfPatient = {
   name: string;
@@ -21,85 +24,30 @@ export type LabReportPdfPatient = {
   phone?: string | null;
   gender?: string | null;
   dateOfBirth?: Date | string | null;
+  age?: number | null;
 };
 
-function parseDob(value?: Date | string | null): Date | undefined {
-  if (!value) return undefined;
-  if (value instanceof Date) return value;
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? undefined : d;
-}
+export type LabReportTemplateSpec = {
+  fileData: string;
+  mimeType: string;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+};
 
-function ageAt(dateOfBirth: Date | undefined, at: Date): { years: number; months: number; days: number } {
-  if (!dateOfBirth) return { years: 0, months: 0, days: 0 };
-  const end = at.getTime();
-  const start = dateOfBirth.getTime();
-  const days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
-  return { years: Math.floor(days / 365.25), months: Math.floor(days / 30.44), days };
-}
-
-function formatAge(age: { years: number; months: number; days: number }): string {
-  if (age.years > 0) return `${age.years}y`;
-  if (age.months > 0) return `${age.months}m`;
-  if (age.days > 0) return `${age.days}d`;
-  return "—";
-}
-
-function matchesRange(
-  range: LabFieldRange,
-  gender?: string | null,
-  age: { years: number; months: number; days: number } = { years: 0, months: 0, days: 0 },
-  sampleType?: string,
-): boolean {
-  if (range.gender && range.gender !== "all" && range.gender !== (gender ?? "")) return false;
-  const ageUnit = range.ageUnit ?? "years";
-  const ageValue = ageUnit === "years" ? age.years : ageUnit === "months" ? age.months : age.days;
-  if (range.ageMin != null && ageValue < range.ageMin) return false;
-  if (range.ageMax != null && ageValue > range.ageMax) return false;
-  if (sampleType && range.sampleType && range.sampleType !== sampleType) return false;
-  return true;
-}
-
-function getApplicableRange(
-  fieldMaster: LabFieldMaster,
-  patient: { gender?: string | null; dateOfBirth?: Date | string | null },
-  recordedAt: Date,
-  sampleType?: string,
-): LabFieldRange | undefined {
-  const dob = parseDob(patient.dateOfBirth);
-  const age = dob ? ageAt(dob, recordedAt) : { years: 0, months: 0, days: 0 };
-  const ranges = fieldMaster.ranges
-    .filter((r) => matchesRange(r, patient.gender, age, sampleType))
-    .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
-  return ranges[0] ?? fieldMaster.ranges.find((r) => r.isDefault);
-}
-
-function formatReferenceRange(range: LabFieldRange | undefined, unit?: string | null): string {
-  if (!range) return "—";
-  if (range.displayLabel) return range.displayLabel;
-  const parts: string[] = [];
-  if (range.low != null && range.high != null) parts.push(`${range.low} – ${range.high}`);
-  else if (range.low != null) parts.push(`≥ ${range.low}`);
-  else if (range.high != null) parts.push(`≤ ${range.high}`);
-  if (unit) parts.push(unit);
-  const main = parts.join(" ") || "—";
-  const crit: string[] = [];
-  if (range.criticalLow != null) crit.push(`critical < ${range.criticalLow}`);
-  if (range.criticalHigh != null) crit.push(`critical > ${range.criticalHigh}`);
-  return crit.length ? `${main} (${crit.join("; ")})` : main;
-}
-
-function parseNumber(value: string): number | null {
-  const v = value.replace(/,/g, "").trim();
-  if (v === "" || v === "-" || v.toLowerCase() === "nil") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+function dataUrlToBytes(dataUrl: string): Uint8Array | undefined {
+  const comma = dataUrl.indexOf(",");
+  if (comma === -1) return undefined;
+  const base64 = dataUrl.slice(comma + 1).trim();
+  if (!base64) return undefined;
+  return Buffer.from(base64, "base64");
 }
 
 function evaluateLabResultFlag(
   fieldMaster: LabFieldMaster,
   value: string,
-  patient: { gender?: string | null; dateOfBirth?: Date | string | null; sampleType?: string },
+  patient: { gender?: string | null; dateOfBirth?: Date | string | null; age?: number | null; sampleType?: string },
   recordedAt: Date,
 ): LabResultFlag | undefined {
   const numericValue = parseNumber(value);
@@ -115,12 +63,7 @@ function evaluateLabResultFlag(
     return undefined;
   }
 
-  const dob = parseDob(patient.dateOfBirth);
-  const age = dob ? ageAt(dob, recordedAt) : { years: 0, months: 0, days: 0 };
-  const ranges = fieldMaster.ranges
-    .filter((r) => matchesRange(r, patient.gender, age, patient.sampleType))
-    .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
-  const range = ranges[0] ?? fieldMaster.ranges.find((r) => r.isDefault);
+  const range = getApplicableRange(fieldMaster, patient, recordedAt, patient.sampleType);
   if (!range) return undefined;
 
   if (range.criticalLow != null && numericValue <= range.criticalLow) return "critical_low";
@@ -183,9 +126,9 @@ function dateLabel(dateStr?: string): string {
 export async function buildLabReportPdfBytes(
   patient: LabReportPdfPatient,
   orders: LabOrder[],
+  template?: LabReportTemplateSpec,
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -202,14 +145,45 @@ export async function buildLabReportPdfBytes(
     return primary;
   }
 
-  let y = TOP;
+  let marginLeft = MARGIN;
+  let marginRight = MARGIN;
+  let marginTop = MARGIN;
+  let marginBottom = MARGIN;
+  let embeddedTemplate: any = undefined;
+
+  if (template?.mimeType === "application/pdf") {
+    const bytes = dataUrlToBytes(template.fileData);
+    if (bytes) {
+      const [first] = await pdfDoc.embedPdf(bytes, [0]);
+      embeddedTemplate = first;
+      marginTop = template.marginTop;
+      marginBottom = template.marginBottom;
+      marginLeft = template.marginLeft;
+      marginRight = template.marginRight;
+    }
+  }
+
+  const top = PAGE_HEIGHT - marginTop;
+  const bottom = marginBottom;
+  const usableWidth = PAGE_WIDTH - marginLeft - marginRight;
+  const rightX = PAGE_WIDTH - marginRight;
+
+  function newPage(): PDFPage {
+    const p = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    if (embeddedTemplate) {
+      p.drawPage(embeddedTemplate, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
+    }
+    return p;
+  }
+
+  let page = newPage();
+  let y = top;
 
   // Header
-  page.drawText("Laboratory Report", { x: MARGIN, y, size: 20, font: boldFont, color: accent });
+  page.drawText("Laboratory Report", { x: marginLeft, y, size: 20, font: boldFont, color: accent });
   y -= 26;
 
-  const dob = parseDob(patient.dateOfBirth);
-  const age = dob ? ageAt(dob, new Date()) : { years: 0, months: 0, days: 0 };
+  const age = resolveAge(patient, new Date());
   const info = [
     `Patient: ${patient.name}`,
     `UHID: ${patient.uhid}`,
@@ -218,35 +192,45 @@ export async function buildLabReportPdfBytes(
   ]
     .filter(Boolean)
     .join("   ·   ");
-  page.drawText(info, { x: MARGIN, y, size: 10, font: normalFont, color: secondary });
+  page.drawText(info, { x: marginLeft, y, size: 10, font: normalFont, color: secondary });
   y -= 22;
 
   const generatedAt = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-  page.drawText(`Generated: ${generatedAt}`, { x: MARGIN, y, size: 9, font: normalFont, color: secondary });
+  page.drawText(`Generated: ${generatedAt}`, { x: marginLeft, y, size: 9, font: normalFont, color: secondary });
   y -= 20;
 
-  page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_WIDTH - MARGIN, y }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
+  page.drawLine({ start: { x: marginLeft, y }, end: { x: rightX, y }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
   y -= 18;
 
   if (orders.length === 0) {
-    page.drawText("No laboratory orders to display.", { x: MARGIN, y, size: 11, font: normalFont, color: secondary });
+    page.drawText("No laboratory orders to display.", { x: marginLeft, y, size: 11, font: normalFont, color: secondary });
     return pdfDoc.save();
   }
 
-  const colWidths = [165, 65, 50, 70, 130, 55];
-  const colX = [MARGIN, MARGIN + colWidths[0], MARGIN + colWidths[0] + colWidths[1], MARGIN + colWidths[0] + colWidths[1] + colWidths[2], MARGIN + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], MARGIN + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4]];
+  const baseColWidths = [165, 65, 50, 70, 130, 55];
+  const colWidthTotal = baseColWidths.reduce((a, b) => a + b, 0);
+  const colScale = Math.min(1, usableWidth / colWidthTotal);
+  const colWidths = baseColWidths.map((w) => w * colScale);
+  const colX = [
+    marginLeft,
+    marginLeft + colWidths[0],
+    marginLeft + colWidths[0] + colWidths[1],
+    marginLeft + colWidths[0] + colWidths[1] + colWidths[2],
+    marginLeft + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3],
+    marginLeft + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4],
+  ];
   const lineHeight = 11;
   const rowPadding = 6;
 
   for (const order of orders) {
     // Order header
-    if (y < BOTTOM + 60) {
-      page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-      y = TOP;
+    if (y < bottom + 60) {
+      page = newPage();
+      y = top;
     }
     const tests = order.items.map((i) => i.label).join(", ");
     page.drawText(`Order #${order.id.slice(-6).toUpperCase()} · ${tests}`, {
-      x: MARGIN,
+      x: marginLeft,
       y,
       size: 12,
       font: boldFont,
@@ -254,7 +238,7 @@ export async function buildLabReportPdfBytes(
     });
     y -= 14;
     page.drawText(`Ordered: ${dateLabel(order.orderedAt)} · Status: ${order.status.toUpperCase()} · Source: ${order.source.toUpperCase()}`, {
-      x: MARGIN,
+      x: marginLeft,
       y,
       size: 9,
       font: normalFont,
@@ -263,12 +247,12 @@ export async function buildLabReportPdfBytes(
     y -= 18;
 
     for (const item of order.items) {
-      if (y < BOTTOM + 60) {
-        page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-        y = TOP;
+      if (y < bottom + 60) {
+        page = newPage();
+        y = top;
       }
       page.drawText(`${item.label}${item.sampleType ? ` · ${item.sampleType}` : ""}`, {
-        x: MARGIN,
+        x: marginLeft,
         y,
         size: 11,
         font: boldFont,
@@ -277,17 +261,17 @@ export async function buildLabReportPdfBytes(
       y -= 16;
 
       // Table header
-      page.drawLine({ start: { x: MARGIN, y: y + 2 }, end: { x: PAGE_WIDTH - MARGIN, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
+      page.drawLine({ start: { x: marginLeft, y: y + 2 }, end: { x: rightX, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
       const headers = ["Test", "Result", "Unit", "Flag", "Reference range", "Note"];
       for (let i = 0; i < headers.length; i++) {
         page.drawText(headers[i], { x: colX[i], y, size: 9, font: boldFont, color: primary });
       }
       y -= 14;
-      page.drawLine({ start: { x: MARGIN, y: y + 2 }, end: { x: PAGE_WIDTH - MARGIN, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
+      page.drawLine({ start: { x: marginLeft, y: y + 2 }, end: { x: rightX, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
 
       const fields = item.reportCatalog?.fields.filter((f) => f.isVisible) ?? [];
       if (fields.length === 0) {
-        page.drawText("No visible fields.", { x: MARGIN, y, size: 9, font: normalFont, color: secondary });
+        page.drawText("No visible fields.", { x: marginLeft, y, size: 9, font: normalFont, color: secondary });
         y -= 20;
       } else {
         for (const field of fields) {
@@ -301,13 +285,13 @@ export async function buildLabReportPdfBytes(
             flag = evaluateLabResultFlag(
               field.fieldMaster,
               value,
-              { gender: patient.gender, dateOfBirth: parseDob(patient.dateOfBirth), sampleType: item.sampleType },
+              { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age, sampleType: item.sampleType },
               recordedAt,
             );
           }
           const range = getApplicableRange(
             field.fieldMaster,
-            patient,
+            { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age },
             result ? new Date(result.recordedAt) : recordedAt,
             item.sampleType,
           );
@@ -326,15 +310,15 @@ export async function buildLabReportPdfBytes(
           );
           const rowHeight = Math.max(...cellHeights, lineHeight) + rowPadding;
 
-          if (y - rowHeight < BOTTOM) {
-            page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-            y = TOP - 18;
-            page.drawLine({ start: { x: MARGIN, y: y + 16 }, end: { x: PAGE_WIDTH - MARGIN, y: y + 16 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
+          if (y - rowHeight < bottom) {
+            page = newPage();
+            y = top - 18;
+            page.drawLine({ start: { x: marginLeft, y: y + 16 }, end: { x: rightX, y: y + 16 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
             for (let i = 0; i < headers.length; i++) {
               page.drawText(headers[i], { x: colX[i], y, size: 9, font: boldFont, color: primary });
             }
             y -= 14;
-            page.drawLine({ start: { x: MARGIN, y: y + 2 }, end: { x: PAGE_WIDTH - MARGIN, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
+            page.drawLine({ start: { x: marginLeft, y: y + 2 }, end: { x: rightX, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
           }
 
           const baseline = y - lineHeight - rowPadding / 2;
@@ -350,14 +334,14 @@ export async function buildLabReportPdfBytes(
     }
 
     if (order.cancelReason) {
-      page.drawText(`Cancellation reason: ${order.cancelReason}`, { x: MARGIN, y, size: 9, font: normalFont, color: critical });
+      page.drawText(`Cancellation reason: ${order.cancelReason}`, { x: marginLeft, y, size: 9, font: normalFont, color: critical });
       y -= 16;
     }
     y -= 12;
   }
 
   // Footer
-  page.drawText("End of report", { x: MARGIN, y: Math.max(y, BOTTOM + 10), size: 9, font: normalFont, color: secondary });
+  page.drawText("End of report", { x: marginLeft, y: Math.max(y, bottom + 10), size: 9, font: normalFont, color: secondary });
 
   return pdfDoc.save();
 }
@@ -365,10 +349,11 @@ export async function buildLabReportPdfBytes(
 export async function buildCombinedLabReportPdfBytes(
   patient: LabReportPdfPatient,
   orders: LabOrder[],
+  template?: LabReportTemplateSpec,
 ): Promise<Uint8Array> {
   // Filter to completed/in_progress orders for combined patient report
   const reportOrders = orders.filter((o) => o.status !== "cancelled");
-  return buildLabReportPdfBytes(patient, reportOrders);
+  return buildLabReportPdfBytes(patient, reportOrders, template);
 }
 
 export function bytesToDataUrl(bytes: Uint8Array, filename = "lab-report.pdf"): string {
