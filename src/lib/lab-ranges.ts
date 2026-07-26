@@ -22,19 +22,15 @@ export function ageAt(dateOfBirth: Date | undefined, at: Date): { years: number;
   return { years: Math.floor(days / 365.25), months: Math.floor(days / 30.44), days };
 }
 
-export function dobFromAge(ageYears: number, at: Date): Date {
-  return new Date(at.getFullYear() - ageYears, at.getMonth(), at.getDate());
-}
-
 export function resolveAge(
   patient: { dateOfBirth?: Date | string | null; age?: number | null },
   at: Date,
-): { years: number; months: number; days: number } {
-  let dob = parseDob(patient.dateOfBirth);
-  if (!dob && patient.age != null && patient.age > 0) {
-    dob = dobFromAge(patient.age, at);
+): { years: number; months: number; days: number } | undefined {
+  if (patient.age != null && Number.isFinite(patient.age)) {
+    return { years: Math.floor(patient.age), months: 0, days: 0 };
   }
-  return dob ? ageAt(dob, at) : { years: 0, months: 0, days: 0 };
+  const dob = parseDob(patient.dateOfBirth);
+  return dob ? ageAt(dob, at) : undefined;
 }
 
 export function matchesRange(
@@ -58,7 +54,7 @@ export function getApplicableRange(
   recordedAt: Date,
   sampleType?: string,
 ): LabFieldRange | undefined {
-  const age = resolveAge(patient, recordedAt);
+  const age = resolveAge(patient, recordedAt) ?? { years: 0, months: 0, days: 0 };
   const ranges = fieldMaster.ranges
     .filter((r) => matchesRange(r, patient.gender, age, sampleType))
     .sort((a, b) => (b.isDefault ? 0 : 1) - (a.isDefault ? 0 : 1));
@@ -80,9 +76,10 @@ export function formatReferenceRange(range: LabFieldRange | undefined, unit?: st
   return crit.length ? `${main} (${crit.join("; ")})` : main;
 }
 
-export function formatAge(age: { years: number; months: number; days: number }): string {
+export function formatAge(age?: { years: number; months: number; days: number } | null): string {
+  if (!age) return "—";
   if (age.years > 0) return `${age.years}y`;
   if (age.months > 0) return `${age.months}m`;
   if (age.days > 0) return `${age.days}d`;
-  return "—";
+  return "0y";
 }
