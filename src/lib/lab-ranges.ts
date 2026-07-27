@@ -34,11 +34,12 @@ export function resolveAge(
   patient: { dateOfBirth?: Date | string | null; age?: number | null },
   at: Date,
 ): { years: number; months: number; days: number } | undefined {
+  const dob = parseDob(patient.dateOfBirth);
+  if (dob) return ageAt(dob, at);
   if (patient.age != null && Number.isFinite(patient.age)) {
     return { years: Math.floor(patient.age), months: 0, days: 0 };
   }
-  const dob = parseDob(patient.dateOfBirth);
-  return dob ? ageAt(dob, at) : undefined;
+  return undefined;
 }
 
 export function matchesRange(
