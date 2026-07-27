@@ -109,13 +109,14 @@ export function getApplicableRange(
 
 export function formatReferenceRange(range: LabFieldRange | undefined, unit?: string | null): string {
   if (!range) return "—";
-  if (range.displayLabel) return range.displayLabel;
   const parts: string[] = [];
   if (range.low != null && range.high != null) parts.push(`${range.low} – ${range.high}`);
   else if (range.low != null) parts.push(`≥ ${range.low}`);
   else if (range.high != null) parts.push(`≤ ${range.high}`);
-  if (unit) parts.push(unit);
-  const main = parts.join(" ") || "—";
+  if (unit && parts.length > 0) parts.push(unit);
+  const numericRange = parts.join(" ");
+  const label = range.displayLabel?.trim();
+  const main = numericRange || label || "—";
   const crit: string[] = [];
   if (range.criticalLow != null) crit.push(`critical < ${range.criticalLow}`);
   if (range.criticalHigh != null) crit.push(`critical > ${range.criticalHigh}`);
