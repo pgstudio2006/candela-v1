@@ -12,6 +12,7 @@ import {
   updateIpdAdmissionAction,
 } from "@/app/actions/ipd-actions";
 import { getPatientInvoicesAction } from "@/app/actions/clinical-actions";
+import { listDocumentTemplatesAction } from "@/app/actions/doctor-actions";
 import { useSession } from "@/components/candela/session-provider";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, MetricStrip, Panel, StatusBadge } from "@/components/frontdesk/ui";
@@ -22,6 +23,7 @@ import { IpdRefundPanel } from "@/components/frontdesk/ipd-refund-panel";
 import { IpdFinalBillModal } from "@/components/frontdesk/ipd-final-bill-modal";
 import { useToast } from "@/components/ui/toast-provider";
 import type { IpdAdmissionDetail, IpdAdmissionStatus, IpdBillingMode, IpdSnapshot } from "@/design-system/ipd-data";
+import type { DocumentTemplate } from "@/design-system/document-templates";
 import { cn } from "@/lib/utils";
 import { printPdfBytes } from "@/lib/invoice-pdf";
 import {
@@ -78,6 +80,7 @@ export default function FrontdeskIpdPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [ipdTab, setIpdTab] = useState<"services" | "advance" | "refund">("services");
   const [finalBillOpen, setFinalBillOpen] = useState(false);
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
 
   const refreshAdmission = useCallback(async () => {
     if (!selectedAdmission) return;
@@ -99,6 +102,13 @@ export default function FrontdeskIpdPage() {
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
+
+  useEffect(() => {
+    if (!isPataudi) return;
+    void listDocumentTemplatesAction().then((result) => {
+      if (result.ok) setDocumentTemplates(result.data);
+    });
+  }, [isPataudi]);
 
   useEffect(() => {
     if (selectedBed?.bedId) {
@@ -254,6 +264,7 @@ export default function FrontdeskIpdPage() {
       const bytes = await generateIpdDischargeSummaryPdf(
         selectedAdmission,
         selectedAdmission.dischargeSummary as Record<string, string>,
+        documentTemplates.find((template) => template.kind === "discharge_summary" && template.isDefault),
       );
       printPdfBytes(bytes, "Discharge Summary");
     } catch (error) {
@@ -306,7 +317,10 @@ export default function FrontdeskIpdPage() {
   const printFileStickers = async () => {
     if (!selectedAdmission) return;
     try {
-      const bytes = await generateIpdFileStickerPdf(selectedAdmission);
+      const bytes = await generateIpdFileStickerPdf(
+        selectedAdmission,
+        documentTemplates.find((template) => template.kind === "file_sticker" && template.isDefault),
+      );
       printPdfBytes(bytes, "Patient File Stickers");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Could not generate file stickers", "error");
@@ -315,7 +329,10 @@ export default function FrontdeskIpdPage() {
   const printRoomPlate = async () => {
     if (!selectedAdmission) return;
     try {
-      const bytes = await generateIpdRoomPlatePdf(selectedAdmission);
+      const bytes = await generateIpdRoomPlatePdf(
+        selectedAdmission,
+        documentTemplates.find((template) => template.kind === "room_plate" && template.isDefault),
+      );
       printPdfBytes(bytes, "Patient Room Plate");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Could not generate room plate", "error");
@@ -324,7 +341,10 @@ export default function FrontdeskIpdPage() {
   const printIpdFileOverview = async () => {
     if (!selectedAdmission) return;
     try {
-      const bytes = await generateIpdOverviewPdf(selectedAdmission);
+      const bytes = await generateIpdOverviewPdf(
+        selectedAdmission,
+        documentTemplates.find((template) => template.kind === "ipd_overview" && template.isDefault),
+      );
       printPdfBytes(bytes, "IPD Patient Overview");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Could not generate IPD overview", "error");

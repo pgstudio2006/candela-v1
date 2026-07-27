@@ -1,8 +1,28 @@
 /** Printable document templates — extensible layout registry */
 
-export type DocumentTemplateKind = "prescription" | "invoice" | "consult_summary";
+export type DocumentTemplateKind =
+  | "prescription"
+  | "invoice"
+  | "consult_summary"
+  | "lab_report"
+  | "file_sticker"
+  | "room_plate"
+  | "ipd_overview"
+  | "discharge_summary";
 
-export type DocumentLayoutId = "navayu-letterhead" | "dr-sunil-saini-letterhead";
+export type DocumentLayoutId = "navayu-letterhead" | "dr-sunil-saini-letterhead" | "uploaded-pdf";
+
+export type DocumentTemplateOverlayField = {
+  id: string;
+  key: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize?: number;
+  align?: "left" | "center" | "right";
+};
 
 export type DocumentTemplate = {
   id: string;
@@ -10,6 +30,14 @@ export type DocumentTemplate = {
   label: string;
   layout: DocumentLayoutId;
   description: string;
+  fileData?: string | null;
+  mimeType?: string | null;
+  marginTop?: number | null;
+  marginBottom?: number | null;
+  marginLeft?: number | null;
+  marginRight?: number | null;
+  overlayFields?: DocumentTemplateOverlayField[];
+  isDefault?: boolean;
   enabled: boolean;
   isSystem: boolean;
 };

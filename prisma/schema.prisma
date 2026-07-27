@@ -574,6 +574,14 @@ model DocumentTemplate {
   label       String
   layout      String
   description String?
+  fileData    String?  @db.Text
+  mimeType    String?
+  marginTop   Int?
+  marginBottom Int?
+  marginLeft  Int?
+  marginRight Int?
+  overlayFields Json?
+  isDefault   Boolean  @default(false)
   enabled     Boolean  @default(true)
   isSystem    Boolean  @default(false)
   createdAt   DateTime @default(now())

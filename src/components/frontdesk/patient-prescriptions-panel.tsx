@@ -1,6 +1,7 @@
 "use client";
 
 import { getPatientConsultationsAction } from "@/app/actions/clinical-actions";
+import { listDocumentTemplatesAction } from "@/app/actions/doctor-actions";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useSession } from "@/components/candela/session-provider";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
@@ -8,8 +9,9 @@ import type { ConsultationRecord } from "@/design-system/doctor-data";
 import { formatConsultDate } from "@/lib/doctor-records";
 import { generatePrescriptionPdf, printPdfBytes } from "@/lib/prescription-pdf";
 import { savePdfAsPatientDocument } from "@/lib/patient-documents";
+import type { DocumentTemplate } from "@/design-system/document-templates";
 import { Printer } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const PATAUDI_BRANCH_ID = "branch_pataudi";
 
@@ -22,21 +24,31 @@ export function PatientPrescriptionsPanel({ patient, visits }: PatientPrescripti
   const { session } = useSession();
   const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
   const [consultations, setConsultations] = useState<ConsultationRecord[]>([]);
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [printingVisitId, setPrintingVisitId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void getPatientConsultationsAction(patient.id).then((result) => {
+    void Promise.all([
+      getPatientConsultationsAction(patient.id),
+      listDocumentTemplatesAction(),
+    ]).then(([consultationResult, templateResult]) => {
       if (cancelled) return;
-      if (result.ok) setConsultations(result.data);
+      if (consultationResult.ok) setConsultations(consultationResult.data);
+      if (templateResult.ok) setDocumentTemplates(templateResult.data);
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
   }, [patient.id]);
+
+  const defaultPrescriptionTemplate = useMemo(() => {
+    if (!isPataudi) return null;
+    return documentTemplates.find((t) => t.kind === "prescription" && t.isDefault) ?? null;
+  }, [documentTemplates, isPataudi]);
 
   return (
     <>
@@ -99,7 +111,10 @@ export function PatientPrescriptionsPanel({ patient, visits }: PatientPrescripti
                             visit,
                             consult,
                             doctorName: visit.doctorName || "Dr. Sunil Saini",
-                            layout: "dr-sunil-saini-letterhead",
+                            layout: defaultPrescriptionTemplate?.layout ?? "dr-sunil-saini-letterhead",
+                            branchId: session?.branchId,
+                            uploadedTemplateFileData: defaultPrescriptionTemplate?.fileData,
+                            template: defaultPrescriptionTemplate,
                           });
                           printPdfBytes(pdfBytes, "Dr. Sunil Saini Prescription");
                           if (isPataudi) {

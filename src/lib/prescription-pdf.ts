@@ -1,8 +1,8 @@
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
 import { generateSainiPrescriptionPdf } from "@/lib/prescription-pdf-saini";
-import type { DocumentLayoutId } from "@/design-system/document-templates";
+import type { DocumentLayoutId, DocumentTemplate, DocumentTemplateOverlayField } from "@/design-system/document-templates";
 import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import {
   COLORS,
@@ -36,18 +36,31 @@ type PrescriptionPdfProps = {
   doctorName: string;
   layout?: DocumentLayoutId;
   branchId?: string;
+  uploadedTemplateFileData?: string | null;
+  template?: DocumentTemplate | null;
 };
 
 export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Promise<Uint8Array> {
-  const { patient, visit, consult, doctorName, layout = "navayu-letterhead", branchId } = props;
+  const { patient, visit, consult, doctorName, layout = "navayu-letterhead", branchId, uploadedTemplateFileData, template } = props;
+  const effectiveLayout = template?.layout ?? layout;
+  const effectiveBranchId = branchId;
 
-  if (layout === "dr-sunil-saini-letterhead") {
+  if (effectiveLayout === "dr-sunil-saini-letterhead") {
     return generateSainiPrescriptionPdf({ patient, visit, consult, doctorName });
   }
 
-  const templateUrl = branchId === "branch_pataudi" ? "/templates/60984.pdf" : TEMPLATE_URL;
-  const templateBytes = await fetch(templateUrl).then((res) => {
-    if (!res.ok) throw new Error("Invoice template PDF not found.");
+  const pdfUrl = template?.layout === "uploaded-pdf"
+    ? (template.fileData ?? uploadedTemplateFileData)
+    : effectiveBranchId === "branch_pataudi"
+      ? (uploadedTemplateFileData ?? "/templates/60984.pdf")
+      : TEMPLATE_URL;
+
+  if (!pdfUrl) {
+    throw new Error("Prescription template PDF not found.");
+  }
+
+  const templateBytes = await fetch(pdfUrl).then((res) => {
+    if (!res.ok) throw new Error("Prescription template PDF not found.");
     return res.arrayBuffer();
   });
 
@@ -62,26 +75,32 @@ export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Prom
   const infoWidth = LAYOUT.marginRight - LAYOUT.marginLeft;
   const midX = LAYOUT.marginLeft + infoWidth / 2;
 
-  // Header
-  drawText(page, "PRESCRIPTION", LAYOUT.marginLeft, currentY, bold, FONT.title);
-  drawRightText(page, `Date: ${date}`, LAYOUT.marginRight, currentY, font, FONT.body);
-  currentY -= 28;
+  const overlayFields = template?.overlayFields;
+  if (overlayFields?.length) {
+    renderOverlayFields(page, overlayFields, { patient, visit, doctorName, date, token: visit.token }, { normal: font, bold });
+    currentY = LAYOUT.contentTop - 12;
+  } else {
+    // Header
+    drawText(page, "PRESCRIPTION", LAYOUT.marginLeft, currentY, bold, FONT.title);
+    drawRightText(page, `Date: ${date}`, LAYOUT.marginRight, currentY, font, FONT.body);
+    currentY -= 28;
 
-  // Patient info card
-  drawHLine(page, LAYOUT.marginLeft, LAYOUT.marginRight, currentY);
-  currentY -= 16;
-  drawText(page, `Patient: ${patient.name}`, LAYOUT.marginLeft, currentY, bold, FONT.body);
-  drawText(page, `UHID: ${patient.uhid}`, midX, currentY, bold, FONT.body);
-  currentY -= 16;
-  const resolvedAge = resolvePatientAge(patient.age, patient.dateOfBirth);
-  drawText(page, `Age / Sex: ${resolvedAge ? `${resolvedAge}y` : "—"} / ${patient.gender || "—"}`, LAYOUT.marginLeft, currentY, font, FONT.body);
-  drawText(page, `Phone: ${patient.phone || "—"}`, midX, currentY, font, FONT.body);
-  currentY -= 16;
-  drawText(page, `Doctor: ${doctorName}`, LAYOUT.marginLeft, currentY, font, FONT.body);
-  drawText(page, `Token: #${visit.token ?? "—"}`, midX, currentY, font, FONT.body);
-  currentY -= 14;
-  drawHLine(page, LAYOUT.marginLeft, LAYOUT.marginRight, currentY);
-  currentY -= LAYOUT.sectionGap;
+    // Patient info card
+    drawHLine(page, LAYOUT.marginLeft, LAYOUT.marginRight, currentY);
+    currentY -= 16;
+    drawText(page, `Patient: ${patient.name}`, LAYOUT.marginLeft, currentY, bold, FONT.body);
+    drawText(page, `UHID: ${patient.uhid}`, midX, currentY, bold, FONT.body);
+    currentY -= 16;
+    const resolvedAge = resolvePatientAge(patient.age, patient.dateOfBirth);
+    drawText(page, `Age / Sex: ${resolvedAge ? `${resolvedAge}y` : "—"} / ${patient.gender || "—"}`, LAYOUT.marginLeft, currentY, font, FONT.body);
+    drawText(page, `Phone: ${patient.phone || "—"}`, midX, currentY, font, FONT.body);
+    currentY -= 16;
+    drawText(page, `Doctor: ${doctorName}`, LAYOUT.marginLeft, currentY, font, FONT.body);
+    drawText(page, `Token: #${visit.token ?? "—"}`, midX, currentY, font, FONT.body);
+    currentY -= 14;
+    drawHLine(page, LAYOUT.marginLeft, LAYOUT.marginRight, currentY);
+    currentY -= LAYOUT.sectionGap;
+  }
 
   // Diagnosis
   const primaryDiagnosis = String(consult.diagnosis.primaryDiagnosis ?? "").trim();
@@ -185,6 +204,64 @@ export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Prom
   drawText(page, "Consultant Signature", sigX + 90, currentY, font, FONT.caption);
 
   return pdfDoc.save();
+}
+
+function formatPrescriptionDate(value: string | Date | undefined): string {
+  if (!value) return "";
+  const d = typeof value === "string" ? new Date(value) : value;
+  return d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-IN") : String(value);
+}
+
+function prescriptionOverlayValue(
+  field: DocumentTemplateOverlayField,
+  data: { patient: Patient; visit: Visit; doctorName: string; date: string; token?: number | string | null },
+): string {
+  switch (field.key) {
+    case "patientName":
+      return data.patient.name;
+    case "uhid":
+      return data.patient.uhid ?? "";
+    case "ageGender": {
+      const resolvedAge = resolvePatientAge(data.patient.age, data.patient.dateOfBirth);
+      return `${resolvedAge ? `${resolvedAge}y` : "—"} / ${data.patient.gender || "—"}`;
+    }
+    case "mobileNo":
+      return data.patient.phone ?? "";
+    case "doctorName":
+      return data.doctorName;
+    case "token":
+      return data.token ? `#${data.token}` : "";
+    case "date":
+      return data.date;
+    case "address":
+      return data.patient.address ?? "";
+    default:
+      return field.label;
+  }
+}
+
+function renderOverlayFields(
+  page: PDFPage,
+  fields: DocumentTemplateOverlayField[],
+  data: { patient: Patient; visit: Visit; doctorName: string; date: string; token?: number | string | null },
+  fonts: { normal: PDFFont; bold: PDFFont },
+) {
+  const width = page.getWidth();
+  const height = page.getHeight();
+  for (const field of fields) {
+    const value = prescriptionOverlayValue(field, data);
+    const font = field.key === "patientName" || field.key === "doctorName" ? fonts.bold : fonts.normal;
+    const size = Math.max(6, Math.min(16, field.fontSize ?? 10));
+    const boxLeft = (field.x / 100) * width;
+    const boxTop = height - (field.y / 100) * height;
+    const boxWidth = (field.width / 100) * width;
+    const textWidth = font.widthOfTextAtSize(value, size);
+    let x = boxLeft;
+    if (field.align === "center") x = boxLeft + boxWidth / 2 - textWidth / 2;
+    if (field.align === "right") x = boxLeft + boxWidth - textWidth;
+    const y = boxTop - size;
+    page.drawText(value, { x: Math.max(0, x), y: Math.max(0, y), size, font, color: rgb(0.08, 0.08, 0.08) });
+  }
 }
 
 export function printPdfBytes(bytes: Uint8Array, title = "Prescription") {

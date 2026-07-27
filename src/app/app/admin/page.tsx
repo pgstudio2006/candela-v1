@@ -20,6 +20,9 @@ export default function AdminDashboardPage() {
       meta="Cross-module KPIs · hawk-eye · RCM alerts · audit stream"
     >
       <MetricStrip metrics={kpis} />
+      <Panel title="Document templates" className="mb-6" action={<Link href="/app/admin/templates" className="text-[11px] text-[var(--attio-accent)]">Open Template Studio →</Link>}>
+        <p className="text-[13px] text-[var(--attio-text-secondary)]">Create fresh branch templates, set print margins, upload backgrounds, and position patient fields visually.</p>
+      </Panel>
       <div className="mb-6">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[13px] font-semibold">Department hawk-eye</h2>

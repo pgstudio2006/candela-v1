@@ -329,6 +329,10 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
         doctorName: visit.doctorName,
         layout: selectedTemplate?.layout ?? "navayu-letterhead",
         branchId: session?.branchId,
+        uploadedTemplateFileData: isPataudi
+          ? documentTemplates.find((template) => template.kind === "prescription" && template.isDefault)?.fileData
+          : undefined,
+        template: selectedTemplate,
       });
       printPdfBytes(pdfBytes, "Prescription");
       if (isPataudi) {

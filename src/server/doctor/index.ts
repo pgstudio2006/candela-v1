@@ -281,6 +281,14 @@ export async function getDoctorSnapshot(
       label: row.label,
       layout: row.layout as DocumentTemplate["layout"],
       description: row.description ?? "",
+      fileData: row.fileData,
+      mimeType: row.mimeType,
+      marginTop: row.marginTop,
+      marginBottom: row.marginBottom,
+      marginLeft: row.marginLeft,
+      marginRight: row.marginRight,
+      overlayFields: (Array.isArray(row.overlayFields) ? row.overlayFields : []) as unknown as NonNullable<DocumentTemplate["overlayFields"]>,
+      isDefault: row.isDefault,
       enabled: row.enabled,
       isSystem: row.isSystem,
     })),
@@ -1127,13 +1135,40 @@ export async function listDoctorAuditLogs(
   }));
 }
 
+function serializeDocumentTemplate(row: any): DocumentTemplate {
+  return {
+    id: row.id,
+    kind: row.kind as DocumentTemplate["kind"],
+    label: row.label,
+    layout: row.layout as DocumentTemplate["layout"],
+    description: row.description ?? "",
+    fileData: row.fileData,
+    mimeType: row.mimeType,
+    marginTop: row.marginTop,
+    marginBottom: row.marginBottom,
+    marginLeft: row.marginLeft,
+    marginRight: row.marginRight,
+    overlayFields: Array.isArray(row.overlayFields) ? row.overlayFields : [],
+    isDefault: row.isDefault,
+    enabled: row.enabled,
+    isSystem: row.isSystem,
+  };
+}
+
+export async function listDocumentTemplates(ctx: ServerContext): Promise<DocumentTemplate[]> {
+  const rows = await prisma.documentTemplate.findMany({
+    where: { ...tenantScope(ctx), OR: [{ branchId: ctx.branchId }, { branchId: null }] },
+    orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
+  });
+  return rows.map(serializeDocumentTemplate);
+}
+
 export async function addDocumentTemplate(
   ctx: ServerContext,
   kind: DocumentTemplate["kind"],
   label: string,
   description: string,
 ) {
-  await resolveDoctorIdForContext(ctx);
   await prisma.documentTemplate.create({
     data: {
       id: `doc_custom_${Date.now()}`,
@@ -1150,29 +1185,40 @@ export async function addDocumentTemplate(
 }
 
 export async function saveDocumentTemplate(ctx: ServerContext, template: DocumentTemplate) {
-  await resolveDoctorIdForContext(ctx);
-  await prisma.documentTemplate.upsert({
-    where: { id: template.id },
-    update: {
-      kind: template.kind,
-      label: template.label,
-      layout: template.layout,
-      description: template.description,
-      enabled: template.enabled,
-      isSystem: template.isSystem,
-      tenantId: ctx.tenantId,
-      branchId: ctx.branchId,
-    },
-    create: {
-      id: template.id,
-      tenantId: ctx.tenantId,
-      branchId: ctx.branchId,
-      kind: template.kind,
-      label: template.label,
-      layout: template.layout,
-      description: template.description,
-      enabled: template.enabled,
-      isSystem: template.isSystem,
-    },
+  const scope = { tenantId: ctx.tenantId, branchId: ctx.branchId };
+  const data = {
+    kind: template.kind,
+    label: template.label.trim(),
+    layout: template.layout,
+    description: template.description,
+    fileData: template.fileData ?? null,
+    mimeType: template.mimeType ?? null,
+    marginTop: template.marginTop ?? 50,
+    marginBottom: template.marginBottom ?? 50,
+    marginLeft: template.marginLeft ?? 50,
+    marginRight: template.marginRight ?? 50,
+    overlayFields: template.overlayFields ?? [],
+    isDefault: template.isDefault ?? false,
+    enabled: template.enabled,
+    isSystem: template.isSystem,
+    ...scope,
+  };
+  const row = await prisma.$transaction(async (tx) => {
+    if (data.isDefault) {
+      await tx.documentTemplate.updateMany({ where: scope, data: { isDefault: false } });
+    }
+    return tx.documentTemplate.upsert({
+      where: { id: template.id },
+      update: data,
+      create: { id: template.id, ...data },
+    });
   });
+  return serializeDocumentTemplate(row);
+}
+
+export async function deleteDocumentTemplate(ctx: ServerContext, id: string) {
+  const result = await prisma.documentTemplate.deleteMany({
+    where: { id, tenantId: ctx.tenantId, branchId: ctx.branchId },
+  });
+  if (result.count === 0) throw new ServerActionError("NOT_FOUND", "Template not found.");
 }
