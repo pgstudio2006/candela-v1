@@ -23,6 +23,13 @@ import { IpdFinalBillModal } from "@/components/frontdesk/ipd-final-bill-modal";
 import { useToast } from "@/components/ui/toast-provider";
 import type { IpdAdmissionDetail, IpdAdmissionStatus, IpdBillingMode, IpdSnapshot } from "@/design-system/ipd-data";
 import { cn } from "@/lib/utils";
+import { printPdfBytes } from "@/lib/invoice-pdf";
+import {
+  generateIpdDischargeSummaryPdf,
+  generateIpdFileStickerPdf,
+  generateIpdOverviewPdf,
+  generateIpdRoomPlatePdf,
+} from "@/lib/ipd-template-pdf";
 
 type DischargeSummaryPayload = {
   admissionDate: string;
@@ -241,38 +248,18 @@ export default function FrontdeskIpdPage() {
     }
   };
 
-  const printDischargeSummary = () => {
+  const printDischargeSummary = async () => {
     if (!selectedAdmission?.dischargeSummary) return;
-    const summary = selectedAdmission.dischargeSummary as Record<string, string>;
-    const printTime = new Date().toISOString();
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return toast("Could not open print window", "error");
-    printWindow.document.write(`
-      <html>
-        <head><title>Discharge Summary - ${selectedAdmission.patientName}</title>
-          <style>body{font-family:system-ui,sans-serif;padding:24px;color:#111;}h1{font-size:18px;margin:0 0 8px;}.meta{color:#555;font-size:12px;margin-bottom:16px;}.section{margin-bottom:12px;}.label{font-weight:600;font-size:12px;color:#444;}.value{font-size:12px;white-space:pre-wrap;}</style>
-        </head>
-        <body>
-          <h1>Discharge Summary</h1>
-          <div class="meta">${selectedAdmission.patientName} · ${selectedAdmission.uhid ?? ""} · ${selectedAdmission.ward} Bed ${selectedAdmission.bed}</div>
-          <div class="section"><div class="label">Admission date</div><div class="value">${summary.admissionDate ?? ""}</div></div>
-          <div class="section"><div class="label">Discharge date</div><div class="value">${printTime}</div></div>
-          <div class="section"><div class="label">Diagnosis</div><div class="value">${summary.diagnosis ?? ""}</div></div>
-          <div class="section"><div class="label">Procedures</div><div class="value">${summary.procedures ?? ""}</div></div>
-          <div class="section"><div class="label">Medications</div><div class="value">${summary.medications ?? ""}</div></div>
-          <div class="section"><div class="label">Follow up</div><div class="value">${summary.followUp ?? ""}</div></div>
-          <div class="section"><div class="label">Notes</div><div class="value">${summary.notes ?? ""}</div></div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    try {
+      const bytes = await generateIpdDischargeSummaryPdf(
+        selectedAdmission,
+        selectedAdmission.dischargeSummary as Record<string, string>,
+      );
+      printPdfBytes(bytes, "Discharge Summary");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not generate discharge summary", "error");
+    }
   };
-
   const printDeathSummary = () => {
     if (!selectedAdmission?.deathSummary) return;
     const summary = selectedAdmission.deathSummary as Record<string, string>;
@@ -316,110 +303,33 @@ export default function FrontdeskIpdPage() {
       .replace(/'/g, "&#039;");
   };
 
-  const printFileStickers = () => {
+  const printFileStickers = async () => {
     if (!selectedAdmission) return;
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (!printWindow) return toast("Could not open print window", "error");
-    const sticker = `
-      <div class="sticker">
-        <div class="name">${escapeHtml(selectedAdmission.patientName)}</div>
-        <div class="uhid">${escapeHtml(selectedAdmission.uhid) ?? ""}</div>
-        <div class="meta">${escapeHtml(selectedAdmission.ward)} · Bed ${escapeHtml(selectedAdmission.bed)}</div>
-        <div class="date">${new Date(selectedAdmission.admittedAt).toLocaleDateString("en-IN")}</div>
-      </div>
-    `;
-    printWindow.document.write(`
-      <html>
-        <head><title>File stickers - ${escapeHtml(selectedAdmission.patientName)}</title>
-          <style>
-            body{font-family:system-ui,sans-serif;padding:12px;}
-            .sticker{width:48%;height:120px;border:1px dashed #333;padding:12px;margin:1%;display:inline-block;box-sizing:border-box;vertical-align:top;}
-            .name{font-weight:700;font-size:16px;margin-bottom:4px;}
-            .uhid{font-size:12px;color:#555;}
-            .meta{font-size:12px;color:#333;margin-top:6px;}
-            .date{font-size:11px;color:#777;margin-top:4px;}
-          </style>
-        </head>
-        <body>${sticker.repeat(6)}</body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    try {
+      const bytes = await generateIpdFileStickerPdf(selectedAdmission);
+      printPdfBytes(bytes, "Patient File Stickers");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not generate file stickers", "error");
+    }
   };
-
-  const printRoomPlate = () => {
+  const printRoomPlate = async () => {
     if (!selectedAdmission) return;
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (!printWindow) return toast("Could not open print window", "error");
-    printWindow.document.write(`
-      <html>
-        <head><title>Room plate - ${escapeHtml(selectedAdmission.patientName)}</title>
-          <style>
-            body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
-            .plate{width:90%;height:60vh;border:2px solid #111;padding:32px;text-align:center;}
-            .ward{font-size:24px;font-weight:700;margin-bottom:8px;}
-            .bed{font-size:48px;font-weight:800;margin-bottom:16px;}
-            .name{font-size:20px;font-weight:600;margin-bottom:8px;}
-            .doctor{font-size:14px;color:#555;margin-bottom:8px;}
-            .date{font-size:13px;color:#777;}
-          </style>
-        </head>
-        <body>
-          <div class="plate">
-            <div class="ward">${escapeHtml(selectedAdmission.ward) ?? "—"}</div>
-            <div class="bed">Bed ${escapeHtml(selectedAdmission.bed) ?? "—"}</div>
-            <div class="name">${escapeHtml(selectedAdmission.patientName) ?? "—"}</div>
-            <div class="doctor">${escapeHtml(selectedAdmission.doctorName) ?? "—"}</div>
-            <div class="date">Admitted ${new Date(selectedAdmission.admittedAt).toLocaleDateString("en-IN")}</div>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    try {
+      const bytes = await generateIpdRoomPlatePdf(selectedAdmission);
+      printPdfBytes(bytes, "Patient Room Plate");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not generate room plate", "error");
+    }
   };
-
-  const printIpdFileOverview = () => {
+  const printIpdFileOverview = async () => {
     if (!selectedAdmission) return;
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (!printWindow) return toast("Could not open print window", "error");
-    const f = (label: string, value: string) => `<div class="section"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(value)}</div></div>`;
-    printWindow.document.write(`
-      <html>
-        <head><title>IPD file - ${escapeHtml(selectedAdmission.patientName)}</title>
-          <style>body{font-family:system-ui,sans-serif;padding:24px;color:#111;}h1{font-size:18px;margin:0 0 8px;}.meta{color:#555;font-size:12px;margin-bottom:16px;}.section{margin-bottom:12px;}.label{font-weight:600;font-size:12px;color:#444;}.value{font-size:12px;white-space:pre-wrap;}</style>
-        </head>
-        <body>
-          <h1>IPD File Overview</h1>
-          <div class="meta">${escapeHtml(selectedAdmission.patientName)} · ${escapeHtml(selectedAdmission.uhid) ?? ""} · ${escapeHtml(selectedAdmission.ward)} Bed ${escapeHtml(selectedAdmission.bed)}</div>
-          ${f("Admission date", new Date(selectedAdmission.admittedAt).toLocaleString("en-IN"))}
-          ${f("Patient type", selectedAdmission.patientType ?? "—")}
-          ${f("Billing mode", selectedAdmission.billingMode ?? "—")}
-          ${f("Attending doctor", selectedAdmission.doctorName ?? "—")}
-          ${f("Diagnosis", selectedAdmission.diagnosis ?? "—")}
-          ${f("Phone", selectedAdmission.phone ?? "—")}
-          ${f("Age / Gender", `${selectedAdmission.age ?? "—"} / ${selectedAdmission.gender ?? "—"}`)}
-          ${f("Expected discharge", selectedAdmission.expectedDischarge ?? "—")}
-          ${f("Status", selectedAdmission.status ?? "—")}
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    try {
+      const bytes = await generateIpdOverviewPdf(selectedAdmission);
+      printPdfBytes(bytes, "IPD Patient Overview");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not generate IPD overview", "error");
+    }
   };
-
   const openSummaryEditor = (type: "discharge" | "death") => {
     if (!selectedAdmission) return;
     if (type === "discharge") {
@@ -674,20 +584,22 @@ export default function FrontdeskIpdPage() {
                           </AttioButton>
                         </div>
 
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printFileStickers}>
-                            <Printer className="size-3" />
-                            File stickers
-                          </AttioButton>
-                          <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printRoomPlate}>
-                            <Printer className="size-3" />
-                            Room plate
-                          </AttioButton>
-                          <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={printIpdFileOverview}>
-                            <Printer className="size-3" />
-                            IPD file
-                          </AttioButton>
-                        </div>
+                        {isPataudi && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={() => void printFileStickers()}>
+                              <Printer className="size-3" />
+                              File stickers
+                            </AttioButton>
+                            <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={() => void printRoomPlate()}>
+                              <Printer className="size-3" />
+                              Room plate
+                            </AttioButton>
+                            <AttioButton variant="secondary" className="!h-7 !text-[11px] gap-1" onClick={() => void printIpdFileOverview()}>
+                              <Printer className="size-3" />
+                              IPD file
+                            </AttioButton>
+                          </div>
+                        )}
 
                         {selectedAdmission.status === "discharged" && (
                           <StatusBadge label="Discharged" variant="success" />

@@ -35,16 +35,18 @@ type PrescriptionPdfProps = {
   consult: ConsultationRecord;
   doctorName: string;
   layout?: DocumentLayoutId;
+  branchId?: string;
 };
 
 export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Promise<Uint8Array> {
-  const { patient, visit, consult, doctorName, layout = "navayu-letterhead" } = props;
+  const { patient, visit, consult, doctorName, layout = "navayu-letterhead", branchId } = props;
 
   if (layout === "dr-sunil-saini-letterhead") {
     return generateSainiPrescriptionPdf({ patient, visit, consult, doctorName });
   }
 
-  const templateBytes = await fetch(TEMPLATE_URL).then((res) => {
+  const templateUrl = branchId === "branch_pataudi" ? "/templates/60984.pdf" : TEMPLATE_URL;
+  const templateBytes = await fetch(templateUrl).then((res) => {
     if (!res.ok) throw new Error("Invoice template PDF not found.");
     return res.arrayBuffer();
   });
