@@ -425,17 +425,32 @@ export async function getIpdAdmissionsByPatient(
 
 export async function getIpdWalletBalance(ctx: ServerContext, admissionId: string) {
   const scope = branchScope(ctx);
-  const [advances, vouchers] = await Promise.all([
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { id: admissionId, ...scope },
+    select: { visitId: true },
+  });
+  if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+  const [advances, vouchers, invoices] = await Promise.all([
     prisma.ipdAdvancePayment.findMany({
       where: { admissionId, tenantId: scope.tenantId, branchId: scope.branchId, status: "received" },
     }),
     prisma.ipdRefundVoucher.findMany({
       where: { admissionId, tenantId: scope.tenantId, branchId: scope.branchId, status: "issued" },
     }),
+    admission.visitId
+      ? prisma.invoice.findMany({
+          where: { visitId: admission.visitId, ...scope },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
   ]);
   const received = advances.reduce((s, a) => s + Number(a.receivedAmount), 0);
   const issuedRefund = vouchers.reduce((s, v) => s + Number(v.amount), 0);
-  return { balance: Math.max(0, received - issuedRefund), received, issuedRefund };
+  const advanceUsed = invoices.reduce(
+    (s, inv) => s + Number((inv.payload as Record<string, unknown> | null)?.advanceUsed ?? 0),
+    0,
+  );
+  return { balance: Math.max(0, received - issuedRefund - advanceUsed), received, issuedRefund };
 }
 
 type AdvanceInput = {

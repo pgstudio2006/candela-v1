@@ -7,7 +7,7 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LAB_ITEM_STATUS_LABELS, LAB_ORDER_STATUS_LABELS, LAB_RESULT_FLAG_LABELS, type LabResultFlag } from "@/design-system/lab-data";
-import { getApplicableRange, formatReferenceRange } from "@/lib/lab-ranges";
+import { getApplicableRange, formatReferenceRange, normalizeGender } from "@/lib/lab-ranges";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Check, FlaskConical } from "lucide-react";
 import Link from "next/link";
@@ -198,7 +198,7 @@ export default function PrepareLabReportPage() {
           <span className="ml-2 font-medium">
             {order.patientName} ({order.patientUhid}) · {order.patientAge != null ? `${order.patientAge}Y` : "—"} / {order.patientGender?.toUpperCase() ?? "—"}
           </span>
-          {order.patientGender?.toLowerCase() === "female" && (
+          {normalizeGender(order.patientGender) === "F" && (
             <label className="ml-3 inline-flex items-center gap-1.5 text-[12px]">
               <input
                 type="checkbox"

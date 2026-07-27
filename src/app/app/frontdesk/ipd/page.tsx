@@ -741,8 +741,12 @@ export default function FrontdeskIpdPage() {
                       <div className="flex items-center gap-1 rounded-lg border border-[var(--attio-border)] p-1">
                         {[
                           { id: "services", label: "Services", icon: Receipt },
-                          { id: "advance", label: "Advance", icon: Wallet },
-                          { id: "refund", label: "Refund", icon: RefreshCcw },
+                          ...(isPataudi
+                            ? [
+                                { id: "advance", label: "Advance", icon: Wallet },
+                                { id: "refund", label: "Refund", icon: RefreshCcw },
+                              ]
+                            : []),
                         ].map((t) => (
                           <button
                             key={t.id}

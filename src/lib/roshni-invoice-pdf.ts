@@ -167,6 +167,16 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
     drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
     y -= 13;
   }
+  if (receipt.advanceUsed && receipt.advanceUsed > 0) {
+    drawRight(page, "Advance used", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.advanceUsed), valueX, y, font, FONT.body);
+    y -= 13;
+  }
+  if (receipt.refundAmount && receipt.refundAmount > 0) {
+    drawRight(page, "Refund due", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.refundAmount), valueX, y, bold, FONT.body);
+    y -= 13;
+  }
   if (receipt.paymentBreakdown && receipt.paymentBreakdown.length > 0) {
     for (const split of receipt.paymentBreakdown) {
       drawRight(page, `Payment - ${split.mode.toUpperCase()}`, labelX + 80, y, bold, FONT.body);

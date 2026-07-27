@@ -57,6 +57,8 @@ export type OpdReceiptPayload = {
   total: number;
   amountPaid: number;
   balanceDue: number;
+  refundAmount?: number;
+  advanceUsed?: number;
   routingNote?: string;
   packageLines?: PackageLineNote[];
   gst: GstSettings;

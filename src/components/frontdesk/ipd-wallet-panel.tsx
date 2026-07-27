@@ -6,7 +6,7 @@ import {
 import { useToast } from "@/components/ui/toast-provider";
 import { AttioButton, DataTable, MetricStrip, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import type { IpdAdmissionDetail, IpdAdvancePayment } from "@/design-system/ipd-data";
-import { IndianRupee, Plus, Trash2 } from "lucide-react";
+import { IndianRupee, Plus, Printer, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type Split = { mode: string; amount: string };
@@ -36,7 +36,10 @@ export function IpdWalletPanel({
     [admission.advancePayments],
   );
   const pending = useMemo(
-    () => admission.advancePayments.reduce((s, a) => s + a.pendingAmount, 0),
+    () =>
+      admission.advancePayments
+        .filter((a) => a.status !== "cancelled" && a.status !== "refunded")
+        .reduce((s, a) => s + a.pendingAmount, 0),
     [admission.advancePayments],
   );
   const issuedRefunds = useMemo(
@@ -74,11 +77,46 @@ export function IpdWalletPanel({
     }
   };
 
+  const handlePrintReceipt = (payment: IpdAdvancePayment) => {
+    const w = window.open("", "_blank", "width=600,height=500");
+    if (!w) return;
+    const date = new Date(payment.receivedAt).toLocaleString();
+    const splits = payment.splits?.length
+      ? payment.splits.map((s) => `<tr><td>${s.mode.toUpperCase()}</td><td style="text-align:right">₹${s.amount.toLocaleString()}</td></tr>`).join("")
+      : `<tr><td>${payment.mode.toUpperCase()}</td><td style="text-align:right">₹${payment.amount.toLocaleString()}</td></tr>`;
+    w.document.write(`
+      <html>
+        <head><title>Advance Receipt</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; font-size: 13px; }
+            h2 { margin: 0 0 8px; font-size: 16px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+            td { padding: 6px 0; border-bottom: 1px solid #ddd; }
+            .total { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h2>Advance Receipt</h2>
+          <p><strong>Patient:</strong> ${admission.patientName} (${admission.uhid ?? "—"})</p>
+          <p><strong>Date:</strong> ${date}</p>
+          <p><strong>Reference:</strong> ${payment.referenceNo ?? "—"}</p>
+          <table>${splits}</table>
+          <p class="total">Total: ₹${payment.amount.toLocaleString()}</p>
+          <p><strong>Notes:</strong> ${payment.notes ?? "—"}</p>
+        </body>
+      </html>
+    `);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
   const columns = [
     { key: "receivedAt", label: "Date" },
     { key: "mode", label: "Mode" },
     { key: "amount", label: "Amount", className: "text-right" },
     { key: "status", label: "Status" },
+    { key: "actions", label: "", className: "text-right" },
   ];
 
   const rows = admission.advancePayments.map((a) => ({
@@ -91,6 +129,16 @@ export function IpdWalletPanel({
       </div>
     ),
     status: <StatusBadge label={a.status} variant={a.status === "received" ? "success" : a.status === "pending" ? "warning" : a.status === "cancelled" ? "danger" : "neutral"} />,
+    actions: (
+      <button
+        type="button"
+        onClick={() => handlePrintReceipt(a)}
+        className="inline-flex items-center text-[var(--attio-text-secondary)] hover:text-[var(--attio-text)]"
+        title="Print receipt"
+      >
+        <Printer className="size-3.5" />
+      </button>
+    ),
   }));
 
   return (

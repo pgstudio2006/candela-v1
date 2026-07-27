@@ -196,6 +196,12 @@ function footerRows(receipt: OpdReceiptPayload): Array<{ label: string; value: s
   if (receipt.balanceDue > 0) {
     rows.push({ label: "Balance due", value: formatInrForPdf(receipt.balanceDue), emphasis: true });
   }
+  if (receipt.advanceUsed && receipt.advanceUsed > 0) {
+    rows.push({ label: "Advance used", value: formatInrForPdf(receipt.advanceUsed) });
+  }
+  if (receipt.refundAmount && receipt.refundAmount > 0) {
+    rows.push({ label: "Refund due", value: formatInrForPdf(receipt.refundAmount), emphasis: true });
+  }
   if (receipt.paymentBreakdown && receipt.paymentBreakdown.length > 0) {
     for (const split of receipt.paymentBreakdown) {
       rows.push({ label: `Payment - ${split.mode.toUpperCase()}`, value: formatInrForPdf(split.amount) });

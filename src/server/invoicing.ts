@@ -381,6 +381,10 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     paymentBreakdown,
     amountPaid: aggregateAmountPaid,
     balanceDue: aggregateBalanceDue,
+    refundAmount: Number((targetSession?.serviceInvoice ?? receiptInvoice)?.refundAmount ?? 0),
+    advanceUsed: Number(
+      ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.advanceUsed ?? 0,
+    ),
     routingNote: visit.routingNote ?? undefined,
   };
 
