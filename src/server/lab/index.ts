@@ -204,10 +204,10 @@ function serializeOrder(row: Record<string, unknown> & { patient?: Record<string
     patientGender: row.patient ? (String(row.patient.gender ?? "") || null) : null,
     patientDateOfBirth: row.patient ? (row.patient.dateOfBirth ? new Date(String(row.patient.dateOfBirth)).toISOString() : null) : null,
     patientAge: row.patient
-      ? (row.patient.age != null
-          ? Number(row.patient.age)
-          : row.patient.dateOfBirth
-            ? Math.floor((Date.now() - new Date(String(row.patient.dateOfBirth)).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+      ? (row.patient.dateOfBirth
+          ? Math.floor((Date.now() - new Date(String(row.patient.dateOfBirth)).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+          : row.patient.age != null
+            ? Number(row.patient.age)
             : null)
       : null,
     patientBloodGroup: row.patient ? (row.patient.bloodGroup ? String(row.patient.bloodGroup) : null) : null,

@@ -56,7 +56,11 @@ export function matchesRange(
   const ageValue = ageUnit === "years" ? age.years : ageUnit === "months" ? age.months : age.days;
   if (range.ageMin != null && ageValue < range.ageMin) return false;
   if (range.ageMax != null && ageValue > range.ageMax) return false;
-  if (sampleType && range.sampleType && range.sampleType !== sampleType) return false;
+  if (sampleType && range.sampleType) {
+    const normalizedItem = sampleType.trim().toLowerCase();
+    const normalizedRange = range.sampleType.trim().toLowerCase();
+    if (normalizedItem !== normalizedRange) return false;
+  }
   if (range.pregnancy != null && range.pregnancy !== Boolean(pregnancy)) return false;
   return true;
 }
