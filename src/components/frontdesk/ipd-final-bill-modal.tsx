@@ -78,7 +78,7 @@ export function IpdFinalBillModal({
   const net = preview?.total ?? 0;
   const wallet = admission.walletBalance ?? 0;
 
-  const { amountPaid, balanceDue, refundAmount } = useMemo(() => {
+  const { amountPaid, balanceDue, refundAmount, appliedCredit } = useMemo(() => {
     const parsed = splits.map((s) => ({ mode: s.mode, amount: Number(s.amount) || 0 }));
     const actual = parsed.filter((p) => !PENDING_MODES.has(p.mode));
     const advanceSplit = actual.find((p) => p.mode === "advance");
@@ -87,7 +87,7 @@ export function IpdFinalBillModal({
     const paid = nonAdvance + walletUsed;
     const balance = Math.max(0, net - paid);
     const refund = Math.max(0, wallet - walletUsed);
-    return { amountPaid: paid, balanceDue: balance, refundAmount: refund };
+    return { amountPaid: paid, balanceDue: balance, refundAmount: refund, appliedCredit: walletUsed };
   }, [splits, net, wallet]);
 
   const applyAvailableCredit = () => {
@@ -223,6 +223,28 @@ export function IpdFinalBillModal({
               </div>
             </div>
 
+            {wallet > 0 && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-[12px]">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-emerald-900">IPD advance available: {fmt(wallet)}</p>
+                    <p className="mt-0.5 text-emerald-800">
+                      {appliedCredit > 0
+                        ? `${fmt(appliedCredit)} is deducted from this bill.`
+                        : "Apply this credit to reduce the amount collected now."}
+                    </p>
+                  </div>
+                  <AttioButton
+                    variant={appliedCredit > 0 ? "secondary" : "primary"}
+                    className="!h-8 !text-[11px]"
+                    onClick={applyAvailableCredit}
+                  >
+                    {appliedCredit > 0 ? `Applied ${fmt(appliedCredit)}` : `Apply ${fmt(Math.min(wallet, net))}`}
+                  </AttioButton>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <label className="text-[11px] text-[var(--attio-text-tertiary)]">Payment splits</label>
               {splits.map((s, i) => (
@@ -252,16 +274,9 @@ export function IpdFinalBillModal({
                   )}
                 </div>
               ))}
-              <div className="flex flex-wrap gap-2">
-                {wallet > 0 && (
-                  <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={applyAvailableCredit}>
-                    Deduct available credit ({fmt(Math.min(wallet, net))})
-                  </AttioButton>
-                )}
-                <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={addSplit}>
-                  Add split
-                </AttioButton>
-              </div>
+              <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={addSplit}>
+                Add payment mode
+              </AttioButton>
             </div>
 
             <div className="grid grid-cols-3 gap-3 text-center">

@@ -83,7 +83,21 @@ export function getApplicableRange(
   sampleType?: string,
 ): LabFieldRange | undefined {
   const age = resolveAge(patient, recordedAt);
-  const matching = fieldMaster.ranges.filter((r) => matchesRange(r, patient.gender, age, sampleType, patient.pregnancy));
+  const exactMatches = fieldMaster.ranges.filter((r) =>
+    matchesRange(r, patient.gender, age, sampleType, patient.pregnancy),
+  );
+  const demographicMatches = fieldMaster.ranges.filter((r) =>
+    matchesRange(r, patient.gender, age, undefined, patient.pregnancy),
+  );
+  const defaultRanges = fieldMaster.ranges.filter((r) => r.isDefault);
+  const matching =
+    exactMatches.length > 0
+      ? exactMatches
+      : demographicMatches.length > 0
+        ? demographicMatches
+        : defaultRanges.length > 0
+          ? defaultRanges
+          : fieldMaster.ranges;
   const sorted = matching.sort((a, b) => {
     const specDiff = rangeSpecificity(b) - rangeSpecificity(a);
     if (specDiff !== 0) return specDiff;
