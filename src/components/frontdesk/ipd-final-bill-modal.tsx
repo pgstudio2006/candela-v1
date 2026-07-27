@@ -90,6 +90,15 @@ export function IpdFinalBillModal({
     return { amountPaid: paid, balanceDue: balance, refundAmount: refund };
   }, [splits, net, wallet]);
 
+  const applyAvailableCredit = () => {
+    const creditToApply = Math.min(wallet, net);
+    const remaining = Math.max(0, net - creditToApply);
+    setSplits([
+      { mode: "advance", amount: String(creditToApply) },
+      ...(remaining > 0 ? [{ mode: "cash", amount: String(remaining) }] : []),
+    ]);
+  };
+
   const addSplit = () => setSplits((prev) => [...prev, { mode: "cash", amount: "" }]);
   const removeSplit = (i: number) => setSplits((prev) => prev.filter((_, idx) => idx !== i));
   const updateSplit = (i: number, patch: Partial<{ mode: string; amount: string }>) =>
@@ -243,9 +252,16 @@ export function IpdFinalBillModal({
                   )}
                 </div>
               ))}
-              <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={addSplit}>
-                Add split
-              </AttioButton>
+              <div className="flex flex-wrap gap-2">
+                {wallet > 0 && (
+                  <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={applyAvailableCredit}>
+                    Deduct available credit ({fmt(Math.min(wallet, net))})
+                  </AttioButton>
+                )}
+                <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={addSplit}>
+                  Add split
+                </AttioButton>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3 text-center">
