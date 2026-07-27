@@ -27,6 +27,16 @@ export type PaymentSplit = {
   amount: number;
 };
 
+export type IpdAdvanceReceiptRow = {
+  receiptNo: string;
+  receivedAt: string;
+  amount: number;
+  receivedAmount: number;
+  mode: string;
+  status: string;
+  referenceNo?: string;
+};
+
 export type OpdReceiptPayload = {
   branchId?: string;
   patientId?: string;
@@ -59,6 +69,7 @@ export type OpdReceiptPayload = {
   balanceDue: number;
   refundAmount?: number;
   advanceUsed?: number;
+  advancePayments?: IpdAdvanceReceiptRow[];
   routingNote?: string;
   packageLines?: PackageLineNote[];
   gst: GstSettings;

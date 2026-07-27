@@ -129,6 +129,39 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
   return tableBottom;
 }
 
+function drawAdvancePayments(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont, tableBottom: number) {
+  const payments = receipt.advancePayments ?? [];
+  if (payments.length === 0) return;
+
+  const left = COLUMNS[0];
+  const right = 350;
+  let y = tableBottom - 18;
+  line(page, left, right, y + 8, 0.6);
+  drawText(page, "Advance & Paid Receipt", left, y, bold, FONT.header);
+  y -= 13;
+  const headers = ["Sr No.", "Receipt No.", "Name", "Qty", "Amount", "Net Amount"];
+  const columns = [left, 55, 145, 252, 285, 350];
+  headers.forEach((header, index) => {
+    if (index >= 4) drawRight(page, header, columns[index], y, bold, FONT.header);
+    else drawText(page, header, columns[index], y, bold, FONT.header);
+  });
+  y -= 5;
+  line(page, left, right, y, 0.5);
+  y -= 10;
+
+  payments.forEach((payment, index) => {
+    const amount = payment.receivedAmount > 0 ? payment.receivedAmount : payment.amount;
+    drawText(page, String(index + 1), columns[0], y, font, FONT.body);
+    drawText(page, safe(payment.receiptNo), columns[1], y, font, FONT.body);
+    drawText(page, "IPD ADVANCE", columns[2], y, font, FONT.body);
+    drawText(page, "1", columns[3], y, font, FONT.body);
+    drawRight(page, money(amount), columns[4] + 28, y, font, FONT.body);
+    drawRight(page, money(amount), columns[5], y, font, FONT.body);
+    y -= 13;
+  });
+  line(page, left, right, y + 5, 0.5);
+}
+
 function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont, tableBottom: number): number {
   const labelX = 372;
   const valueX = 575;
@@ -243,6 +276,7 @@ export async function generateRoshniInvoicePdf(receipt: OpdReceiptPayload): Prom
   line(page, 15, 575, 735, 0.8);
   drawInfo(page, receipt, font, bold);
   const tableBottom = drawTable(page, receipt, font, bold);
+  drawAdvancePayments(page, receipt, font, bold, tableBottom);
   const totalsBottom = drawTotals(page, receipt, font, bold, tableBottom);
   drawNotes(page, receipt, font, totalsBottom);
 
