@@ -59,7 +59,9 @@ export function matchesRange(
   if (sampleType && range.sampleType) {
     const normalizedItem = sampleType.trim().toLowerCase();
     const normalizedRange = range.sampleType.trim().toLowerCase();
-    if (normalizedItem !== normalizedRange) return false;
+    if (normalizedItem !== normalizedRange && !normalizedItem.includes(normalizedRange) && !normalizedRange.includes(normalizedItem)) {
+      return false;
+    }
   }
   if (range.pregnancy != null && range.pregnancy !== Boolean(pregnancy)) return false;
   return true;
