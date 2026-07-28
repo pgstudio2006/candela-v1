@@ -11,10 +11,7 @@ import { useToast } from "@/components/ui/toast-provider";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 import { Download, MessageCircle, Printer, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useSession } from "@/components/candela/session-provider";
 
-const PATAUDI_BRANCH_ID = "branch_pataudi";
-const PAYMENT_MODES = ["cash", "card", "upi", "netbanking", "cheque", "wallet", "other", "due", "pending", "advance"];
 const OUTSTANDING_PAYMENT_MODES = ["cash", "card", "upi", "netbanking", "cheque", "other"];
 const PENDING_MODES = new Set(["due", "pending"]);
 
@@ -32,8 +29,6 @@ export function IpdFinalBillModal({
   onGenerated: () => void;
 }) {
   const { toast } = useToast();
-  const { session } = useSession();
-  const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
   const [discountType, setDiscountType] = useState<"fixed" | "percent">("fixed");
   const [discountInput, setDiscountInput] = useState(0);
   const [preview, setPreview] = useState<{
@@ -97,23 +92,11 @@ export function IpdFinalBillModal({
     if (splitsInitialized || !preview) return;
     const wallet = admission.walletBalance ?? 0;
     const net = preview.total;
-    if (isPataudi) {
-      const outstanding = Math.max(0, net - Math.min(wallet, net));
-      setSplits(outstanding > 0 ? [{ mode: "cash", amount: String(outstanding) }] : []);
-    } else {
-      if (wallet > 0) {
-        const advanceAmount = Math.min(wallet, net);
-        const rest = Math.max(0, net - wallet);
-        const base = [{ mode: "advance", amount: String(advanceAmount) }];
-        if (rest > 0) base.push({ mode: "cash", amount: String(rest) });
-        setSplits(base);
-      } else {
-        setSplits([{ mode: "cash", amount: String(net) }]);
-      }
-    }
+    const outstanding = Math.max(0, net - Math.min(wallet, net));
+    setSplits(outstanding > 0 ? [{ mode: "cash", amount: String(outstanding) }] : []);
     setSplitsInitialized(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preview, isPataudi, admission.walletBalance]);
+  }, [preview, admission.walletBalance]);
 
   const net = preview?.total ?? 0;
   const wallet = admission.walletBalance ?? 0;
@@ -138,58 +121,39 @@ export function IpdFinalBillModal({
 
   const { amountPaid, balanceDue, refundAmount, appliedCredit, advanceAdjusted, paymentStatus, settlementType } =
     useMemo(() => {
-      if (isPataudi) {
-        const adjusted = Math.min(wallet, net);
-        const outstandingAfterAdvance = Math.max(0, net - adjusted);
-        const extraPaid = Math.min(
-          parsedSplits
-            .filter((p) => p.mode !== "advance" && !PENDING_MODES.has(p.mode))
-            .reduce((s, p) => s + p.amount, 0),
-          outstandingAfterAdvance,
-        );
-        const paid = adjusted + extraPaid;
-        const outstanding = Math.max(0, net - paid);
-        const refund = Math.max(0, wallet - adjusted);
-        let paymentStatus = "Pending";
-        let settlementType = "Due";
-        if (refund > 0) {
-          paymentStatus = "Refund";
-          settlementType = "Refund Pending";
-        } else if (outstanding === 0) {
-          paymentStatus = "Paid";
-          settlementType = adjusted > 0 ? "Advance Settlement" : extraPaid > 0 ? "Cash Settlement" : "No Payment";
-        } else if (adjusted > 0 || extraPaid > 0) {
-          paymentStatus = "Partial";
-          settlementType = adjusted > 0 ? "Advance Settlement" : "Partial Payment";
-        }
-        return {
-          amountPaid: paid,
-          balanceDue: outstanding,
-          refundAmount: refund,
-          appliedCredit: adjusted,
-          advanceAdjusted: adjusted,
-          paymentStatus,
-          settlementType,
-        };
+      const adjusted = Math.min(wallet, net);
+      const outstandingAfterAdvance = Math.max(0, net - adjusted);
+      const extraPaid = Math.min(
+        parsedSplits
+          .filter((p) => !PENDING_MODES.has(p.mode))
+          .reduce((s, p) => s + p.amount, 0),
+        outstandingAfterAdvance,
+      );
+      const paid = adjusted + extraPaid;
+      const outstanding = Math.max(0, net - paid);
+      const refund = Math.max(0, wallet - adjusted);
+      let paymentStatus = "Pending";
+      let settlementType = "Due";
+      if (refund > 0) {
+        paymentStatus = "Refund";
+        settlementType = "Refund Pending";
+      } else if (outstanding === 0) {
+        paymentStatus = "Paid";
+        settlementType = adjusted > 0 ? "Advance Settlement" : extraPaid > 0 ? "Cash Settlement" : "No Payment";
+      } else if (adjusted > 0 || extraPaid > 0) {
+        paymentStatus = "Partial";
+        settlementType = adjusted > 0 ? "Advance Settlement" : "Partial Payment";
       }
-      const actual = parsedSplits.filter((p) => !PENDING_MODES.has(p.mode));
-      const advanceSplit = actual.find((p) => p.mode === "advance");
-      const nonAdvance = actual.filter((p) => p.mode !== "advance").reduce((s, p) => s + p.amount, 0);
-      const walletUsed = advanceSplit ? Math.min(advanceSplit.amount, wallet) : Math.min(wallet, Math.max(0, net - nonAdvance));
-      const paid = nonAdvance + walletUsed;
-      const balance = Math.max(0, net - paid);
-      const refund = Math.max(0, wallet - walletUsed);
-      return { amountPaid: paid, balanceDue: balance, refundAmount: refund, appliedCredit: walletUsed, advanceAdjusted: 0, paymentStatus: "", settlementType: "" };
-    }, [isPataudi, net, wallet, parsedSplits, totalAdvanceReceived, totalRefunded, advanceAlreadyUsed]);
-
-  const applyAvailableCredit = () => {
-    const creditToApply = Math.min(wallet, net);
-    const remaining = Math.max(0, net - creditToApply);
-    setSplits([
-      { mode: "advance", amount: String(creditToApply) },
-      ...(remaining > 0 ? [{ mode: "cash", amount: String(remaining) }] : []),
-    ]);
-  };
+      return {
+        amountPaid: paid,
+        balanceDue: outstanding,
+        refundAmount: refund,
+        appliedCredit: adjusted,
+        advanceAdjusted: adjusted,
+        paymentStatus,
+        settlementType,
+      };
+    }, [net, wallet, parsedSplits, totalAdvanceReceived, totalRefunded, advanceAlreadyUsed]);
 
   const addSplit = () => setSplits((prev) => [...prev, { mode: "cash", amount: "" }]);
   const removeSplit = (i: number) => setSplits((prev) => prev.filter((_, idx) => idx !== i));
@@ -349,60 +313,34 @@ export function IpdFinalBillModal({
               </div>
             </div>
 
-            {isPataudi && (
-              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-[12px]">
-                <p className="font-semibold text-blue-900">Settlement summary</p>
-                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
-                  <span className="text-blue-800">Final bill amount</span>
-                  <span className="text-right tabular-nums">{fmt(net)}</span>
-                  <span className="text-blue-800">Total advance received</span>
-                  <span className="text-right tabular-nums">{fmt(totalAdvanceReceived)}</span>
-                  <span className="text-blue-800">Advance already used</span>
-                  <span className="text-right tabular-nums">{fmt(advanceAlreadyUsed)}</span>
-                  <span className="text-blue-800">Available advance</span>
-                  <span className="text-right tabular-nums">{fmt(wallet)}</span>
-                  <span className="text-blue-800">Advance adjusted</span>
-                  <span className="text-right tabular-nums">{fmt(advanceAdjusted)}</span>
-                  <span className="text-blue-800">Outstanding amount</span>
-                  <span className="text-right tabular-nums">{fmt(balanceDue)}</span>
-                  <span className="text-blue-800">Refund amount</span>
-                  <span className="text-right tabular-nums">{fmt(refundAmount)}</span>
-                </div>
-                <div className="mt-3 flex items-center justify-between border-t border-blue-200 pt-2">
-                  <span className="font-medium text-blue-900">Status: {paymentStatus}</span>
-                  <span className="text-blue-800">{settlementType}</span>
-                </div>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-[12px]">
+              <p className="font-semibold text-blue-900">Settlement summary</p>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                <span className="text-blue-800">Final bill amount</span>
+                <span className="text-right tabular-nums">{fmt(net)}</span>
+                <span className="text-blue-800">Total advance received</span>
+                <span className="text-right tabular-nums">{fmt(totalAdvanceReceived)}</span>
+                <span className="text-blue-800">Advance already used</span>
+                <span className="text-right tabular-nums">{fmt(advanceAlreadyUsed)}</span>
+                <span className="text-blue-800">Available advance</span>
+                <span className="text-right tabular-nums">{fmt(wallet)}</span>
+                <span className="text-blue-800">Advance adjusted</span>
+                <span className="text-right tabular-nums">{fmt(advanceAdjusted)}</span>
+                <span className="text-blue-800">Outstanding amount</span>
+                <span className="text-right tabular-nums">{fmt(balanceDue)}</span>
+                <span className="text-blue-800">Refund amount</span>
+                <span className="text-right tabular-nums">{fmt(refundAmount)}</span>
               </div>
-            )}
-
-            {!isPataudi && wallet > 0 && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-[12px]">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-emerald-900">IPD advance available: {fmt(wallet)}</p>
-                    <p className="mt-0.5 text-emerald-800">
-                      {appliedCredit > 0
-                        ? `${fmt(appliedCredit)} is deducted from this bill.`
-                        : "Apply this credit to reduce the amount collected now."}
-                    </p>
-                  </div>
-                  <AttioButton
-                    variant={appliedCredit > 0 ? "secondary" : "primary"}
-                    className="!h-8 !text-[11px]"
-                    onClick={applyAvailableCredit}
-                  >
-                    {appliedCredit > 0 ? `Applied ${fmt(appliedCredit)}` : `Apply ${fmt(Math.min(wallet, net))}`}
-                  </AttioButton>
-                </div>
+              <div className="mt-3 flex items-center justify-between border-t border-blue-200 pt-2">
+                <span className="font-medium text-blue-900">Status: {paymentStatus}</span>
+                <span className="text-blue-800">{settlementType}</span>
               </div>
-            )}
+            </div>
 
             <div className="space-y-2">
-              <label className="text-[11px] text-[var(--attio-text-tertiary)]">
-                {isPataudi ? "Payment modes for outstanding balance" : "Payment splits"}
-              </label>
-              {splits.length === 0 && !isPataudi ? (
-                <p className="text-[12px] text-[var(--attio-text-tertiary)]">No payment splits configured.</p>
+              <label className="text-[11px] text-[var(--attio-text-tertiary)]">Payment modes for outstanding balance</label>
+              {splits.length === 0 ? (
+                <p className="text-[12px] text-[var(--attio-text-tertiary)]">No additional payment modes needed — the bill is fully covered by the advance.</p>
               ) : (
                 splits.map((s, i) => (
                   <div key={i} className="flex items-center gap-2">
@@ -411,7 +349,7 @@ export function IpdFinalBillModal({
                       onChange={(e) => updateSplit(i, { mode: e.target.value })}
                       className="h-8 rounded-md border px-2 text-[12px] capitalize"
                     >
-                      {(isPataudi ? OUTSTANDING_PAYMENT_MODES : PAYMENT_MODES).map((m) => (
+                      {OUTSTANDING_PAYMENT_MODES.map((m) => (
                         <option key={m} value={m}>{m}</option>
                       ))}
                     </select>
@@ -424,7 +362,7 @@ export function IpdFinalBillModal({
                       placeholder="Amount"
                       className="h-8 flex-1 rounded-md border px-2 text-[12px]"
                     />
-                    {splits.length > (isPataudi ? 0 : 1) && (
+                    {splits.length > 0 && (
                       <button type="button" onClick={() => removeSplit(i)} className="text-red-500 hover:text-red-700">
                         <X className="size-3.5" />
                       </button>

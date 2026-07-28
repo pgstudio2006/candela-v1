@@ -307,16 +307,7 @@ export async function getIpdAdmission(ctx: ServerContext, id: string) {
     createdAt: v.createdAt.toISOString(),
   }));
 
-  const receivedTotal = advancePayments
-    .filter((a) => a.status === "received")
-    .reduce((s, a) => s + a.receivedAmount, 0);
-  const issuedRefundTotal = refundVouchers
-    .filter((v) => v.status === "issued")
-    .reduce((s, v) => s + v.amount, 0);
-  const advanceUsed = finalInvoice
-    ? Number((finalInvoice.payload as Record<string, unknown> | null)?.advanceUsed ?? 0)
-    : 0;
-  const walletBalance = Math.max(0, receivedTotal - issuedRefundTotal - advanceUsed);
+  const walletBalance = (await getIpdWalletBalance(ctx, id)).balance;
 
   const detail: IpdAdmissionDetail = {
     id: admission.id,

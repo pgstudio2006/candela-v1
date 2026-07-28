@@ -20,7 +20,6 @@ import { getIpdAdmissionAction } from "@/app/actions/ipd-actions";
 import { IpdAdmissionWorkspace } from "@/components/frontdesk/ipd-admission-workspace";
 import { LabOrderButton } from "@/components/lab/lab-order-modal";
 
-const PATAUDI_BRANCH_ID = "branch_pataudi";
 type BillingMode = "opd" | "ipd";
 
 export type BillingWorkspaceProps = {
@@ -40,7 +39,6 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
   const params = useSearchParams();
   const visitParam = params.get("visit") ?? undefined;
   const { session } = useSession();
-  const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
   const {
     processBilling,
     processCounselBilling,
@@ -223,7 +221,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
           </div>
         )}
 
-        <div className={cn("grid gap-6", isPataudi && mode === "ipd" && ipdAdmission ? "grid-cols-1" : "lg:grid-cols-[1fr_280px]")}>
+        <div className={cn("grid gap-6", mode === "ipd" && ipdAdmission ? "grid-cols-1" : "lg:grid-cols-[1fr_280px]")}>
           <div>
             {activeVisit && counselForVisit ? (
               <Panel title={`Package closure · ${activePatient?.name ?? "Patient"}`}>
@@ -238,7 +236,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
                   }}
                 />
               </Panel>
-            ) : isPataudi && mode === "ipd" && ipdAdmission ? (
+            ) : mode === "ipd" && ipdAdmission ? (
               <IpdAdmissionWorkspace admission={ipdAdmission} />
             ) : (
               <OpdBillingForm
@@ -355,7 +353,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
               </Panel>
             )}
 
-            {!(isPataudi && mode === "ipd" && ipdAdmission) && (
+            {!(mode === "ipd" && ipdAdmission) && (
               <Panel title="Routing guide">
                 <p className="text-[13px] text-[var(--attio-text-secondary)]">{routingGuideText}</p>
                 <Link
