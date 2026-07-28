@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import {
   addIpdCartItemAction,
+  previewIpdFinalBillAction,
   removeIpdCartItemAction,
   updateIpdCartItemAction,
 } from "@/app/actions/ipd-actions";
@@ -21,6 +22,10 @@ import { useSession } from "@/components/candela/session-provider";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 
 const PATAUDI_BRANCH_ID = "branch_pataudi";
+
+function fmt(n: number) {
+  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 type IpdServiceCartPanelProps = {
   admission: IpdAdmissionDetail;
@@ -39,11 +44,38 @@ export function IpdServiceCartPanel({ admission, onChange, onGenerateFinalBill }
   const [packageSearch, setPackageSearch] = useState("");
   const [cart, setCart] = useState(admission.cart);
   const [processing, setProcessing] = useState(false);
+  const [preview, setPreview] = useState<{
+    subtotal: number;
+    discount: number;
+    taxableSubtotal: number;
+    cgstTotal: number;
+    sgstTotal: number;
+    igstTotal: number;
+    taxAmount: number;
+    total: number;
+  } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     setCart(admission.cart);
   }, [admission.cart]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingPreview(true);
+    previewIpdFinalBillAction(admission.id, 0)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data) setPreview(res.data as NonNullable<typeof preview>);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPreview(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [admission.id, cart]);
 
   useEffect(() => {
     let cancelled = false;
@@ -275,20 +307,37 @@ export function IpdServiceCartPanel({ admission, onChange, onGenerateFinalBill }
                     </div>
                   ))}
                 </div>
-                <div className="flex items-center justify-between text-[13px] font-medium">
-                  <span>Cart total (excl. GST)</span>
-                  <span>₹{cartTotal.toLocaleString("en-IN")}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-md bg-[var(--attio-surface)] px-3 py-2 text-[12px]">
-                  <span className="text-[var(--attio-text-secondary)]">
-                    {isPataudi ? "Available advance" : "Advance wallet balance"}
-                  </span>
-                  <span className="font-medium tabular-nums">₹{(admission.walletBalance ?? 0).toLocaleString("en-IN")}</span>
+                <div className="rounded-md bg-[var(--attio-surface)] p-3 text-[12px]">
+                  <p className="font-medium text-[var(--attio-text-secondary)]">Billing preview</p>
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                    <span className="text-[var(--attio-text-tertiary)]">Subtotal</span>
+                    <span className="text-right tabular-nums">{fmt(preview?.subtotal ?? cartTotal)}</span>
+                    <span className="text-[var(--attio-text-tertiary)]">GST</span>
+                    <span className="text-right tabular-nums">{fmt(preview?.taxAmount ?? 0)}</span>
+                    <span className="text-[var(--attio-text-tertiary)]">Net bill</span>
+                    <span className="text-right tabular-nums font-medium">{fmt(preview?.total ?? cartTotal)}</span>
+                    <span className="text-[var(--attio-text-tertiary)]">{isPataudi ? "Available advance" : "Wallet balance"}</span>
+                    <span className="text-right tabular-nums">{fmt(admission.walletBalance ?? 0)}</span>
+                    <span className="text-[var(--attio-text-tertiary)]">
+                      {isPataudi ? "Outstanding / due" : "Due after advance"}
+                    </span>
+                    <span className="text-right tabular-nums">
+                      {fmt(Math.max(0, (preview?.total ?? cartTotal) - (admission.walletBalance ?? 0)))}
+                    </span>
+                    {isPataudi && (admission.walletBalance ?? 0) > (preview?.total ?? cartTotal) && (
+                      <>
+                        <span className="text-[var(--attio-text-tertiary)]">Refund due</span>
+                        <span className="text-right tabular-nums text-emerald-600">
+                          {fmt(Math.max(0, (admission.walletBalance ?? 0) - (preview?.total ?? cartTotal)))}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <AttioButton
                   variant="primary"
                   className="w-full"
-                  disabled={processing || !cart.length || !admission.visitId}
+                  disabled={processing || !cart.length || !admission.visitId || loadingPreview}
                   onClick={goToBilling}
                 >
                   {isPataudi ? "Generate final bill" : "Generate final bill & collect payment"}

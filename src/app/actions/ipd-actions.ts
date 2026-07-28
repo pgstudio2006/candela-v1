@@ -362,7 +362,20 @@ export async function directDischargeIpdAdmissionAction(id: string): Promise<Act
 export async function previewIpdFinalBillAction(
   admissionId: string,
   discount = 0,
-): Promise<ActionResult<{ subtotal: number; discount: number; taxAmount: number; total: number }>> {
+): Promise<
+  ActionResult<{
+    subtotal: number;
+    discount: number;
+    taxableSubtotal: number;
+    cgstTotal: number;
+    sgstTotal: number;
+    igstTotal: number;
+    taxAmount: number;
+    total: number;
+    taxRate: number;
+    taxMode: "exempt" | "cgst_sgst" | "igst";
+  }>
+> {
   return runAction(async () => {
     const ctx = await requireModule("frontdesk");
     return previewIpdFinalBill(ctx, admissionId, discount);

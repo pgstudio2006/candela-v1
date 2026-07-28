@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  approveIpdRefundVoucherAction,
   createIpdRefundVoucherAction,
   directDischargeIpdAdmissionAction,
   issueIpdRefundVoucherAction,
@@ -9,7 +8,7 @@ import {
 import { AttioButton, DataTable, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useToast } from "@/components/ui/toast-provider";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
-import { Check, CheckCircle, Plus, Zap } from "lucide-react";
+import { CheckCircle, Plus, Zap } from "lucide-react";
 import { useState } from "react";
 
 const REFUND_MODES = ["cash", "card", "upi", "netbanking", "cheque"];
@@ -37,43 +36,39 @@ export function IpdRefundPanel({
     if (n <= 0) return toast("Enter a positive refund amount", "error");
     setSaving(true);
     try {
-      const res = await createIpdRefundVoucherAction(admission.id, {
+      const createRes = await createIpdRefundVoucherAction(admission.id, {
         amount: n,
         mode,
         notes: notes.trim() || undefined,
         invoiceId: admission.finalInvoiceId || undefined,
       });
-      if (!res.ok) throw new Error(res.error);
-      if (!res.data) throw new Error("Failed to create refund voucher");
-      toast("Refund voucher created", "success");
+      if (!createRes.ok) throw new Error(createRes.error);
+      if (!createRes.data) throw new Error("Failed to create refund voucher");
+
+      const issueRes = await issueIpdRefundVoucherAction(createRes.data.id, {
+        referenceNo: referenceNo.trim() || undefined,
+      });
+      if (!issueRes.ok) throw new Error(issueRes.error);
+
+      toast("Refund issued", "success");
       setAmount("");
       setNotes("");
+      setReferenceNo("");
       onChange?.();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to create refund voucher", "error");
+      toast(err instanceof Error ? err.message : "Failed to issue refund", "error");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleApprove = async (id: string) => {
-    const res = await approveIpdRefundVoucherAction(id);
-    if (!res.ok) {
-      toast(res.error, "error");
-      return;
-    }
-    toast("Refund approved", "success");
-    onChange?.();
-  };
-
   const handleIssue = async (id: string) => {
-    const res = await issueIpdRefundVoucherAction(id, { referenceNo: referenceNo.trim() || undefined });
+    const res = await issueIpdRefundVoucherAction(id);
     if (!res.ok) {
       toast(res.error, "error");
       return;
     }
     toast("Refund issued", "success");
-    setReferenceNo("");
     onChange?.();
   };
 
@@ -103,12 +98,7 @@ export function IpdRefundPanel({
     status: <StatusBadge label={v.status} variant={v.status === "issued" ? "success" : v.status === "approved" ? "info" : v.status === "pending" ? "warning" : "danger"} />,
     actions: (
       <div className="flex items-center justify-end gap-2">
-        {v.status === "pending" && (
-          <AttioButton variant="secondary" className="!h-6 !px-2 !text-[11px]" onClick={() => void handleApprove(v.id)}>
-            <Check className="size-3" /> Approve
-          </AttioButton>
-        )}
-        {v.status === "approved" && (
+        {v.status !== "issued" && (
           <AttioButton variant="secondary" className="!h-6 !px-2 !text-[11px]" onClick={() => void handleIssue(v.id)}>
             <CheckCircle className="size-3" /> Issue
           </AttioButton>
@@ -162,7 +152,7 @@ export function IpdRefundPanel({
           </div>
           <AttioButton onClick={() => void handleCreate()} disabled={saving}>
             <Plus className="size-3.5" />
-            {saving ? "Creating..." : "Create refund voucher"}
+            {saving ? "Issuing..." : "Issue refund"}
           </AttioButton>
         </div>
       </Panel>

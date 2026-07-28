@@ -663,7 +663,8 @@ export async function issueIpdRefundVoucher(
     where: { id: voucherId, tenantId: scope.tenantId, branchId: scope.branchId },
   });
   if (!voucher) throw new ServerActionError("NOT_FOUND", "Refund voucher not found.");
-  if (voucher.status !== "approved") throw new ServerActionError("VALIDATION", "Voucher must be approved before issue.");
+  if (voucher.status === "issued") throw new ServerActionError("VALIDATION", "Voucher has already been issued.");
+  if (voucher.status !== "pending" && voucher.status !== "approved") throw new ServerActionError("VALIDATION", "Voucher cannot be issued.");
 
   const wallet = await getIpdWalletBalance(ctx, voucher.admissionId);
   if (Number(voucher.amount) > wallet.balance) {
@@ -1148,8 +1149,14 @@ export async function previewIpdFinalBill(
   return {
     subtotal,
     discount,
+    taxableSubtotal: Number(gstInvoice.taxableSubtotal),
+    cgstTotal: Number(gstInvoice.cgstTotal),
+    sgstTotal: Number(gstInvoice.sgstTotal),
+    igstTotal: Number(gstInvoice.igstTotal),
     taxAmount: Number(gstInvoice.taxTotal),
     total: Number(gstInvoice.grandTotal),
+    taxRate: Number(gstInvoice.settings.gstRatePercent),
+    taxMode: gstInvoice.settings.taxMode,
   };
 }
 
@@ -1431,10 +1438,23 @@ export async function generateIpdFinalBill(
   let nonPendingForInvoice: { mode: string; amount: number }[] = [];
   let invoiceMode = "advance";
 
+  const pendingModes = new Set(["due", "pending"]);
+
   if (isPataudi) {
-    // Credit-only IPD final bill for Pataudi: auto adjust all available advance.
+    // Credit-based IPD final bill for Pataudi: auto-apply available advance, then
+    // accept any additional payment modes provided by the front desk for the outstanding balance.
     walletUsed = Math.min(wallet.balance, net);
-    amountPaid = walletUsed;
+    const outstandingAfterAdvance = Math.max(0, net - walletUsed);
+
+    const pataudiProvided = (input.paymentSplits ?? []).filter(
+      (p) => p.amount > 0 && !pendingModes.has(p.mode) && p.mode !== "advance",
+    );
+    const extraPaid = Math.min(
+      pataudiProvided.reduce((s, p) => s + p.amount, 0),
+      outstandingAfterAdvance,
+    );
+
+    amountPaid = walletUsed + extraPaid;
     balance = Math.max(0, net - amountPaid);
     refund = Math.max(0, wallet.balance - walletUsed);
 
@@ -1443,10 +1463,10 @@ export async function generateIpdFinalBill(
       settlementType = "Refund Pending";
     } else if (balance === 0) {
       paymentStatus = "Paid";
-      settlementType = walletUsed > 0 ? "Advance Settlement" : "No Payment";
-    } else if (walletUsed > 0) {
+      settlementType = walletUsed > 0 ? "Advance Settlement" : extraPaid > 0 ? "Cash Settlement" : "No Payment";
+    } else if (walletUsed > 0 || extraPaid > 0) {
       paymentStatus = "Partial";
-      settlementType = "Advance Settlement";
+      settlementType = walletUsed > 0 ? "Advance Settlement" : "Due";
     } else {
       paymentStatus = "Pending";
       settlementType = "Due";
@@ -1454,11 +1474,22 @@ export async function generateIpdFinalBill(
 
     const actualSplits: { mode: string; amount: number }[] = [];
     if (walletUsed > 0) actualSplits.push({ mode: "advance", amount: walletUsed });
+    if (extraPaid > 0) {
+      // Only include the portion of provided splits that actually fits into the outstanding balance.
+      let remaining = extraPaid;
+      for (const split of pataudiProvided) {
+        const take = Math.min(split.amount, remaining);
+        if (take > 0) {
+          actualSplits.push({ mode: split.mode, amount: take });
+          remaining -= take;
+        }
+      }
+    }
     const pendingSplits: { mode: string; amount: number }[] = balance > 0 ? [{ mode: "due", amount: balance }] : [];
 
     allSplits = [...actualSplits, ...pendingSplits];
     nonPendingForInvoice = actualSplits;
-    invoiceMode = actualSplits.length === 1 && pendingSplits.length === 0 ? "advance" : "split";
+    invoiceMode = nonPendingForInvoice.length === 1 ? nonPendingForInvoice[0].mode : "split";
   } else {
     const pendingModes = new Set(["due", "pending"]);
     const providedSplits = input.paymentSplits?.length ? input.paymentSplits : [];

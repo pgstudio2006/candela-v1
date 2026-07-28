@@ -15,6 +15,7 @@ import { useSession } from "@/components/candela/session-provider";
 
 const PATAUDI_BRANCH_ID = "branch_pataudi";
 const PAYMENT_MODES = ["cash", "card", "upi", "netbanking", "cheque", "wallet", "other", "due", "pending", "advance"];
+const OUTSTANDING_PAYMENT_MODES = ["cash", "card", "upi", "netbanking", "cheque", "other"];
 const PENDING_MODES = new Set(["due", "pending"]);
 
 function fmt(n: number) {
@@ -33,8 +34,20 @@ export function IpdFinalBillModal({
   const { toast } = useToast();
   const { session } = useSession();
   const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
-  const [discount, setDiscount] = useState(0);
-  const [preview, setPreview] = useState<{ subtotal: number; discount: number; taxAmount: number; total: number } | null>(null);
+  const [discountType, setDiscountType] = useState<"fixed" | "percent">("fixed");
+  const [discountInput, setDiscountInput] = useState(0);
+  const [preview, setPreview] = useState<{
+    subtotal: number;
+    discount: number;
+    taxableSubtotal: number;
+    cgstTotal: number;
+    sgstTotal: number;
+    igstTotal: number;
+    taxAmount: number;
+    total: number;
+    taxRate: number;
+    taxMode: "exempt" | "cgst_sgst" | "igst";
+  } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [splits, setSplits] = useState<{ mode: string; amount: string }[]>([]);
@@ -43,9 +56,21 @@ export function IpdFinalBillModal({
   const [downloading, setDownloading] = useState(false);
   const [sending, setSending] = useState(false);
 
+  const cartSubtotal = useMemo(
+    () => admission.cart.reduce((s, item) => s + item.amount * item.quantity, 0),
+    [admission.cart],
+  );
+
+  const discountAmount = useMemo(() => {
+    if (discountType === "percent") {
+      return Math.round(cartSubtotal * (discountInput / 100) * 100) / 100;
+    }
+    return discountInput;
+  }, [discountType, discountInput, cartSubtotal]);
+
   const loadPreview = async () => {
     setLoadingPreview(true);
-    const res = await previewIpdFinalBillAction(admission.id, discount);
+    const res = await previewIpdFinalBillAction(admission.id, discountAmount);
     setLoadingPreview(false);
     if (!res.ok) {
       toast(res.error, "error");
@@ -55,12 +80,27 @@ export function IpdFinalBillModal({
       toast("Failed to preview final bill", "error");
       return;
     }
-    const data = res.data;
-    setPreview(data);
+    setPreview(res.data as NonNullable<typeof preview>);
+  };
 
-    if (!splitsInitialized && !isPataudi) {
-      const wallet = admission.walletBalance ?? 0;
-      const net = data.total;
+  useEffect(() => {
+    setSplitsInitialized(false);
+    setSplits([]);
+  }, [admission.id]);
+
+  useEffect(() => {
+    void loadPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discountInput, discountType, admission.id]);
+
+  useEffect(() => {
+    if (splitsInitialized || !preview) return;
+    const wallet = admission.walletBalance ?? 0;
+    const net = preview.total;
+    if (isPataudi) {
+      const outstanding = Math.max(0, net - Math.min(wallet, net));
+      setSplits(outstanding > 0 ? [{ mode: "cash", amount: String(outstanding) }] : []);
+    } else {
       if (wallet > 0) {
         const advanceAmount = Math.min(wallet, net);
         const rest = Math.max(0, net - wallet);
@@ -70,14 +110,10 @@ export function IpdFinalBillModal({
       } else {
         setSplits([{ mode: "cash", amount: String(net) }]);
       }
-      setSplitsInitialized(true);
     }
-  };
-
-  useEffect(() => {
-    void loadPreview();
+    setSplitsInitialized(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discount, admission.id]);
+  }, [preview, isPataudi, admission.walletBalance]);
 
   const net = preview?.total ?? 0;
   const wallet = admission.walletBalance ?? 0;
@@ -95,11 +131,24 @@ export function IpdFinalBillModal({
     [totalAdvanceReceived, totalRefunded, wallet],
   );
 
+  const parsedSplits = useMemo(
+    () => splits.map((s) => ({ mode: s.mode, amount: Number(s.amount) || 0 })),
+    [splits],
+  );
+
   const { amountPaid, balanceDue, refundAmount, appliedCredit, advanceAdjusted, paymentStatus, settlementType } =
     useMemo(() => {
       if (isPataudi) {
         const adjusted = Math.min(wallet, net);
-        const outstanding = Math.max(0, net - adjusted);
+        const outstandingAfterAdvance = Math.max(0, net - adjusted);
+        const extraPaid = Math.min(
+          parsedSplits
+            .filter((p) => p.mode !== "advance" && !PENDING_MODES.has(p.mode))
+            .reduce((s, p) => s + p.amount, 0),
+          outstandingAfterAdvance,
+        );
+        const paid = adjusted + extraPaid;
+        const outstanding = Math.max(0, net - paid);
         const refund = Math.max(0, wallet - adjusted);
         let paymentStatus = "Pending";
         let settlementType = "Due";
@@ -108,13 +157,13 @@ export function IpdFinalBillModal({
           settlementType = "Refund Pending";
         } else if (outstanding === 0) {
           paymentStatus = "Paid";
-          settlementType = adjusted > 0 ? "Advance Settlement" : "No Payment";
-        } else if (adjusted > 0) {
+          settlementType = adjusted > 0 ? "Advance Settlement" : extraPaid > 0 ? "Cash Settlement" : "No Payment";
+        } else if (adjusted > 0 || extraPaid > 0) {
           paymentStatus = "Partial";
-          settlementType = "Advance Settlement";
+          settlementType = adjusted > 0 ? "Advance Settlement" : "Partial Payment";
         }
         return {
-          amountPaid: adjusted,
+          amountPaid: paid,
           balanceDue: outstanding,
           refundAmount: refund,
           appliedCredit: adjusted,
@@ -123,8 +172,7 @@ export function IpdFinalBillModal({
           settlementType,
         };
       }
-      const parsed = splits.map((s) => ({ mode: s.mode, amount: Number(s.amount) || 0 }));
-      const actual = parsed.filter((p) => !PENDING_MODES.has(p.mode));
+      const actual = parsedSplits.filter((p) => !PENDING_MODES.has(p.mode));
       const advanceSplit = actual.find((p) => p.mode === "advance");
       const nonAdvance = actual.filter((p) => p.mode !== "advance").reduce((s, p) => s + p.amount, 0);
       const walletUsed = advanceSplit ? Math.min(advanceSplit.amount, wallet) : Math.min(wallet, Math.max(0, net - nonAdvance));
@@ -132,7 +180,7 @@ export function IpdFinalBillModal({
       const balance = Math.max(0, net - paid);
       const refund = Math.max(0, wallet - walletUsed);
       return { amountPaid: paid, balanceDue: balance, refundAmount: refund, appliedCredit: walletUsed, advanceAdjusted: 0, paymentStatus: "", settlementType: "" };
-    }, [isPataudi, net, wallet, splits, totalAdvanceReceived, totalRefunded, advanceAlreadyUsed]);
+    }, [isPataudi, net, wallet, parsedSplits, totalAdvanceReceived, totalRefunded, advanceAlreadyUsed]);
 
   const applyAvailableCredit = () => {
     const creditToApply = Math.min(wallet, net);
@@ -152,14 +200,11 @@ export function IpdFinalBillModal({
     if (!preview) return;
     setSaving(true);
     try {
-      const res = isPataudi
-        ? await generateIpdFinalBillAction(admission.id, { discount })
-        : await generateIpdFinalBillAction(admission.id, {
-            discount,
-            paymentSplits: splits
-              .map((s) => ({ mode: s.mode, amount: Number(s.amount) || 0 }))
-              .filter((s) => s.amount > 0),
-          });
+      const paymentSplits = parsedSplits.filter((p) => p.amount > 0);
+      const res = await generateIpdFinalBillAction(admission.id, {
+        discount: discountAmount,
+        paymentSplits,
+      });
       if (!res.ok) throw new Error(res.error);
       const data = res.data;
       setGenerated({ invoiceId: data.invoiceId, invoiceNumber: data.invoiceNumber });
@@ -252,19 +297,52 @@ export function IpdFinalBillModal({
             <DataTable columns={columns} rows={rows} />
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="text-[11px] text-[var(--attio-text-tertiary)]">Discount amount</label>
-                <input
-                  type="number"
-                  value={discount}
-                  min={0}
-                  onChange={(e) => setDiscount(Number(e.target.value))}
-                  className="mt-1 h-8 w-full rounded-md border px-2 text-[12px]"
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[11px] text-[var(--attio-text-tertiary)]">Discount type</label>
+                  <select
+                    value={discountType}
+                    onChange={(e) => setDiscountType(e.target.value as "fixed" | "percent")}
+                    className="mt-1 h-8 w-full rounded-md border bg-white px-2 text-[12px]"
+                  >
+                    <option value="fixed">Fixed amount</option>
+                    <option value="percent">Percentage (%)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-[var(--attio-text-tertiary)]">
+                    {discountType === "percent" ? "Discount %" : "Discount amount"}
+                  </label>
+                  <input
+                    type="number"
+                    value={discountInput}
+                    min={0}
+                    step={0.01}
+                    onChange={(e) => setDiscountInput(Number(e.target.value))}
+                    className="mt-1 h-8 w-full rounded-md border px-2 text-[12px]"
+                  />
+                </div>
+                {discountType === "percent" && discountAmount > 0 && (
+                  <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                    Discount amount: {fmt(discountAmount)}
+                  </p>
+                )}
               </div>
               <div className="rounded-md bg-[var(--attio-surface)] p-3 text-[12px]">
                 <p className="text-[var(--attio-text-tertiary)]">Preview</p>
                 <p>Subtotal: {fmt(preview?.subtotal ?? 0)}</p>
+                <p>Discount: {fmt(discountAmount)}</p>
+                <p>Taxable: {fmt(preview?.taxableSubtotal ?? cartSubtotal - discountAmount)}</p>
+                {preview && preview.taxMode === "exempt" ? (
+                  <p>Tax: Exempt</p>
+                ) : preview && preview.taxMode === "igst" ? (
+                  <p>IGST ({preview.taxRate}%): {fmt(preview.igstTotal)}</p>
+                ) : (
+                  <>
+                    <p>CGST ({(preview?.taxRate ?? 0) / 2}%): {fmt(preview?.cgstTotal ?? 0)}</p>
+                    <p>SGST ({(preview?.taxRate ?? 0) / 2}%): {fmt(preview?.sgstTotal ?? 0)}</p>
+                  </>
+                )}
                 <p>Tax: {fmt(preview?.taxAmount ?? 0)}</p>
                 <p className="font-medium">Net: {fmt(net)}</p>
                 <p>Wallet available: {fmt(wallet)}</p>
@@ -319,17 +397,21 @@ export function IpdFinalBillModal({
               </div>
             )}
 
-            {!isPataudi && (
-              <div className="space-y-2">
-                <label className="text-[11px] text-[var(--attio-text-tertiary)]">Payment splits</label>
-                {splits.map((s, i) => (
+            <div className="space-y-2">
+              <label className="text-[11px] text-[var(--attio-text-tertiary)]">
+                {isPataudi ? "Payment modes for outstanding balance" : "Payment splits"}
+              </label>
+              {splits.length === 0 && !isPataudi ? (
+                <p className="text-[12px] text-[var(--attio-text-tertiary)]">No payment splits configured.</p>
+              ) : (
+                splits.map((s, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <select
                       value={s.mode}
                       onChange={(e) => updateSplit(i, { mode: e.target.value })}
                       className="h-8 rounded-md border px-2 text-[12px] capitalize"
                     >
-                      {PAYMENT_MODES.map((m) => (
+                      {(isPataudi ? OUTSTANDING_PAYMENT_MODES : PAYMENT_MODES).map((m) => (
                         <option key={m} value={m}>{m}</option>
                       ))}
                     </select>
@@ -342,18 +424,18 @@ export function IpdFinalBillModal({
                       placeholder="Amount"
                       className="h-8 flex-1 rounded-md border px-2 text-[12px]"
                     />
-                    {splits.length > 1 && (
+                    {splits.length > (isPataudi ? 0 : 1) && (
                       <button type="button" onClick={() => removeSplit(i)} className="text-red-500 hover:text-red-700">
                         <X className="size-3.5" />
                       </button>
                     )}
                   </div>
-                ))}
-                <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={addSplit}>
-                  Add payment mode
-                </AttioButton>
-              </div>
-            )}
+                ))
+              )}
+              <AttioButton variant="secondary" className="!h-7 !text-[11px]" onClick={addSplit}>
+                Add payment mode
+              </AttioButton>
+            </div>
 
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-md border p-2">

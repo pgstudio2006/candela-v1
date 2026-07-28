@@ -17,9 +17,7 @@ import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 import { getVisitForBillingAction } from "@/app/actions/clinical-actions";
 import { getIpdAdmissionAction } from "@/app/actions/ipd-actions";
-import { IpdWalletPanel } from "@/components/frontdesk/ipd-wallet-panel";
-import { IpdServiceCartPanel } from "@/components/frontdesk/ipd-service-cart-panel";
-import { IpdFinalBillModal } from "@/components/frontdesk/ipd-final-bill-modal";
+import { IpdAdmissionWorkspace } from "@/components/frontdesk/ipd-admission-workspace";
 import { LabOrderButton } from "@/components/lab/lab-order-modal";
 
 const PATAUDI_BRANCH_ID = "branch_pataudi";
@@ -60,7 +58,6 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
   const [routingFlash, setRoutingFlash] = useState<string | null>(null);
   const [receiptVisitId, setReceiptVisitId] = useState<string | null>(null);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
-  const [finalBillOpen, setFinalBillOpen] = useState(false);
 
   const pending = getPendingBilling();
   const activeVisitId = selectedVisitId || "";
@@ -226,7 +223,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+        <div className={cn("grid gap-6", isPataudi && mode === "ipd" && ipdAdmission ? "grid-cols-1" : "lg:grid-cols-[1fr_280px]")}>
           <div>
             {activeVisit && counselForVisit ? (
               <Panel title={`Package closure · ${activePatient?.name ?? "Patient"}`}>
@@ -242,23 +239,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
                 />
               </Panel>
             ) : isPataudi && mode === "ipd" && ipdAdmission ? (
-              <>
-                <IpdServiceCartPanel
-                  admission={ipdAdmission}
-                  onChange={() => void refreshIpdAdmission(ipdAdmission.id)}
-                  onGenerateFinalBill={() => setFinalBillOpen(true)}
-                />
-                {finalBillOpen && (
-                  <IpdFinalBillModal
-                    admission={ipdAdmission}
-                    onClose={() => setFinalBillOpen(false)}
-                    onGenerated={() => {
-                      setFinalBillOpen(false);
-                      void refreshIpdAdmission(ipdAdmission.id);
-                    }}
-                  />
-                )}
-              </>
+              <IpdAdmissionWorkspace admission={ipdAdmission} />
             ) : (
               <OpdBillingForm
                 branchId={session?.branchId}
@@ -374,24 +355,17 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
               </Panel>
             )}
 
-            {mode === "ipd" && ipdAdmission && (
-              <IpdWalletPanel
-                admission={ipdAdmission}
-                onChange={() => {
-                  void refreshIpdAdmission(ipdAdmission.id);
-                }}
-              />
+            {!(isPataudi && mode === "ipd" && ipdAdmission) && (
+              <Panel title="Routing guide">
+                <p className="text-[13px] text-[var(--attio-text-secondary)]">{routingGuideText}</p>
+                <Link
+                  href={queueHref}
+                  className="mt-2 inline-block text-[13px] font-medium text-[var(--attio-accent)] hover:underline"
+                >
+                  {queueLabel}
+                </Link>
+              </Panel>
             )}
-
-            <Panel title="Routing guide">
-              <p className="text-[13px] text-[var(--attio-text-secondary)]">{routingGuideText}</p>
-              <Link
-                href={queueHref}
-                className="mt-2 inline-block text-[13px] font-medium text-[var(--attio-accent)] hover:underline"
-              >
-                {queueLabel}
-              </Link>
-            </Panel>
           </div>
         </div>
       </PageChrome>

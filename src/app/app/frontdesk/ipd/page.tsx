@@ -57,7 +57,7 @@ type DeathSummaryPayload = {
   preparedBy: string;
   preparedAt: string;
 };
-import { ArrowRightLeft, BedDouble, Calendar, FileText, Loader2, Pencil, Plus, Printer, Receipt, RefreshCcw, Sparkles, Stethoscope, User, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, BedDouble, Calendar, FileText, Loader2, Pencil, Plus, Printer, Receipt, RefreshCcw, Sparkles, Stethoscope, User, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -499,13 +499,14 @@ export default function FrontdeskIpdPage() {
         <>
           <MetricStrip metrics={metrics} />
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_360px]">
-            <div className="space-y-4">
-              {snapshot?.wards.map((ward) => (
+          <div className={cn("mt-4 grid gap-4", selectedBed ? "grid-cols-1" : "lg:grid-cols-[1fr_360px]")}>
+            {!selectedBed && (
+              <div className="space-y-4">
+                {snapshot?.wards.map((ward) => (
                 <Panel key={ward.wardId} title={ward.ward}>
                   <div className="flex flex-wrap gap-2">
                     {ward.beds.map((bed) => {
-                      const isSelected = selectedBed?.wardId === ward.wardId && selectedBed?.bedId === bed.id;
+                      const isSelected = false;
                       return (
                         <button
                           key={bed.id}
@@ -543,10 +544,26 @@ export default function FrontdeskIpdPage() {
                 </Panel>
               ))}
             </div>
+            )}
 
             <div className="space-y-4">
               {selectedBed ? (
                 <>
+                  <div className="flex items-center justify-between">
+                    <AttioButton
+                      variant="secondary"
+                      className="gap-1.5"
+                      onClick={() => {
+                        setSelectedBed(null);
+                        setSelectedAdmission(null);
+                      }}
+                    >
+                      <ArrowLeft className="size-3.5" />
+                      Back to ward map
+                    </AttioButton>
+                    <p className="text-[13px] text-[var(--attio-text-tertiary)]">{selectedAdmission?.patientName ?? "Bed details"}</p>
+                  </div>
+
                   <Panel title="Bed details">
                     {selectedAdmission ? (
                       <div className="space-y-3">
