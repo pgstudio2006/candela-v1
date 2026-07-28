@@ -107,7 +107,11 @@ export function getApplicableRange(
   return sorted[0] ?? undefined;
 }
 
-export function formatReferenceRange(range: LabFieldRange | undefined, unit?: string | null): string {
+export function formatReferenceRange(
+  range: LabFieldRange | undefined,
+  unit?: string | null,
+  includeQualifiers = false,
+): string {
   if (!range) return "—";
   const parts: string[] = [];
   if (range.low != null && range.high != null) parts.push(`${range.low} – ${range.high}`);
@@ -117,10 +121,38 @@ export function formatReferenceRange(range: LabFieldRange | undefined, unit?: st
   const numericRange = parts.join(" ");
   const label = range.displayLabel?.trim();
   const main = numericRange || label || "—";
+
+  if (!includeQualifiers) {
+    const crit: string[] = [];
+    if (range.criticalLow != null) crit.push(`critical < ${range.criticalLow}`);
+    if (range.criticalHigh != null) crit.push(`critical > ${range.criticalHigh}`);
+    return crit.length ? `${main} (${crit.join("; ")})` : main;
+  }
+
+  const qualifiers: string[] = [];
+  const gender = (range.gender ?? "").trim().toLowerCase();
+  if (gender && gender !== "all") qualifiers.push(gender.toUpperCase());
+
+  const ageUnit = range.ageUnit ?? "years";
+  if (range.ageMin != null || range.ageMax != null) {
+    const min = range.ageMin ?? "";
+    const max = range.ageMax ?? "";
+    if (min !== "" && max !== "") qualifiers.push(`${min}-${max} ${ageUnit}`);
+    else if (min !== "") qualifiers.push(`≥ ${min} ${ageUnit}`);
+    else if (max !== "") qualifiers.push(`≤ ${max} ${ageUnit}`);
+  }
+
+  if (range.pregnancy != null) qualifiers.push(range.pregnancy ? "Pregnant" : "Non-pregnant");
+  if (range.sampleType?.trim()) qualifiers.push(range.sampleType.trim());
+  if (range.condition?.trim()) qualifiers.push(range.condition.trim());
+
+  const qualifierText = qualifiers.join(" · ");
+  const base = qualifierText ? `${main} · ${qualifierText}` : main;
+
   const crit: string[] = [];
   if (range.criticalLow != null) crit.push(`critical < ${range.criticalLow}`);
   if (range.criticalHigh != null) crit.push(`critical > ${range.criticalHigh}`);
-  return crit.length ? `${main} (${crit.join("; ")})` : main;
+  return crit.length ? `${base} (${crit.join("; ")})` : base;
 }
 
 export function formatAge(age?: { years: number; months: number; days: number } | null): string {

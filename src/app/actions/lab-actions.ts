@@ -15,6 +15,7 @@ import {
   generatePatientLabReportPdf,
   getFieldMaster,
   getLabOrder,
+  getPendingLabOrdersForVisit,
   getReportCatalog,
   listFieldMasters,
   listLabOrders,
@@ -112,6 +113,13 @@ export async function getLabOrderAction(id: string): Promise<ActionResult<LabOrd
   return runAction(async () => {
     const ctx = await requireModule("laboratory");
     return getLabOrder(ctx, id);
+  });
+}
+
+export async function getPendingLabOrdersForVisitAction(visitId: string): Promise<ActionResult<LabOrder[]>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "doctor", "laboratory", "admin");
+    return getPendingLabOrdersForVisit(ctx, visitId);
   });
 }
 

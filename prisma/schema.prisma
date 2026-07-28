@@ -746,6 +746,8 @@ model ServiceCharge {
   updatedAt   DateTime @updatedAt
   branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
   packageServices PackageService[]
+  labReportCatalogs LabReportCatalog[]
+  labOrderItems LabOrderItem[]
 
   @@index([tenantId, branchId, category])
   @@index([tenantId, branchId, active])
@@ -2274,15 +2276,18 @@ model LabReportCatalog {
   sampleType   String?
   headerNote   String?
   footerNote   String?
+  serviceId    String?
   active       Boolean                 @default(true)
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
   fields       LabReportCatalogField[]
   orderItems   LabOrderItem[]
   branch       Branch                  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  service      ServiceCharge?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, branchId, code])
   @@index([tenantId, branchId, active])
+  @@index([tenantId, branchId, serviceId])
 }
 
 model LabReportCatalogField {
@@ -2311,7 +2316,7 @@ model LabOrder {
   orderedBy         String        // userId
   orderedByName     String?
   source            String        // opd | ipd | emergency | direct
-  status            String        // ordered | sample_collected | in_progress | completed | cancelled
+  status            String        // pending_billing | ordered | sample_collected | in_progress | completed | cancelled
   pregnancy         Boolean       @default(false) // female pregnancy status for range matching
   orderedAt         DateTime      @default(now())
   sampleCollectedAt DateTime?
@@ -2339,17 +2344,21 @@ model LabOrderItem {
   serviceId         String?          // optional link to ServiceCharge
   label             String
   sampleType        String?
-  status            String           // ordered | sample_collected | in_progress | completed
+  price             Decimal?
+  gstPercent        Decimal?
+  status            String           // pending_billing | ordered | sample_collected | in_progress | completed
   sampleCollectedAt DateTime?
   completedAt       DateTime?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
   labOrder          LabOrder         @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
   reportCatalog     LabReportCatalog @relation(fields: [reportCatalogId], references: [id], onDelete: Cascade)
+  service           ServiceCharge?   @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   results           LabReportResult[]
 
   @@index([labOrderId, status])
   @@index([reportCatalogId])
+  @@index([serviceId])
 }
 
 model LabReportResult {

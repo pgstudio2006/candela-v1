@@ -1163,6 +1163,23 @@ export async function listDocumentTemplates(ctx: ServerContext): Promise<Documen
   return rows.map(serializeDocumentTemplate);
 }
 
+export async function getDefaultDocumentTemplate(
+  ctx: ServerContext,
+  kind: DocumentTemplate["kind"],
+): Promise<DocumentTemplate | null> {
+  const rows = await prisma.documentTemplate.findMany({
+    where: {
+      ...tenantScope(ctx),
+      kind,
+      enabled: true,
+      OR: [{ branchId: ctx.branchId }, { branchId: null }],
+    },
+    orderBy: [{ isDefault: "desc" }, { branchId: "desc" }, { createdAt: "desc" }],
+    take: 1,
+  });
+  return rows.length ? serializeDocumentTemplate(rows[0]) : null;
+}
+
 export async function addDocumentTemplate(
   ctx: ServerContext,
   kind: DocumentTemplate["kind"],

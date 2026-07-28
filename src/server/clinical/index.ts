@@ -962,6 +962,30 @@ export async function processBilling(
         packageLines: payload.packageLines,
       });
       invoiceCreated = true;
+
+      // Any billed lab-order items move from pending_billing -> ordered for the laboratory.
+      const labOrderItemIds: string[] = [];
+      const labOrderIds = new Set<string>();
+      for (const line of payload.packageLines) {
+        if (line.labOrderItemId && line.labOrderId) {
+          labOrderItemIds.push(line.labOrderItemId);
+          labOrderIds.add(line.labOrderId);
+        }
+      }
+      if (labOrderItemIds.length > 0) {
+        await tx.labOrderItem.updateMany({
+          where: { id: { in: labOrderItemIds } },
+          data: { status: "ordered" },
+        });
+        for (const orderId of labOrderIds) {
+          const pending = await tx.labOrderItem.count({
+            where: { labOrderId: orderId, status: "pending_billing" },
+          });
+          if (pending === 0) {
+            await tx.labOrder.update({ where: { id: orderId }, data: { status: "ordered" } });
+          }
+        }
+      }
     }
 
     if (ipdPharmacy.lines.length > 0 && pharmacyNet > 0 && ledger.currentCollected > 0 && !payload.skipBilling && paymentScope !== "defer") {

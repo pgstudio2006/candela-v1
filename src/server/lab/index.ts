@@ -10,6 +10,7 @@ import { serializeForClient } from "@/server/serialize";
 import { getApplicableRange, parseNumber } from "@/lib/lab-ranges";
 import { buildLabReportPdfBytes, bytesToDataUrl, type LabReportTemplateSpec } from "./lab-report-pdf";
 import { deliverWhatsAppDocument } from "@/server/notification-delivery";
+import { getDefaultDocumentTemplate } from "@/server/doctor";
 import type {
   LabDataType,
   LabFieldMaster,
@@ -23,6 +24,7 @@ import type {
   LabReportTemplate,
   LabTemplateOverlayField,
 } from "@/design-system/lab-data";
+import type { DocumentTemplate } from "@/design-system/document-templates";
 
 export type LabSnapshot = {
   fieldMasters: LabFieldMaster[];
@@ -119,6 +121,7 @@ function serializeFieldRange(row: Record<string, unknown>): LabFieldRange {
 }
 
 function serializeReportCatalog(row: Record<string, unknown> & { fields?: unknown[] }): LabReportCatalog {
+  const service = row.service ? (row.service as Record<string, unknown>) : undefined;
   return {
     id: String(row.id),
     tenantId: String(row.tenantId ?? ""),
@@ -129,6 +132,16 @@ function serializeReportCatalog(row: Record<string, unknown> & { fields?: unknow
     sampleType: row.sampleType ? String(row.sampleType) : undefined,
     headerNote: row.headerNote ? String(row.headerNote) : undefined,
     footerNote: row.footerNote ? String(row.footerNote) : undefined,
+    serviceId: row.serviceId ? String(row.serviceId) : undefined,
+    service: service
+      ? {
+          id: String(service.id),
+          label: String(service.label ?? ""),
+          category: String(service.category ?? ""),
+          rate: Number(service.rate ?? 0),
+          gstPercent: service.gstPercent != null ? Number(service.gstPercent) : undefined,
+        }
+      : undefined,
     active: Boolean(row.active),
     fields: Array.isArray(row.fields)
       ? row.fields.map((f) => serializeReportCatalogField(f as Record<string, unknown> & { fieldMaster?: unknown }))
@@ -174,12 +187,16 @@ function serializeReportResult(row: Record<string, unknown> & { fieldMaster?: un
 }
 
 function serializeOrderItem(row: Record<string, unknown> & { reportCatalog?: unknown; results?: unknown[] }): LabOrder["items"][number] {
+  const service = row.service ? (row.service as Record<string, unknown>) : undefined;
   return {
     id: String(row.id),
     labOrderId: String(row.labOrderId),
     reportCatalogId: String(row.reportCatalogId),
     reportCatalog: row.reportCatalog ? serializeReportCatalog(row.reportCatalog as Record<string, unknown> & { fields?: unknown[] }) : undefined,
     serviceId: row.serviceId ? String(row.serviceId) : undefined,
+    serviceName: service ? String(service.label ?? "") : undefined,
+    price: row.price != null ? Number(row.price) : undefined,
+    gstPercent: row.gstPercent != null ? Number(row.gstPercent) : undefined,
     label: String(row.label),
     sampleType: row.sampleType ? String(row.sampleType) : undefined,
     status: String(row.status) as LabOrder["items"][number]["status"],
@@ -337,7 +354,10 @@ export async function listReportCatalogs(ctx: ServerContext): Promise<LabReportC
   const scope = branchScope(ctx);
   const rows = await prisma.labReportCatalog.findMany({
     where: scope,
-    include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } },
+    include: {
+      service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
+      fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } },
+    },
     orderBy: { name: "asc" },
   });
   return serializeForClient(rows.map((r) => serializeReportCatalog(r as unknown as Record<string, unknown> & { fields?: unknown[] }))) as LabReportCatalog[];
@@ -347,7 +367,10 @@ export async function getReportCatalog(ctx: ServerContext, id: string): Promise<
   const scope = branchScope(ctx);
   const row = await prisma.labReportCatalog.findFirst({
     where: { id, ...scope },
-    include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } },
+    include: {
+      service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
+      fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } },
+    },
   });
   if (!row) return null;
   return serializeForClient(serializeReportCatalog(row as unknown as Record<string, unknown> & { fields?: unknown[] })) as LabReportCatalog;
@@ -381,13 +404,14 @@ export async function upsertReportCatalog(ctx: ServerContext, input: ReportCatal
     sampleType: input.sampleType?.trim() ?? null,
     headerNote: input.headerNote?.trim() ?? null,
     footerNote: input.footerNote?.trim() ?? null,
+    serviceId: input.serviceId?.trim() || null,
     active: input.active ?? true,
   };
 
   const upserted = await prisma.$transaction(async (tx) => {
     const catalog = id
       ? await tx.labReportCatalog.update({ where: { id }, data: { ...data, updatedAt: new Date() } })
-      : await tx.labReportCatalog.create({ data });
+      : await tx.labReportCatalog.create({ data: data as any });
 
     if (input.fields) {
       await tx.labReportCatalogField.deleteMany({ where: { reportCatalogId: catalog.id } });
@@ -406,7 +430,10 @@ export async function upsertReportCatalog(ctx: ServerContext, input: ReportCatal
 
     return tx.labReportCatalog.findFirstOrThrow({
       where: { id: catalog.id },
-      include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } },
+      include: {
+        service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
+        fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } },
+      },
     });
   });
 
@@ -425,12 +452,13 @@ export async function deleteReportCatalog(ctx: ServerContext, id: string): Promi
 export async function listLabOrders(ctx: ServerContext, patientId?: string): Promise<LabOrder[]> {
   const scope = branchScope(ctx);
   const rows = await prisma.labOrder.findMany({
-    where: { ...scope, ...(patientId ? { patientId } : {}) },
+    where: { ...scope, status: { not: "pending_billing" }, ...(patientId ? { patientId } : {}) },
     include: {
       patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
+          service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
           reportCatalog: { include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } } },
         },
       },
@@ -449,6 +477,7 @@ export async function getLabOrder(ctx: ServerContext, id: string): Promise<LabOr
       items: {
         orderBy: { createdAt: "asc" },
         include: {
+          service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
           reportCatalog: { include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } } },
           results: { include: { fieldMaster: { include: { ranges: true } } } },
         },
@@ -472,7 +501,7 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
 
   const catalogs = await prisma.labReportCatalog.findMany({
     where: { id: { in: input.items.map((i) => i.reportCatalogId) }, ...scope },
-    select: { id: true, name: true, sampleType: true },
+    include: { service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } } },
   });
   const catalogMap = new Map(catalogs.map((c) => [c.id, c]));
 
@@ -485,16 +514,19 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
       orderedBy: ctx.userId,
       orderedByName: ctx.userId,
       source: input.source ?? "direct",
-      status: "ordered",
+      status: "pending_billing",
       items: {
         create: input.items.map((item) => {
           const catalog = catalogMap.get(item.reportCatalogId);
+          const service = catalog?.service;
           return {
             reportCatalogId: item.reportCatalogId,
-            serviceId: item.serviceId ?? null,
+            serviceId: item.serviceId ?? service?.id ?? null,
             label: item.label ?? catalog?.name ?? "Lab test",
             sampleType: item.sampleType ?? catalog?.sampleType ?? null,
-            status: "ordered",
+            price: service?.rate != null ? Number(service.rate) : 0,
+            gstPercent: service?.gstPercent != null ? Number(service.gstPercent) : 0,
+            status: "pending_billing",
           };
         }),
       },
@@ -503,6 +535,7 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
       patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
       items: {
         include: {
+          service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
           reportCatalog: { include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } } },
         },
       },
@@ -510,6 +543,28 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
   });
 
   return serializeForClient(serializeOrder(order as unknown as Record<string, unknown> & { patient?: Record<string, unknown>; items?: unknown[] })) as LabOrder;
+}
+
+export async function getPendingLabOrdersForVisit(
+  ctx: ServerContext,
+  visitId: string,
+): Promise<LabOrder[]> {
+  const scope = branchScope(ctx);
+  const rows = await prisma.labOrder.findMany({
+    where: { ...scope, visitId, status: "pending_billing" },
+    include: {
+      patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
+          reportCatalog: { include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return serializeForClient(rows.map((r) => serializeOrder(r as unknown as Record<string, unknown> & { patient?: Record<string, unknown>; items?: unknown[] }))) as LabOrder[];
 }
 
 export async function collectLabOrderSample(
@@ -835,21 +890,22 @@ function assertBranchAccess(ctx: ServerContext, branchId?: string | null) {
 // Report templates
 // ---------------------------------------------------------------------------
 
-function toLabReportTemplateSpec(template: LabReportTemplate): LabReportTemplateSpec {
+function labTemplateSpecFromDocumentTemplate(template: DocumentTemplate | null): LabReportTemplateSpec | undefined {
+  if (!template?.fileData) return undefined;
   return {
     fileData: template.fileData,
-    mimeType: template.mimeType,
-    marginTop: template.marginTop,
-    marginBottom: template.marginBottom,
-    marginLeft: template.marginLeft,
-    marginRight: template.marginRight,
-    overlayFields: template.overlayFields ?? [],
+    mimeType: template.mimeType ?? "application/pdf",
+    marginTop: template.marginTop ?? 50,
+    marginBottom: template.marginBottom ?? 50,
+    marginLeft: template.marginLeft ?? 50,
+    marginRight: template.marginRight ?? 50,
+    overlayFields: (template.overlayFields ?? []).map((f) => ({ ...f })) as LabTemplateOverlayField[],
   };
 }
 
 async function getDefaultLabReportTemplateForPdf(ctx: ServerContext): Promise<LabReportTemplateSpec | undefined> {
-  const template = await getDefaultLabReportTemplate(ctx);
-  return template ? toLabReportTemplateSpec(template) : undefined;
+  const template = await getDefaultDocumentTemplate(ctx, "lab_report");
+  return labTemplateSpecFromDocumentTemplate(template);
 }
 
 export async function listLabReportTemplates(ctx: ServerContext): Promise<LabReportTemplate[]> {

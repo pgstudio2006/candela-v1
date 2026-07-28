@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { LabReportCatalog, LabReportCatalogField } from "@/design-system/lab-data";
 import { cn } from "@/lib/utils";
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type ReportFormField = {
   id?: string;
@@ -35,6 +35,7 @@ type ReportForm = {
   sampleType: string;
   headerNote: string;
   footerNote: string;
+  serviceId: string;
   active: boolean;
   fields: ReportFormField[];
 };
@@ -44,6 +45,14 @@ export default function LabReportCatalogPage() {
   const [editing, setEditing] = useState<ReportForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [openFieldIdx, setOpenFieldIdx] = useState<number | null>(null);
+  const [serviceCharges, setServiceCharges] = useState<{ id: string; label: string; category: string; rate: number }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/service-charges", { credentials: "include" })
+      .then((res) => res.json())
+      .then((json) => { if (json.ok) setServiceCharges((json.data ?? []).filter((s: { category?: string }) => s.category === "Laboratory")); })
+      .catch(() => {});
+  }, []);
 
   const columns = [
     { key: "code", label: "Code" },
@@ -86,7 +95,7 @@ export default function LabReportCatalogPage() {
 
   const toEditForm = (c?: LabReportCatalog): ReportForm => {
     if (!c) {
-      return { code: "", name: "", description: "", sampleType: "", headerNote: "", footerNote: "", active: true, fields: [] };
+      return { code: "", name: "", description: "", sampleType: "", headerNote: "", footerNote: "", serviceId: "", active: true, fields: [] };
     }
     return {
       id: c.id,
@@ -96,6 +105,7 @@ export default function LabReportCatalogPage() {
       sampleType: c.sampleType ?? "",
       headerNote: c.headerNote ?? "",
       footerNote: c.footerNote ?? "",
+      serviceId: c.serviceId ?? "",
       active: c.active,
       fields: c.fields.map((f) => ({
         id: f.id,
@@ -158,6 +168,7 @@ export default function LabReportCatalogPage() {
         sampleType: editing.sampleType.trim() || undefined,
         headerNote: editing.headerNote.trim() || undefined,
         footerNote: editing.footerNote.trim() || undefined,
+        serviceId: editing.serviceId.trim() || undefined,
         active: editing.active,
         fields: editing.fields.map((f) => ({
           id: f.id,
@@ -222,6 +233,19 @@ export default function LabReportCatalogPage() {
               <div className="space-y-1 md:col-span-2">
                 <Label className="text-[12px]">Header note</Label>
                 <Textarea value={editing.headerNote} onChange={(e) => setEditing({ ...editing, headerNote: e.target.value })} className="min-h-[50px] text-[13px]" />
+              </div>
+              <div className="space-y-1 md:col-span-3">
+                <Label className="text-[12px]">Linked service charge (for OPD billing price)</Label>
+                <select
+                  value={editing.serviceId}
+                  onChange={(e) => setEditing({ ...editing, serviceId: e.target.value })}
+                  className="h-9 w-full rounded-md border px-2 text-[13px]"
+                >
+                  <option value="">No service charge linked</option>
+                  {serviceCharges.map((s) => (
+                    <option key={s.id} value={s.id}>{s.label} · ₹{Number(s.rate).toLocaleString("en-IN")}</option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <Label className="text-[12px]">Active</Label>

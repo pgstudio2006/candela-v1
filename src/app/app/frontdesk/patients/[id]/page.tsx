@@ -18,6 +18,8 @@ import { useEffect, useMemo, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
 import { getPatientInvoicesAction, getPatientInvoiceReceiptsAction } from "@/app/actions/clinical-actions";
 import { getIpdAdmissionsByPatientAction } from "@/app/actions/ipd-actions";
+import { getPendingLabOrdersForVisitAction } from "@/app/actions/lab-actions";
+import type { LabOrder } from "@/design-system/lab-data";
 import { downloadPdfBytes } from "@/lib/invoice-pdf";
 import { generatePatientInvoiceSummaryPdf } from "@/lib/patient-invoice-summary-pdf";
 
@@ -48,6 +50,8 @@ export default function PatientRecordPage() {
   const [patientStatus, setPatientStatus] = useState<string>("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [ipdAdmissions, setIpdAdmissions] = useState<Extract<Awaited<ReturnType<typeof getIpdAdmissionsByPatientAction>>, { ok: true }>["data"]>([]);
+  const [cart, setCart] = useState<LabOrder[]>([]);
+  const [cartLoading, setCartLoading] = useState(false);
 
   useEffect(() => {
     if (patient) setActivePatientId(patient.id);
@@ -68,6 +72,23 @@ export default function PatientRecordPage() {
       cancelled = true;
     };
   }, [patient]);
+
+  useEffect(() => {
+    if (!activeVisit?.id) {
+      setCart([]);
+      return;
+    }
+    let cancelled = false;
+    setCartLoading(true);
+    void getPendingLabOrdersForVisitAction(activeVisit.id).then((result) => {
+      if (cancelled) return;
+      setCart(result.ok ? (result.data ?? []) : []);
+      setCartLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeVisit?.id]);
 
   useEffect(() => {
     if (patient) {
@@ -183,6 +204,7 @@ export default function PatientRecordPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="visits">Visits</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsTrigger value="cart">Cart</TabsTrigger>
           <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
           <TabsTrigger value="ipd">IPD</TabsTrigger>
           <TabsTrigger value="counsellor">Counsellor</TabsTrigger>
@@ -309,6 +331,50 @@ export default function PatientRecordPage() {
                 </li>
               ))}
             </ul>
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="cart" className="mt-4">
+          <Panel
+            title="Current visit cart"
+            action={
+              activeVisit ? (
+                <Link href={`/app/frontdesk/billing?visit=${activeVisit.id}`}>
+                  <AttioButton variant="primary" className="h-8 gap-1.5 text-[12px]">
+                    <CreditCard className="size-3.5" /> Go to billing
+                  </AttioButton>
+                </Link>
+              ) : null
+            }
+          >
+            {cartLoading ? (
+              <p className="text-[13px] text-[var(--attio-text-secondary)]">Loading cart…</p>
+            ) : cart.length === 0 ? (
+              <p className="text-[13px] text-[var(--attio-text-secondary)]">No pending lab orders in the cart for this visit.</p>
+            ) : (
+              <div className="space-y-3">
+                {cart.map((order) => (
+                  <div key={order.id} className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
+                    <p className="text-[12px] text-[var(--attio-text-tertiary)]">Order · {new Date(order.orderedAt).toLocaleString("en-IN")}</p>
+                    <ul className="mt-2 space-y-2">
+                      {order.items.map((item) => (
+                        <li key={item.id} className="flex items-center justify-between text-[13px]">
+                          <div>
+                            <p className="font-medium">{item.label}</p>
+                            <p className="text-[11px] text-[var(--attio-text-tertiary)]">{item.reportCatalog?.code ?? item.reportCatalogId}</p>
+                          </div>
+                          <p className="font-semibold text-[var(--attio-accent)]">₹{(item.price ?? 0).toLocaleString("en-IN")}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-[var(--attio-border)] pt-2 text-[13px] font-semibold">
+                  <span>Cart total</span>
+                  <span>₹{cart.reduce((sum, o) => sum + o.items.reduce((s, i) => s + (i.price ?? 0), 0), 0).toLocaleString("en-IN")}</span>
+                </div>
+              </div>
+            )}
           </Panel>
         </TabsContent>
 

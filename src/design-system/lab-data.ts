@@ -11,6 +11,7 @@ export const LAB_DATA_TYPES = [
 export type LabDataType = (typeof LAB_DATA_TYPES)[number]["value"];
 
 export const LAB_ORDER_STATUS = [
+  "pending_billing",
   "ordered",
   "sample_collected",
   "in_progress",
@@ -20,6 +21,7 @@ export const LAB_ORDER_STATUS = [
 export type LabOrderStatus = (typeof LAB_ORDER_STATUS)[number];
 
 export const LAB_ORDER_STATUS_LABELS: Record<LabOrderStatus, string> = {
+  pending_billing: "Pending Billing",
   ordered: "Ordered",
   sample_collected: "Sample Collected",
   in_progress: "In Progress",
@@ -28,6 +30,7 @@ export const LAB_ORDER_STATUS_LABELS: Record<LabOrderStatus, string> = {
 };
 
 export const LAB_ITEM_STATUS = [
+  "pending_billing",
   "ordered",
   "sample_collected",
   "in_progress",
@@ -36,6 +39,7 @@ export const LAB_ITEM_STATUS = [
 export type LabItemStatus = (typeof LAB_ITEM_STATUS)[number];
 
 export const LAB_ITEM_STATUS_LABELS: Record<LabItemStatus, string> = {
+  pending_billing: "Pending Billing",
   ordered: "Ordered",
   sample_collected: "Sample Collected",
   in_progress: "In Progress",
@@ -118,6 +122,8 @@ export type LabReportCatalog = {
   sampleType?: string;
   headerNote?: string;
   footerNote?: string;
+  serviceId?: string;
+  service?: { id: string; label: string; category: string; rate: number; gstPercent?: number };
   active: boolean;
   fields: LabReportCatalogField[];
   createdAt: string;
@@ -146,6 +152,9 @@ export type LabOrderItem = {
   reportCatalogId: string;
   reportCatalog?: LabReportCatalog;
   serviceId?: string;
+  serviceName?: string;
+  price?: number;
+  gstPercent?: number;
   label: string;
   sampleType?: string;
   status: LabItemStatus;
@@ -189,7 +198,7 @@ export type LabOrderInput = {
   visitId?: string;
   admissionId?: string;
   source: LabOrder["source"];
-  items: { reportCatalogId: string; label: string; sampleType?: string; serviceId?: string }[];
+  items: { reportCatalogId: string; label?: string; sampleType?: string; serviceId?: string }[];
 };
 
 export type LabResultInput = {
@@ -209,6 +218,10 @@ export type LabTemplateOverlayField = {
   height: number; // percentage
   fontSize?: number;
   align?: "left" | "center" | "right";
+  fontStyle?: "normal" | "bold" | "italic" | "bold-italic";
+  color?: string; // hex color, e.g. #1a1a1a
+  wrap?: boolean;
+  zIndex?: number;
 };
 
 export type LabReportTemplate = {

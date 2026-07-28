@@ -14,7 +14,7 @@ import {
 } from "@/lib/billing-packages";
 import { getVisitBillingAction } from "@/app/actions/clinical-actions";
 import { getIpdCartAction } from "@/app/actions/ipd-actions";
-import { listActiveLabCatalogsAction } from "@/app/actions/lab-actions";
+import { getPendingLabOrdersForVisitAction, listActiveLabCatalogsAction } from "@/app/actions/lab-actions";
 import { computeGstInvoice } from "@/lib/gst-invoicing";
 import type { BillingPackageLine, PaymentSplit } from "@/lib/opd-billing";
 import { resolveBillingDiscount } from "@/lib/opd-billing";
@@ -23,7 +23,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -63,6 +65,7 @@ function lineFromPackage(pkg: BillingPackage): SelectedLine {
     amount: pkg.amount,
     quantity: 1,
     description: pkg.description,
+    gstRatePercent: pkg.gstPercent,
   };
 }
 
@@ -83,12 +86,18 @@ export function OpdBillingForm({
   const [loading, setLoading] = useState(true);
   const [packageSearch, setPackageSearch] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
+  const [serviceCategory, setServiceCategory] = useState("");
   const [labCatalogs, setLabCatalogs] = useState<LabReportCatalog[]>([]);
   const [labLoading, setLabLoading] = useState(false);
   const [labSearch, setLabSearch] = useState("");
   const [selectedLabCatalogId, setSelectedLabCatalogId] = useState("");
   const [selectedLabAmount, setSelectedLabAmount] = useState("");
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
+
+  const serviceCategories = useMemo(
+    () => Array.from(new Set(services.map((s) => s.category).filter((c): c is string => Boolean(c)))).sort(),
+    [services],
+  );
 
   useEffect(() => {
     const loadData = async () => {
@@ -143,7 +152,41 @@ export function OpdBillingForm({
     setSelectedLabCatalogId("");
     setSelectedLabAmount("");
     setLabSearch("");
+    setServiceCategory("");
   }, [visit?.id]);
+
+  // Auto-load pending lab orders for the current OPD visit into the billing cart.
+  useEffect(() => {
+    if (!visit?.id || visit.ipdAdmissionId || existingInvoice || lines.length > 0) return;
+    let cancelled = false;
+    void getPendingLabOrdersForVisitAction(visit.id).then((res) => {
+      if (cancelled) return;
+      if (res.ok && res.data?.length) {
+        const pendingLines: SelectedLine[] = [];
+        for (const order of res.data) {
+          for (const item of order.items) {
+            if (item.status !== "pending_billing") continue;
+            pendingLines.push({
+              key: `lab_${item.id}_${Date.now()}`,
+              packageId: item.serviceId ?? `lab-${item.reportCatalogId}`,
+              label: item.label,
+              amount: item.price ?? 0,
+              quantity: 1,
+              description: `Lab order #${order.id}`,
+              category: item.reportCatalog?.service?.category ?? "Laboratory",
+              gstRatePercent: item.gstPercent,
+              labOrderItemId: item.id,
+              labOrderId: order.id,
+            });
+          }
+        }
+        if (pendingLines.length) setLines((prev) => [...prev, ...pendingLines]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visit?.id, visit?.ipdAdmissionId, existingInvoice]);
 
   const subtotal = lines.reduce((s, l) => s + l.amount * l.quantity, 0);
   const discountResolved = resolveBillingDiscount(subtotal, {
@@ -167,6 +210,8 @@ export function OpdBillingForm({
       label: l.label,
       quantity: l.quantity,
       taxableAmount: l.amount * l.quantity,
+      gstRatePercent: l.gstRatePercent,
+      category: l.category,
     })),
     discount: discountAmount,
   });
@@ -391,6 +436,17 @@ export function OpdBillingForm({
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-[12px]">Select service</Label>
+                  <select
+                    value={serviceCategory}
+                    disabled={Boolean(existingInvoice)}
+                    onChange={(e) => setServiceCategory(e.target.value)}
+                    className="h-9 w-full rounded-md border px-2 text-[13px]"
+                  >
+                    <option value="">All categories</option>
+                    {serviceCategories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                   <Select
                     value=""
                     disabled={Boolean(existingInvoice)}
@@ -414,26 +470,37 @@ export function OpdBillingForm({
                           className="h-8 text-[12px]"
                         />
                       </div>
-                      {services
-                        .filter((svc: BillingPackage) =>
-                          svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
-                          (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase()))
-                        )
-                        .map((svc: BillingPackage) => (
-                          <SelectItem
-                            key={svc.id}
-                            value={svc.id}
-                            className="py-3 [&>[data-slot=select-item-text]]:whitespace-normal"
-                          >
-                            <div className="flex flex-col gap-0.5">
-                              <p className="text-[13px] font-medium leading-tight">{svc.label}</p>
-                              {svc.description && (
-                                <p className="text-[11px] text-[var(--attio-text-tertiary)] leading-tight">{svc.description}</p>
-                              )}
-                              <p className="text-[12px] font-semibold text-[var(--attio-accent)]">{formatPackagePrice(svc)}</p>
-                            </div>
-                          </SelectItem>
-                        ))}
+                      {Object.entries(
+                        services
+                          .filter((svc: BillingPackage) =>
+                            (!serviceCategory || svc.category === serviceCategory) &&
+                            (svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+                              (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase())))
+                          )
+                          .reduce((acc, svc) => {
+                            (acc[svc.category] ??= []).push(svc);
+                            return acc;
+                          }, {} as Record<string, BillingPackage[]>)
+                      ).map(([category, group]) => (
+                        <SelectGroup key={category}>
+                          <SelectLabel className="text-[11px] font-semibold uppercase text-[var(--attio-text-tertiary)]">{category}</SelectLabel>
+                          {group.map((svc) => (
+                            <SelectItem
+                              key={svc.id}
+                              value={svc.id}
+                              className="py-3 [&>[data-slot=select-item-text]]:whitespace-normal"
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <p className="text-[13px] font-medium leading-tight">{svc.label}</p>
+                                {svc.description && (
+                                  <p className="text-[11px] text-[var(--attio-text-tertiary)] leading-tight">{svc.description}</p>
+                                )}
+                                <p className="text-[12px] font-semibold text-[var(--attio-accent)]">{formatPackagePrice(svc)}</p>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -498,8 +565,9 @@ export function OpdBillingForm({
                       value={selectedLabCatalogId}
                       disabled={Boolean(existingInvoice) || labLoading}
                       onValueChange={(value) => {
+                        const catalog = labCatalogs.find((c) => c.id === value);
                         setSelectedLabCatalogId(value ?? "");
-                        setSelectedLabAmount("");
+                        setSelectedLabAmount(catalog?.service?.rate != null ? String(catalog.service.rate) : "");
                       }}
                     >
                       <SelectTrigger className="h-9 text-[13px]">
@@ -525,8 +593,13 @@ export function OpdBillingForm({
                           .map((c) => (
                             <SelectItem key={c.id} value={c.id} className="py-3">
                               <div className="flex flex-col gap-0.5">
-                                <p className="text-[13px] font-medium leading-tight">{c.name}</p>
-                                <p className="text-[11px] text-[var(--attio-text-tertiary)]">{c.code}</p>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-[13px] font-medium leading-tight">{c.name}</p>
+                                  <p className="text-[12px] font-semibold text-[var(--attio-accent)]">
+                                    {c.service?.rate != null ? `₹${Number(c.service.rate).toLocaleString("en-IN")}` : "No price"}
+                                  </p>
+                                </div>
+                                <p className="text-[11px] text-[var(--attio-text-tertiary)]">{c.code} · {c.service?.label ?? "No service linked"}</p>
                               </div>
                             </SelectItem>
                           ))}
@@ -555,15 +628,17 @@ export function OpdBillingForm({
                         const catalog = labCatalogs.find((c) => c.id === selectedLabCatalogId);
                         if (!catalog) return;
                         const amount = Number(selectedLabAmount) || 0;
+                        const service = catalog.service;
                         setLines((prev) => [
                           ...prev,
                           {
                             key: `lab_${catalog.id}_${Date.now()}`,
-                            packageId: `lab-${catalog.id}`,
+                            packageId: service?.id ?? `lab-${catalog.id}`,
                             label: `Lab: ${catalog.name}`,
                             amount,
                             quantity: 1,
-                            category: "lab",
+                            category: service?.category ?? "Laboratory",
+                            gstRatePercent: service?.gstPercent,
                           },
                         ]);
                         setSelectedLabCatalogId("");
@@ -588,7 +663,7 @@ export function OpdBillingForm({
                           <p className="text-[13px] font-medium">{line.label}</p>
                           <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                             {line.packageId}
-                            {line.category === "lab" && (
+                            {(line.category === "Laboratory" || line.category === "lab") && (
                               <span className="ml-1.5 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">Lab</span>
                             )}
                           </p>

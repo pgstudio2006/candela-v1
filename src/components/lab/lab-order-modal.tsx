@@ -114,6 +114,11 @@ function LabOrderModal({ patientId, patientName, visitId, admissionId, source, o
                       <label className="flex items-center gap-2 text-[13px] font-medium">
                         <input type="checkbox" checked={!!item} onChange={() => toggle(c)} />
                         {c.name} <span className="text-[var(--attio-text-tertiary)]">({c.code})</span>
+                        {c.service?.rate != null ? (
+                          <span className="ml-auto text-[12px] font-semibold text-[var(--attio-accent)]">₹{Number(c.service.rate).toLocaleString("en-IN")}</span>
+                        ) : (
+                          <span className="ml-auto text-[11px] text-amber-600">No price</span>
+                        )}
                       </label>
                       {item && (
                         <div className="mt-2 pl-6">

@@ -7,6 +7,7 @@ import {
   type LabResultFlag,
   type LabTemplateOverlayField,
 } from "@/design-system/lab-data";
+import { CLINIC_BRAND } from "@/design-system/document-templates";
 import {
   resolveAge,
   getApplicableRange,
@@ -83,12 +84,31 @@ function wrapText(text: string, font: any, size: number, maxWidth: number): stri
   const lines: string[] = [];
   let line = "";
   for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (font.widthOfTextAtSize(test, size) <= maxWidth) {
-      line = test;
+    const wordWidth = font.widthOfTextAtSize(word, size);
+    if (wordWidth <= maxWidth) {
+      const test = line ? `${line} ${word}` : word;
+      if (font.widthOfTextAtSize(test, size) <= maxWidth) {
+        line = test;
+      } else {
+        if (line) lines.push(line);
+        line = word;
+      }
     } else {
-      if (line) lines.push(line);
-      line = word;
+      // Long word: flush the current line, then break the word into character chunks.
+      if (line) {
+        lines.push(line);
+        line = "";
+      }
+      let remaining = word;
+      while (remaining.length) {
+        let i = 1;
+        while (i <= remaining.length && font.widthOfTextAtSize(remaining.slice(0, i), size) <= maxWidth) {
+          i++;
+        }
+        i = Math.max(1, Math.min(i - 1, remaining.length));
+        lines.push(remaining.slice(0, i));
+        remaining = remaining.slice(i);
+      }
     }
   }
   if (line) lines.push(line);
@@ -118,6 +138,30 @@ function drawWrapped(
 function measureHeight(text: string, font: any, size: number, maxWidth: number, lineHeight: number): number {
   const lines = wrapText(text, font, size, maxWidth);
   return lines.length * lineHeight;
+}
+
+function hexToRgb(hex: string | undefined): Color | undefined {
+  if (!hex) return undefined;
+  const sanitized = hex.replace("#", "");
+  if (sanitized.length !== 3 && sanitized.length !== 6) return undefined;
+  const full = sanitized.length === 3 ? sanitized.split("").map((c) => c + c).join("") : sanitized;
+  const int = Number.parseInt(full, 16);
+  if (Number.isNaN(int)) return undefined;
+  return rgb(((int >> 16) & 255) / 255, ((int >> 8) & 255) / 255, (int & 255) / 255);
+}
+
+type OverlayFontMap = {
+  normal: any;
+  bold: any;
+  italic: any;
+  boldItalic: any;
+};
+
+function overlayFont(field: LabTemplateOverlayField, fonts: OverlayFontMap) {
+  if (field.fontStyle === "bold-italic") return fonts.boldItalic;
+  if (field.fontStyle === "italic") return fonts.italic;
+  if (field.fontStyle === "bold") return fonts.bold;
+  return fonts.normal;
 }
 
 function overlayFieldValue(
@@ -150,6 +194,24 @@ function overlayFieldValue(
       case "sampleId":
       case "orderId":
         return order?.id ?? "";
+      case "doctorName":
+        return order?.orderedByName ?? "";
+      case "sampleType":
+        return order?.items.map((i) => i.sampleType).filter(Boolean).join(", ") ?? "";
+      case "pregnancy":
+        return order?.pregnancy ? "Pregnant" : "";
+      case "orderDate":
+        return order?.orderedAt ? dateLabel(order.orderedAt) : "";
+      case "dateOfBirth":
+        return patient.dateOfBirth ? dateLabel(String(patient.dateOfBirth)) : "";
+      case "branchName":
+        return CLINIC_BRAND.name;
+      case "branchAddress":
+        return CLINIC_BRAND.address;
+      case "branchPhone":
+        return CLINIC_BRAND.phone;
+      case "orderedBy":
+        return order?.orderedByName ?? "";
       default:
         return "";
     }
@@ -163,20 +225,34 @@ function drawOverlayFields(
   fields: LabTemplateOverlayField[],
   patient: LabReportPdfPatient,
   order: LabOrder | undefined,
-  font: any,
+  fonts: OverlayFontMap,
 ) {
-  for (const field of fields) {
+  const sorted = [...fields].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  for (const field of sorted) {
     const text = overlayFieldValue(field, patient, order);
     if (!text && field.key !== "ageGender") continue;
+    const font = overlayFont(field, fonts);
     const fontSize = field.fontSize ?? 9;
+    const color = hexToRgb(field.color) ?? rgb(0.1, 0.1, 0.1);
     const x = (field.x / 100) * PAGE_WIDTH;
     const yTop = PAGE_HEIGHT - (field.y / 100) * PAGE_HEIGHT;
     const maxWidth = Math.max(20, (field.width / 100) * PAGE_WIDTH);
+    const lineHeight = fontSize * 1.2;
+
+    if (field.wrap) {
+      drawWrapped(page, text, x, yTop - fontSize * 0.2, maxWidth, fontSize, font, lineHeight, color);
+      continue;
+    }
+
     const textWidth = font.widthOfTextAtSize(text, fontSize);
     let drawX = x;
     if (field.align === "center") drawX = x + maxWidth / 2 - textWidth / 2;
     if (field.align === "right") drawX = x + maxWidth - textWidth;
-    drawWrapped(page, text, drawX, yTop - fontSize * 0.2, maxWidth, fontSize, font, fontSize * 1.2, rgb(0.1, 0.1, 0.1));
+    if (textWidth > maxWidth) {
+      drawWrapped(page, text, x, yTop - fontSize * 0.2, maxWidth, fontSize, font, lineHeight, color);
+    } else {
+      page.drawText(text, { x: Math.max(0, drawX), y: yTop - fontSize * 0.2, size: fontSize, font, color });
+    }
   }
 }
 
@@ -194,6 +270,9 @@ export async function buildLabReportPdfBytes(
   const pdfDoc = await PDFDocument.create();
   const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const italicFont = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+  const boldItalicFont = await pdfDoc.embedFont(StandardFonts.HelveticaBoldOblique);
+  const overlayFonts: OverlayFontMap = { normal: normalFont, bold: boldFont, italic: italicFont, boldItalic: boldItalicFont };
 
   const primary = rgb(0.12, 0.12, 0.12);
   const secondary = rgb(0.4, 0.4, 0.4);
@@ -213,12 +292,20 @@ export async function buildLabReportPdfBytes(
   let marginTop = MARGIN;
   let marginBottom = MARGIN;
   let embeddedTemplate: any = undefined;
+  let embeddedImage: any = undefined;
 
-  if (template?.mimeType === "application/pdf") {
+  if (template?.fileData) {
     const bytes = dataUrlToBytes(template.fileData);
     if (bytes) {
-      const [first] = await pdfDoc.embedPdf(bytes, [0]);
-      embeddedTemplate = first;
+      const mime = (template.mimeType ?? "application/pdf").toLowerCase();
+      if (mime === "application/pdf") {
+        const [first] = await pdfDoc.embedPdf(bytes, [0]);
+        embeddedTemplate = first;
+      } else if (mime === "image/png") {
+        embeddedImage = await pdfDoc.embedPng(bytes);
+      } else if (mime === "image/jpeg" || mime === "image/jpg") {
+        embeddedImage = await pdfDoc.embedJpg(bytes);
+      }
       marginTop = template.marginTop;
       marginBottom = template.marginBottom;
       marginLeft = template.marginLeft;
@@ -236,8 +323,11 @@ export async function buildLabReportPdfBytes(
     if (embeddedTemplate) {
       p.drawPage(embeddedTemplate, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
     }
+    if (embeddedImage) {
+      p.drawImage(embeddedImage, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
+    }
     if (template?.overlayFields?.length) {
-      drawOverlayFields(p, template.overlayFields, patient, orderForOverlay, normalFont);
+      drawOverlayFields(p, template.overlayFields, patient, orderForOverlay, overlayFonts);
     }
     return p;
   }
@@ -273,7 +363,7 @@ export async function buildLabReportPdfBytes(
     return pdfDoc.save();
   }
 
-  const baseColWidths = [165, 65, 50, 70, 130, 55];
+  const baseColWidths = [150, 60, 45, 60, 125, 100];
   const colWidthTotal = baseColWidths.reduce((a, b) => a + b, 0);
   const colScale = Math.min(1, usableWidth / colWidthTotal);
   const colWidths = baseColWidths.map((w) => w * colScale);
@@ -313,10 +403,13 @@ export async function buildLabReportPdfBytes(
     y -= 18;
 
     for (const item of order.items) {
-      if (y < bottom + 60) {
+      if (y < bottom + 100) {
         page = newPage(order);
         y = top;
       }
+
+      const catalog = item.reportCatalog;
+
       page.drawText(`${item.label}${item.sampleType ? ` · ${item.sampleType}` : ""}`, {
         x: marginLeft,
         y,
@@ -326,7 +419,26 @@ export async function buildLabReportPdfBytes(
       });
       y -= 16;
 
+      // Catalog description & header note
+      const catalogNotes = [
+        catalog?.description?.trim() ?? "",
+        catalog?.headerNote?.trim() ?? "",
+      ].filter(Boolean);
+      for (const text of catalogNotes) {
+        const noteHeight = measureHeight(text, normalFont, 9, usableWidth, 11) + 6;
+        if (y - noteHeight < bottom) {
+          page = newPage(order);
+          y = top;
+        }
+        y = drawWrapped(page, text, marginLeft, y, usableWidth, 9, normalFont, 11, secondary);
+        y -= 6;
+      }
+
       // Table header
+      if (y - 22 < bottom) {
+        page = newPage(order);
+        y = top;
+      }
       page.drawLine({ start: { x: marginLeft, y: y + 2 }, end: { x: rightX, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
       const headers = ["Test", "Result", "Unit", "Flag", "Reference range", "Note"];
       for (let i = 0; i < headers.length; i++) {
@@ -335,7 +447,7 @@ export async function buildLabReportPdfBytes(
       y -= 14;
       page.drawLine({ start: { x: marginLeft, y: y + 2 }, end: { x: rightX, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
 
-      const fields = item.reportCatalog?.fields.filter((f) => f.isVisible) ?? [];
+      const fields = catalog?.fields.filter((f) => f.isVisible) ?? [];
       if (fields.length === 0) {
         page.drawText("No visible fields.", { x: marginLeft, y, size: 9, font: normalFont, color: secondary });
         y -= 20;
@@ -346,6 +458,7 @@ export async function buildLabReportPdfBytes(
           const result = item.results.find((r) => r.fieldMasterId === field.fieldMasterId);
           const value = result?.value ?? "";
           const note = result?.note ?? "";
+          const defaultNote = field.fieldMaster.defaultNote?.trim() ?? "";
           let flag = result?.flag;
           if (!flag && value) {
             flag = evaluateLabResultFlag(
@@ -362,18 +475,25 @@ export async function buildLabReportPdfBytes(
             item.sampleType,
           );
 
+          const nameText = field.fieldMaster.name;
+          const testMaxWidth = colWidths[0] - 8;
+          const nameHeight = measureHeight(nameText, boldFont, 9, testMaxWidth, lineHeight);
+          const defaultNoteHeight = defaultNote ? measureHeight(defaultNote, normalFont, 8, testMaxWidth, 10) + 2 : 0;
+          const testCellHeight = nameHeight + defaultNoteHeight;
+
           const rowCells = [
-            field.fieldMaster.name,
+            nameText,
             value || "—",
             field.fieldMaster.unit || "—",
             flag ? LAB_RESULT_FLAG_LABELS[flag] : "—",
-            formatReferenceRange(range, field.fieldMaster.unit),
+            formatReferenceRange(range, field.fieldMaster.unit, true),
             note,
           ];
 
-          const cellHeights = rowCells.map((cell, idx) =>
-            measureHeight(cell, idx === 0 ? boldFont : normalFont, 9, colWidths[idx] - 8, lineHeight)
-          );
+          const cellHeights = rowCells.map((cell, idx) => {
+            if (idx === 0) return testCellHeight;
+            return measureHeight(cell, idx === 1 && flag ? boldFont : normalFont, 9, colWidths[idx] - 8, lineHeight);
+          });
           const rowHeight = Math.max(...cellHeights, lineHeight) + rowPadding;
 
           if (y - rowHeight < bottom) {
@@ -388,14 +508,33 @@ export async function buildLabReportPdfBytes(
           }
 
           const baseline = y - lineHeight - rowPadding / 2;
-          for (let i = 0; i < rowCells.length; i++) {
+
+          // Test column: field name with default note printed directly below it
+          const nameBottomY = drawWrapped(page, nameText, colX[0] + 4, baseline, testMaxWidth, 9, boldFont, lineHeight, primary);
+          if (defaultNote) {
+            drawWrapped(page, defaultNote, colX[0] + 4, nameBottomY - 2, testMaxWidth, 8, normalFont, 10, secondary);
+          }
+
+          for (let i = 1; i < rowCells.length; i++) {
             const color = i === 3 && flag ? flagColor(flag) : i === 1 && flag ? flagColor(flag) : primary;
-            const font = i === 0 || (i === 1 && flag) ? boldFont : normalFont;
+            const font = i === 1 && flag ? boldFont : normalFont;
             drawWrapped(page, rowCells[i], colX[i] + 4, baseline, colWidths[i] - 8, 9, font, lineHeight, color);
           }
           y -= rowHeight;
         }
       }
+
+      // Catalog footer note
+      if (catalog?.footerNote?.trim()) {
+        const footerHeight = measureHeight(catalog.footerNote, normalFont, 9, usableWidth, 11) + 6;
+        if (y - footerHeight < bottom) {
+          page = newPage(order);
+          y = top;
+        }
+        y = drawWrapped(page, catalog.footerNote, marginLeft, y, usableWidth, 9, normalFont, 11, secondary);
+        y -= 6;
+      }
+
       y -= 10;
     }
 

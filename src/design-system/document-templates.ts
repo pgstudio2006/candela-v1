@@ -10,7 +10,7 @@ export type DocumentTemplateKind =
   | "ipd_overview"
   | "discharge_summary";
 
-export type DocumentLayoutId = "navayu-letterhead" | "dr-sunil-saini-letterhead" | "uploaded-pdf";
+export type DocumentLayoutId = "navayu-letterhead" | "dr-sunil-saini-letterhead" | "uploaded-pdf" | "uploaded-image";
 
 export type DocumentTemplateOverlayField = {
   id: string;
@@ -22,6 +22,20 @@ export type DocumentTemplateOverlayField = {
   height: number;
   fontSize?: number;
   align?: "left" | "center" | "right";
+  fontStyle?: "normal" | "bold" | "italic" | "bold-italic";
+  color?: string; // hex color, e.g. #1a1a1a
+  wrap?: boolean;
+  zIndex?: number;
+};
+
+export type DocumentTemplateSpec = {
+  fileData?: string;
+  mimeType?: string;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+  overlayFields: DocumentTemplateOverlayField[];
 };
 
 export type DocumentTemplate = {
