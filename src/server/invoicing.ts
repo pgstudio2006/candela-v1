@@ -409,6 +409,19 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     advanceUsed: Number(
       ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.advanceUsed ?? 0,
     ),
+    advanceAvailable: Number(
+      ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.advanceAvailable ?? 0,
+    ),
+    paymentStatus:
+      String(
+        ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.paymentStatus ??
+          "",
+      ) || undefined,
+    settlementType:
+      String(
+        ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.settlementType ??
+          "",
+      ) || undefined,
     advancePayments: advancePayments.map((payment) => ({
       receiptNo: payment.referenceNo?.trim() || `ADV-${payment.id.slice(-8).toUpperCase()}`,
       receivedAt: payment.receivedAt.toISOString(),

@@ -17,7 +17,10 @@ import {
 } from "@/lib/billing-packages";
 import { useToast } from "@/components/ui/toast-provider";
 import { useRouter } from "next/navigation";
+import { useSession } from "@/components/candela/session-provider";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
+
+const PATAUDI_BRANCH_ID = "branch_pataudi";
 
 type IpdServiceCartPanelProps = {
   admission: IpdAdmissionDetail;
@@ -27,6 +30,8 @@ type IpdServiceCartPanelProps = {
 
 export function IpdServiceCartPanel({ admission, onChange, onGenerateFinalBill }: IpdServiceCartPanelProps) {
   const { toast } = useToast();
+  const { session } = useSession();
+  const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
   const [services, setServices] = useState<BillingPackage[]>([]);
   const [packages, setPackages] = useState<BillingPackage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -275,7 +280,9 @@ export function IpdServiceCartPanel({ admission, onChange, onGenerateFinalBill }
                   <span>₹{cartTotal.toLocaleString("en-IN")}</span>
                 </div>
                 <div className="flex items-center justify-between rounded-md bg-[var(--attio-surface)] px-3 py-2 text-[12px]">
-                  <span className="text-[var(--attio-text-secondary)]">Advance wallet balance</span>
+                  <span className="text-[var(--attio-text-secondary)]">
+                    {isPataudi ? "Available advance" : "Advance wallet balance"}
+                  </span>
                   <span className="font-medium tabular-nums">₹{(admission.walletBalance ?? 0).toLocaleString("en-IN")}</span>
                 </div>
                 <AttioButton
@@ -284,7 +291,7 @@ export function IpdServiceCartPanel({ admission, onChange, onGenerateFinalBill }
                   disabled={processing || !cart.length || !admission.visitId}
                   onClick={goToBilling}
                 >
-                  Generate final bill & collect payment
+                  {isPataudi ? "Generate final bill" : "Generate final bill & collect payment"}
                 </AttioButton>
               </div>
             )}

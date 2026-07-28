@@ -69,6 +69,9 @@ export type OpdReceiptPayload = {
   balanceDue: number;
   refundAmount?: number;
   advanceUsed?: number;
+  advanceAvailable?: number;
+  paymentStatus?: string;
+  settlementType?: string;
   advancePayments?: IpdAdvanceReceiptRow[];
   routingNote?: string;
   packageLines?: PackageLineNote[];

@@ -21,6 +21,7 @@ import { writePlatformAudit } from "@/server/platform-audit";
 import { ensureHospitalBootstrap } from "@/server/hospital-bootstrap";
 import { syncVisitFromOpdVisit } from "@/server/visit-sync";
 import { createId } from "@/lib/id";
+import { isPataudiBranch } from "@/lib/auth-types";
 import { patientDisplayName, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { resolveDoctorName } from "@/lib/clinical-roster";
 import { backfillBranchScope } from "@/server/branch-scope";
@@ -1418,35 +1419,77 @@ export async function generateIpdFinalBill(
   const net = gstInvoice.grandTotal;
 
   const wallet = await getIpdWalletBalance(ctx, admissionId);
-  const pendingModes = new Set(["due", "pending"]);
-  const providedSplits = input.paymentSplits?.length ? input.paymentSplits : [];
-  const actualSplits = providedSplits.filter((p) => !pendingModes.has(p.mode));
-  const pendingSplits = providedSplits.filter((p) => pendingModes.has(p.mode));
+  const isPataudi = isPataudiBranch(branch?.name);
 
-  const advanceSplit = actualSplits.find((p) => p.mode === "advance");
   let walletUsed = 0;
-  let nonAdvanceActual = actualSplits
-    .filter((p) => p.mode !== "advance")
-    .reduce((s, p) => s + p.amount, 0);
+  let amountPaid = 0;
+  let balance = 0;
+  let refund = 0;
+  let paymentStatus = "";
+  let settlementType = "";
+  let allSplits: { mode: string; amount: number }[] = [];
+  let nonPendingForInvoice: { mode: string; amount: number }[] = [];
+  let invoiceMode = "advance";
 
-  if (advanceSplit) {
-    walletUsed = Math.min(advanceSplit.amount, wallet.balance);
-  } else if (wallet.balance > 0 && nonAdvanceActual < net) {
-    walletUsed = Math.min(wallet.balance, net - nonAdvanceActual);
+  if (isPataudi) {
+    // Credit-only IPD final bill for Pataudi: auto adjust all available advance.
+    walletUsed = Math.min(wallet.balance, net);
+    amountPaid = walletUsed;
+    balance = Math.max(0, net - amountPaid);
+    refund = Math.max(0, wallet.balance - walletUsed);
+
+    if (refund > 0) {
+      paymentStatus = "Refund";
+      settlementType = "Refund Pending";
+    } else if (balance === 0) {
+      paymentStatus = "Paid";
+      settlementType = walletUsed > 0 ? "Advance Settlement" : "No Payment";
+    } else if (walletUsed > 0) {
+      paymentStatus = "Partial";
+      settlementType = "Advance Settlement";
+    } else {
+      paymentStatus = "Pending";
+      settlementType = "Due";
+    }
+
+    const actualSplits: { mode: string; amount: number }[] = [];
+    if (walletUsed > 0) actualSplits.push({ mode: "advance", amount: walletUsed });
+    const pendingSplits: { mode: string; amount: number }[] = balance > 0 ? [{ mode: "due", amount: balance }] : [];
+
+    allSplits = [...actualSplits, ...pendingSplits];
+    nonPendingForInvoice = actualSplits;
+    invoiceMode = actualSplits.length === 1 && pendingSplits.length === 0 ? "advance" : "split";
+  } else {
+    const pendingModes = new Set(["due", "pending"]);
+    const providedSplits = input.paymentSplits?.length ? input.paymentSplits : [];
+    const actualSplits = providedSplits.filter((p) => !pendingModes.has(p.mode));
+    const pendingSplits = providedSplits.filter((p) => pendingModes.has(p.mode));
+
+    const advanceSplit = actualSplits.find((p) => p.mode === "advance");
+    let nonAdvanceActual = actualSplits
+      .filter((p) => p.mode !== "advance")
+      .reduce((s, p) => s + p.amount, 0);
+
+    if (advanceSplit) {
+      walletUsed = Math.min(advanceSplit.amount, wallet.balance);
+    } else if (wallet.balance > 0 && nonAdvanceActual < net) {
+      walletUsed = Math.min(wallet.balance, net - nonAdvanceActual);
+    }
+
+    if (walletUsed > 0 && !advanceSplit) {
+      actualSplits.unshift({ mode: "advance", amount: walletUsed });
+    } else if (advanceSplit) {
+      advanceSplit.amount = walletUsed;
+    }
+
+    amountPaid = nonAdvanceActual + walletUsed;
+    balance = Math.max(0, net - amountPaid);
+    refund = Math.max(0, wallet.balance - walletUsed);
+
+    allSplits = [...actualSplits, ...pendingSplits];
+    nonPendingForInvoice = actualSplits.filter((p) => !pendingModes.has(p.mode));
+    invoiceMode = nonPendingForInvoice.length === 1 ? nonPendingForInvoice[0].mode : "split";
   }
-
-  if (walletUsed > 0 && !advanceSplit) {
-    actualSplits.unshift({ mode: "advance", amount: walletUsed });
-  } else if (advanceSplit) {
-    advanceSplit.amount = walletUsed;
-  }
-
-  const amountPaid = nonAdvanceActual + walletUsed;
-  const balance = Math.max(0, net - amountPaid);
-  const refund = Math.max(0, wallet.balance - walletUsed);
-
-  const allSplits = [...actualSplits, ...pendingSplits];
-  const nonPendingForInvoice = actualSplits.filter((p) => !pendingModes.has(p.mode));
 
   const invoiceResult = await prisma.$transaction(async (tx) => {
     const { invoiceId } = await createVisitInvoice(
@@ -1458,7 +1501,7 @@ export async function generateIpdFinalBill(
         subtotal,
         discount: input.discount ?? 0,
         collected: amountPaid,
-        mode: nonPendingForInvoice.length === 1 ? nonPendingForInvoice[0].mode : "split",
+        mode: invoiceMode,
         paymentScope: balance === 0 ? "full" : "partial",
         lines: packageLines.map((line) => ({
           label: line.label,
@@ -1477,7 +1520,14 @@ export async function generateIpdFinalBill(
       where: { id: invoiceId },
       data: {
         refundAmount: refund,
-        payload: { ...payload, paymentSplits: allSplits, advanceUsed: walletUsed } as Prisma.InputJsonObject,
+        payload: {
+          ...payload,
+          paymentSplits: allSplits,
+          advanceUsed: walletUsed,
+          advanceAvailable: wallet.balance,
+          paymentStatus,
+          settlementType,
+        } as Prisma.InputJsonObject,
       },
     });
 

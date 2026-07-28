@@ -18,7 +18,11 @@ import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 import { getVisitForBillingAction } from "@/app/actions/clinical-actions";
 import { getIpdAdmissionAction } from "@/app/actions/ipd-actions";
 import { IpdWalletPanel } from "@/components/frontdesk/ipd-wallet-panel";
+import { IpdServiceCartPanel } from "@/components/frontdesk/ipd-service-cart-panel";
+import { IpdFinalBillModal } from "@/components/frontdesk/ipd-final-bill-modal";
 import { LabOrderButton } from "@/components/lab/lab-order-modal";
+
+const PATAUDI_BRANCH_ID = "branch_pataudi";
 type BillingMode = "opd" | "ipd";
 
 export type BillingWorkspaceProps = {
@@ -38,6 +42,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
   const params = useSearchParams();
   const visitParam = params.get("visit") ?? undefined;
   const { session } = useSession();
+  const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
   const {
     processBilling,
     processCounselBilling,
@@ -55,6 +60,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
   const [routingFlash, setRoutingFlash] = useState<string | null>(null);
   const [receiptVisitId, setReceiptVisitId] = useState<string | null>(null);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const [finalBillOpen, setFinalBillOpen] = useState(false);
 
   const pending = getPendingBilling();
   const activeVisitId = selectedVisitId || "";
@@ -235,6 +241,24 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
                   }}
                 />
               </Panel>
+            ) : isPataudi && mode === "ipd" && ipdAdmission ? (
+              <>
+                <IpdServiceCartPanel
+                  admission={ipdAdmission}
+                  onChange={() => void refreshIpdAdmission(ipdAdmission.id)}
+                  onGenerateFinalBill={() => setFinalBillOpen(true)}
+                />
+                {finalBillOpen && (
+                  <IpdFinalBillModal
+                    admission={ipdAdmission}
+                    onClose={() => setFinalBillOpen(false)}
+                    onGenerated={() => {
+                      setFinalBillOpen(false);
+                      void refreshIpdAdmission(ipdAdmission.id);
+                    }}
+                  />
+                )}
+              </>
             ) : (
               <OpdBillingForm
                 branchId={session?.branchId}

@@ -166,7 +166,9 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
   const labelX = 372;
   const valueX = 575;
   let y = tableBottom - 40;
-  drawRight(page, "Subtotal", labelX + 80, y, bold, FONT.body);
+  const showSettlement = !!(receipt.paymentStatus && receipt.settlementType);
+
+  drawRight(page, showSettlement ? "Gross Amount" : "Subtotal", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.subtotal), valueX, y, bold, FONT.body);
   y -= 13;
   if (receipt.discount > 0) {
@@ -189,38 +191,64 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
     drawRight(page, money(receipt.igstTotal), valueX, y, bold, FONT.body);
     y -= 13;
   }
-  drawRight(page, "Grand total", labelX + 80, y, bold, FONT.body);
+  drawRight(page, showSettlement ? "Net Bill Amount" : "Grand total", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.total), valueX, y, bold, FONT.body);
   y -= 13;
-  drawRight(page, "Collected", labelX + 80, y, bold, FONT.body);
-  drawRight(page, money(receipt.amountPaid), valueX, y, bold, FONT.body);
-  y -= 13;
-  if (receipt.balanceDue > 0) {
-    drawRight(page, "Balance due", labelX + 80, y, bold, FONT.body);
-    drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
-    y -= 13;
-  }
-  if (receipt.advanceUsed && receipt.advanceUsed > 0) {
-    drawRight(page, "Advance used", labelX + 80, y, bold, FONT.body);
-    drawRight(page, money(receipt.advanceUsed), valueX, y, font, FONT.body);
-    y -= 13;
-  }
-  if (receipt.refundAmount && receipt.refundAmount > 0) {
-    drawRight(page, "Refund due", labelX + 80, y, bold, FONT.body);
-    drawRight(page, money(receipt.refundAmount), valueX, y, bold, FONT.body);
-    y -= 13;
-  }
-  if (receipt.paymentBreakdown && receipt.paymentBreakdown.length > 0) {
-    for (const split of receipt.paymentBreakdown) {
-      drawRight(page, `Payment - ${split.mode.toUpperCase()}`, labelX + 80, y, bold, FONT.body);
-      drawRight(page, money(split.amount), valueX, y, font, FONT.body);
+
+  if (showSettlement) {
+    if (receipt.advanceUsed && receipt.advanceUsed > 0) {
+      drawRight(page, "Less: Advance Adjusted", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.advanceUsed), valueX, y, font, FONT.body);
       y -= 13;
     }
-  } else if (receipt.paymentMode) {
-    drawRight(page, "Payment mode", labelX + 80, y, bold, FONT.body);
-    drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
+    if (receipt.balanceDue > 0) {
+      drawRight(page, "Outstanding Amount", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
+      y -= 13;
+    }
+    if (receipt.refundAmount && receipt.refundAmount > 0) {
+      drawRight(page, "Refund Amount", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.refundAmount), valueX, y, bold, FONT.body);
+      y -= 13;
+    }
+    drawRight(page, "Payment Status", labelX + 80, y, bold, FONT.body);
+    drawRight(page, receipt.paymentStatus!.toUpperCase(), valueX, y, font, FONT.body);
     y -= 13;
+    drawRight(page, "Settlement Type", labelX + 80, y, bold, FONT.body);
+    drawRight(page, receipt.settlementType!, valueX, y, font, FONT.body);
+    y -= 13;
+  } else {
+    drawRight(page, "Collected", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.amountPaid), valueX, y, bold, FONT.body);
+    y -= 13;
+    if (receipt.balanceDue > 0) {
+      drawRight(page, "Balance due", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
+      y -= 13;
+    }
+    if (receipt.advanceUsed && receipt.advanceUsed > 0) {
+      drawRight(page, "Advance used", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.advanceUsed), valueX, y, font, FONT.body);
+      y -= 13;
+    }
+    if (receipt.refundAmount && receipt.refundAmount > 0) {
+      drawRight(page, "Refund due", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.refundAmount), valueX, y, bold, FONT.body);
+      y -= 13;
+    }
+    if (receipt.paymentBreakdown && receipt.paymentBreakdown.length > 0) {
+      for (const split of receipt.paymentBreakdown) {
+        drawRight(page, `Payment - ${split.mode.toUpperCase()}`, labelX + 80, y, bold, FONT.body);
+        drawRight(page, money(split.amount), valueX, y, font, FONT.body);
+        y -= 13;
+      }
+    } else if (receipt.paymentMode) {
+      drawRight(page, "Payment mode", labelX + 80, y, bold, FONT.body);
+      drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
+      y -= 13;
+    }
   }
+
   line(page, 15, 575, y, 0.5);
   y -= 13;
   drawRight(page, "GLOBAL HOSPITAL & TRAUMA CENTRE", 575, y, font, FONT.body);
