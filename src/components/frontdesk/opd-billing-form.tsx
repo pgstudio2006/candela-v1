@@ -91,7 +91,6 @@ export function OpdBillingForm({
   const [labLoading, setLabLoading] = useState(false);
   const [labSearch, setLabSearch] = useState("");
   const [selectedLabCatalogId, setSelectedLabCatalogId] = useState("");
-  const [selectedLabAmount, setSelectedLabAmount] = useState("");
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
 
   const serviceCategories = useMemo(
@@ -150,7 +149,6 @@ export function OpdBillingForm({
     setIsBalancePayment(false);
     setBillingMeta({});
     setSelectedLabCatalogId("");
-    setSelectedLabAmount("");
     setLabSearch("");
     setServiceCategory("");
   }, [visit?.id]);
@@ -166,15 +164,16 @@ export function OpdBillingForm({
         for (const order of res.data) {
           for (const item of order.items) {
             if (item.status !== "pending_billing") continue;
+            const liveService = item.reportCatalog?.service;
             pendingLines.push({
               key: `lab_${item.id}_${Date.now()}`,
               packageId: item.serviceId ?? `lab-${item.reportCatalogId}`,
               label: item.label,
-              amount: item.price ?? 0,
+              amount: liveService?.rate ?? item.price ?? 0,
               quantity: 1,
               description: `Lab order #${order.id}`,
-              category: item.reportCatalog?.service?.category ?? "Laboratory",
-              gstRatePercent: item.gstPercent,
+              category: liveService?.category ?? "Laboratory",
+              gstRatePercent: liveService?.gstPercent ?? item.gstPercent,
               labOrderItemId: item.id,
               labOrderId: order.id,
             });
@@ -558,16 +557,14 @@ export function OpdBillingForm({
               <Panel title="Lab orders">
                 <div className="space-y-3">
                   <p className="text-[12px] text-[var(--attio-text-secondary)]">
-                    Search lab catalogs, enter price, and add to the billing cart.
+                    Price is taken from the lab catalog&apos;s linked admin service charge.
                   </p>
-                  <div className="grid gap-3 sm:grid-cols-[1fr_120px_100px]">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_100px]">
                     <Select
                       value={selectedLabCatalogId}
                       disabled={Boolean(existingInvoice) || labLoading}
                       onValueChange={(value) => {
-                        const catalog = labCatalogs.find((c) => c.id === value);
                         setSelectedLabCatalogId(value ?? "");
-                        setSelectedLabAmount(catalog?.service?.rate != null ? String(catalog.service.rate) : "");
                       }}
                     >
                       <SelectTrigger className="h-9 text-[13px]">
@@ -611,23 +608,12 @@ export function OpdBillingForm({
                         )}
                       </SelectContent>
                     </Select>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      disabled={Boolean(existingInvoice) || !selectedLabCatalogId}
-                      value={selectedLabAmount}
-                      onChange={(e) => setSelectedLabAmount(e.target.value)}
-                      placeholder="Price ₹"
-                      className="h-9 text-[13px]"
-                    />
                     <AttioButton
                       variant="secondary"
-                      disabled={Boolean(existingInvoice) || !selectedLabCatalogId || !selectedLabAmount}
+                      disabled={Boolean(existingInvoice) || !selectedLabCatalogId}
                       onClick={() => {
                         const catalog = labCatalogs.find((c) => c.id === selectedLabCatalogId);
                         if (!catalog) return;
-                        const amount = Number(selectedLabAmount) || 0;
                         const service = catalog.service;
                         setLines((prev) => [
                           ...prev,
@@ -635,14 +621,13 @@ export function OpdBillingForm({
                             key: `lab_${catalog.id}_${Date.now()}`,
                             packageId: service?.id ?? `lab-${catalog.id}`,
                             label: `Lab: ${catalog.name}`,
-                            amount,
+                            amount: service?.rate != null ? Number(service.rate) : 0,
                             quantity: 1,
                             category: service?.category ?? "Laboratory",
                             gstRatePercent: service?.gstPercent,
                           },
                         ]);
                         setSelectedLabCatalogId("");
-                        setSelectedLabAmount("");
                       }}
                     >
                       Add

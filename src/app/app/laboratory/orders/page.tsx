@@ -87,6 +87,7 @@ export default function LabOrdersPage() {
   const columns = [
     { key: "patient", label: "Patient" },
     { key: "tests", label: "Tests" },
+    { key: "amount", label: "Amount" },
     { key: "source", label: "Source" },
     { key: "status", label: "Status" },
     { key: "orderedAt", label: "Ordered" },
@@ -107,6 +108,10 @@ export default function LabOrdersPage() {
             {o.items.map((i) => i.label).join(", ")}
           </div>
         ),
+        amount: (() => {
+          const total = o.items.reduce((sum, i) => sum + Number(i.reportCatalog?.service?.rate ?? i.price ?? 0), 0);
+          return <span className="text-[12px] font-semibold text-[var(--attio-accent)]">₹{Number(total).toLocaleString("en-IN")}</span>;
+        })(),
         source: <span className="text-[12px] uppercase">{o.source}</span>,
         status: <StatusBadge label={LAB_ORDER_STATUS_LABELS[o.status]} variant={o.status === "completed" ? "success" : o.status === "cancelled" ? "danger" : "info"} />,
         orderedAt: <span className="text-[12px]">{new Date(o.orderedAt).toLocaleString()}</span>,
