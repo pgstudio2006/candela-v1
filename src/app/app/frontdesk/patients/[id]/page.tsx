@@ -128,6 +128,50 @@ export default function PatientRecordPage() {
     }
   };
 
+  const handleViewDischargeSummary = (admission: (typeof ipdAdmissions)[number], summary: Record<string, string>) => {
+    const name = patient?.name ?? "";
+    const uhid = patient?.uhid ?? "";
+    const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const formatDate = (value?: string) => {
+      if (!value) return "—";
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? value : d.toLocaleDateString("en-IN");
+    };
+    const fields = [
+      { label: "Admission date", value: formatDate(summary.admissionDate) },
+      { label: "Discharge date", value: formatDate(summary.dischargeDate) },
+      { label: "Diagnosis", value: summary.diagnosis },
+      { label: "Procedures", value: summary.procedures },
+      { label: "Medications", value: summary.medications },
+      { label: "Follow up", value: summary.followUp },
+      { label: "Notes", value: summary.notes },
+    ];
+    const body = fields
+      .filter((f) => typeof f.value === "string" && f.value.trim() !== "" && f.value !== "—")
+      .map((f) => `<div class="section"><div class="label">${escape(f.label)}</div><div class="value">${escape(f.value)}</div></div>`)
+      .join("");
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head><title>Discharge Summary - ${escape(name)}</title>
+          <style>body{font-family:system-ui,sans-serif;padding:24px;color:#111;}h1{font-size:18px;margin:0 0 8px;}.meta{color:#555;font-size:12px;margin-bottom:16px;}.section{margin-bottom:12px;}.label{font-weight:600;font-size:12px;color:#444;}.value{font-size:12px;white-space:pre-wrap;}</style>
+        </head>
+        <body>
+          <h1>Discharge Summary</h1>
+          <div class="meta">${escape(name)} · ${escape(uhid)} · ${escape(admission.ward)} Bed ${escape(admission.bed)}</div>
+          ${body}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   if (!patient) {
     return (
       <PageChrome breadcrumbs={[{ label: "Front Desk", href: "/app/frontdesk" }, { label: "Patients" }]} title="Patient not found">
@@ -336,10 +380,21 @@ export default function PatientRecordPage() {
                     <p className="mt-1 text-[var(--attio-text-secondary)]">Diagnosis: {a.diagnosis}</p>
                     {(() => {
                       const summary = a.dischargeSummary;
-                      return typeof summary === "object" && summary !== null && Object.keys(summary).length > 0;
-                    })() && (
-                      <p className="mt-1 text-[11px] text-[var(--attio-text-tertiary)]">Discharge summary on file</p>
-                    )}
+                      const hasSummary = typeof summary === "object" && summary !== null && Object.keys(summary).length > 0;
+                      return hasSummary ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">Discharge summary on file</p>
+                          <AttioButton
+                            variant="secondary"
+                            className="!h-7 !text-[11px] gap-1"
+                            onClick={() => void handleViewDischargeSummary(a, summary as Record<string, string>)}
+                          >
+                            <Printer className="size-3.5" />
+                            View / Print
+                          </AttioButton>
+                        </div>
+                      ) : null;
+                    })()}
                     {a.visitId && (
                       <Link href={`/app/frontdesk/ipd-billing?visit=${a.visitId}`} className="mt-2 inline-block text-[12px] text-[var(--attio-accent)] hover:underline">
                         View billing →
