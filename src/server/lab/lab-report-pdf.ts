@@ -313,7 +313,10 @@ export async function buildLabReportPdfBytes(
       } else if (mime === "image/jpeg" || mime === "image/jpg") {
         embeddedImage = await pdfDoc.embedJpg(bytes);
       }
-      marginTop = template.marginTop;
+      const headerOverlayBottom = template.overlayFields
+        ?.filter((f) => f.y < 50)
+        .reduce((max, f) => Math.max(max, ((f.y + (f.height ?? 0)) / 100) * PAGE_HEIGHT), 0) ?? 0;
+      marginTop = Math.max(template.marginTop, headerOverlayBottom + 20);
       marginBottom = template.marginBottom;
       marginLeft = template.marginLeft;
       marginRight = template.marginRight;

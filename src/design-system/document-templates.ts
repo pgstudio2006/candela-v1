@@ -125,7 +125,7 @@ export const DEFAULT_DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Shared-header laboratory report",
     fileData: "/templates/60984.pdf",
     mimeType: "application/pdf",
-    marginTop: 170,
+    marginTop: 280,
     marginBottom: 70,
     marginLeft: 40,
     marginRight: 40,
