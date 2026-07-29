@@ -25,7 +25,7 @@ import {
   requireDoctorVisit,
 } from "@/server/doctor/guards";
 import { ensureVisitDoctorAssignment } from "@/server/doctor/visit-claim";
-import { ensureIpdWardBed, writeIpdRoundLog, getIpdRoundLog, findOnDutyNurseForWard } from "@/server/ipd";
+import { ensureIpdWardBed, writeIpdRoundLog, getIpdRoundLog, findOnDutyNurseForWard, createLabOrdersFromIpdRounds } from "@/server/ipd";
 import { ServerActionError } from "@/server/errors";
 import { notifyPrescriptionWhatsapp } from "@/server/notifications";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
@@ -1014,6 +1014,12 @@ export async function saveIpdRound(
       },
     }),
   ]);
+
+  if (ipd.visitId) {
+    void createLabOrdersFromIpdRounds(ctx, prisma, ipd.id, ipd.visitId, ipd.patientId).catch((err) => {
+      console.error("[doctor saveIpdRound] Failed to create lab orders from round:", err);
+    });
+  }
 
   const medicineText = typeof note.medicines === "string" ? note.medicines.trim() : "";
   if (medicineText || (medicationLines && medicationLines.length > 0)) {

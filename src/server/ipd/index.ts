@@ -1292,7 +1292,7 @@ export async function removeIpdCartItem(ctx: ServerContext, admissionId: string,
   return cart;
 }
 
-async function createLabOrdersFromIpdRounds(
+export async function createLabOrdersFromIpdRounds(
   ctx: ServerContext,
   tx: Prisma.TransactionClient,
   admissionId: string,
@@ -1302,12 +1302,34 @@ async function createLabOrdersFromIpdRounds(
   const scope = branchScope(ctx);
   const logs = await tx.ipdRoundLog.findMany({
     where: { ...scope, ipdAdmissionId: admissionId, kind: "doctor_round" },
-    select: { payload: true },
+    orderBy: { createdAt: "asc" },
   });
 
-  const requested = new Set<string>();
+  const catalogs = await tx.labReportCatalog.findMany({
+    where: { ...scope, active: true },
+    include: { service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } } },
+  });
+
+  const unmatched: string[] = [];
+  const allItems: {
+    reportCatalogId: string;
+    label: string;
+    sampleType?: string;
+    status: string;
+    serviceId?: string;
+    price?: number;
+    gstPercent?: number;
+  }[] = [];
+  const cartItems: IpdCartItem[] = [];
+  const processedLogIds: string[] = [];
+  let actorId = ctx.userId;
+  let actorName = ctx.userId;
+
   for (const log of logs) {
     const payload = log.payload as Record<string, unknown> | null;
+    if (payload?.labOrderId) continue;
+
+    const requested = new Set<string>();
     for (const key of ["labReports", "radiologyReports"]) {
       const raw = payload?.[key];
       if (typeof raw === "string" && raw.trim()) {
@@ -1317,43 +1339,73 @@ async function createLabOrdersFromIpdRounds(
         });
       }
     }
-  }
 
-  if (requested.size === 0) return { itemCount: 0, unmatched: [] };
+    const logItems: typeof allItems = [];
+    const logCartItems: IpdCartItem[] = [];
 
-  const catalogs = await tx.labReportCatalog.findMany({
-    where: { ...scope, active: true },
-    select: { id: true, name: true, code: true, sampleType: true },
-  });
-
-  const items: { reportCatalogId: string; label: string; sampleType?: string; status: string }[] = [];
-  const unmatched: string[] = [];
-  for (const line of requested) {
-    const normalized = line.toLowerCase();
-    let catalog = catalogs.find(
-      (c) => c.name.toLowerCase() === normalized || c.code.toLowerCase() === normalized,
-    );
-    if (!catalog) {
-      const candidates = catalogs.filter(
-        (c) => c.name.toLowerCase().includes(normalized) || c.code.toLowerCase().includes(normalized),
+    for (const line of requested) {
+      const normalized = line.toLowerCase();
+      let catalog = catalogs.find(
+        (c) => c.name.toLowerCase() === normalized || c.code.toLowerCase() === normalized,
       );
-      if (candidates.length) {
-        catalog = candidates.sort((a, b) => a.name.length - b.name.length)[0];
+      if (!catalog) {
+        const candidates = catalogs.filter(
+          (c) => c.name.toLowerCase().includes(normalized) || c.code.toLowerCase().includes(normalized),
+        );
+        if (candidates.length) {
+          catalog = candidates.sort((a, b) => a.name.length - b.name.length)[0];
+        }
+      }
+      if (catalog) {
+        const service = catalog.service;
+        logItems.push({
+          reportCatalogId: catalog.id,
+          label: catalog.name,
+          sampleType: catalog.sampleType ?? undefined,
+          status: "ordered",
+          serviceId: service?.id,
+          price: service?.rate != null ? Number(service.rate) : undefined,
+          gstPercent: service?.gstPercent != null ? Number(service.gstPercent) : undefined,
+        });
+        if (service) {
+          logCartItems.push({
+            id: createId("ipdcart"),
+            type: "service",
+            packageId: service.id,
+            label: `Lab: ${catalog.name}`,
+            amount: Number(service.rate),
+            quantity: 1,
+            addedAt: new Date().toISOString(),
+          });
+        }
+      } else {
+        unmatched.push(line);
       }
     }
-    if (catalog) {
-      items.push({
-        reportCatalogId: catalog.id,
-        label: catalog.name,
-        sampleType: catalog.sampleType ?? undefined,
-        status: "ordered",
-      });
-    } else {
-      unmatched.push(line);
+
+    if (logItems.length > 0) {
+      allItems.push(...logItems);
+      cartItems.push(...logCartItems);
+      processedLogIds.push(log.id);
+      if (log.actorId) {
+        actorId = log.actorId;
+        actorName = log.actorName ?? actorId;
+      }
     }
   }
 
-  if (items.length === 0) return { itemCount: 0, unmatched };
+  if (allItems.length === 0) return { itemCount: 0, unmatched };
+
+  const admission = await tx.ipdAdmission.findFirst({
+    where: { id: admissionId },
+    select: { cart: true },
+  });
+  const existingCart = parseCart(admission?.cart);
+  const newCart = [...existingCart, ...cartItems];
+  await tx.ipdAdmission.update({
+    where: { id: admissionId },
+    data: { cart: newCart as unknown as object },
+  });
 
   const order = await tx.labOrder.create({
     data: {
@@ -1361,15 +1413,24 @@ async function createLabOrdersFromIpdRounds(
       patientId,
       visitId,
       admissionId,
-      orderedBy: ctx.userId,
-      orderedByName: ctx.userId,
+      orderedBy: actorId,
+      orderedByName: actorName,
       source: "ipd",
       status: "ordered",
-      items: { create: items },
+      items: { create: allItems },
     },
   });
 
-  return { orderId: order.id, itemCount: items.length, unmatched };
+  for (const logId of processedLogIds) {
+    const log = await tx.ipdRoundLog.findFirst({ where: { id: logId }, select: { payload: true } });
+    const payload = (log?.payload as Record<string, unknown> | null) ?? {};
+    await tx.ipdRoundLog.update({
+      where: { id: logId },
+      data: { payload: { ...payload, labOrderId: order.id } as unknown as object },
+    });
+  }
+
+  return { orderId: order.id, itemCount: allItems.length, unmatched };
 }
 
 export async function generateIpdFinalBill(
@@ -1393,7 +1454,22 @@ export async function generateIpdFinalBill(
   const visit = await prisma.opdVisit.findUnique({ where: { id: visitId } });
   if (!visit) throw new ServerActionError("NOT_FOUND", "Visit not found.");
 
-  const cart = parseCart(admission.cart);
+  const labOrderResult = await createLabOrdersFromIpdRounds(
+    ctx,
+    prisma,
+    admissionId,
+    visitId,
+    admission.patientId,
+  );
+  if (labOrderResult.unmatched.length) {
+    console.warn("[ipd final bill] Unmatched round lab/radiology orders:", labOrderResult.unmatched);
+  }
+
+  const freshAdmission = await prisma.ipdAdmission.findFirst({
+    where: { id: admissionId, tenantId: scope.tenantId, branchId: scope.branchId },
+    select: { cart: true },
+  });
+  const cart = parseCart(freshAdmission?.cart);
   if (!cart.length) throw new ServerActionError("VALIDATION", "No services or packages in the IPD cart.");
 
   const packageLines = cart.map((item) => ({
@@ -1573,17 +1649,6 @@ export async function generateIpdFinalBill(
         balanceDue: balance > 0 ? balance : null,
       },
     });
-
-    const labOrderResult = await createLabOrdersFromIpdRounds(
-      ctx,
-      tx,
-      admissionId,
-      visitId,
-      admission.patientId,
-    );
-    if (labOrderResult.unmatched.length) {
-      console.warn("[ipd final bill] Unmatched round lab/radiology orders:", labOrderResult.unmatched);
-    }
 
     return { invoiceId, labOrderId: labOrderResult.orderId, labOrderItemCount: labOrderResult.itemCount };
   });
