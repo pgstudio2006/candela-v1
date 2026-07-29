@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const ctx = await requireAnyModule("admin", "frontdesk", "counsellor", "doctor");
+    const ctx = await requireAnyModule("admin", "frontdesk", "counsellor", "doctor", "laboratory");
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get("branchId") || ctx.branchId;
     const charges = await prisma.serviceCharge.findMany({
