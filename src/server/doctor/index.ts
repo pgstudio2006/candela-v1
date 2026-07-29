@@ -9,7 +9,7 @@ import type {
 } from "@/design-system/doctor-data";
 import { DEMO_DOCTOR_ID } from "@/design-system/doctor-data";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
-import type { DocumentTemplate } from "@/design-system/document-templates";
+import { DEFAULT_DOCUMENT_TEMPLATES, type DocumentTemplate } from "@/design-system/document-templates";
 import { validateCompleteConsultation } from "@/lib/doctor-validation";
 import { visitVisibleInDoctorWorkspace } from "@/lib/doctor-queue";
 import { isInReceptionQueue, isRedFlagVisit, patientDisplayName } from "@/lib/frontdesk-workflow";
@@ -1177,7 +1177,8 @@ export async function getDefaultDocumentTemplate(
     orderBy: [{ isDefault: "desc" }, { branchId: "desc" }, { createdAt: "desc" }],
     take: 1,
   });
-  return rows.length ? serializeDocumentTemplate(rows[0]) : null;
+  if (rows.length) return serializeDocumentTemplate(rows[0]);
+  return DEFAULT_DOCUMENT_TEMPLATES.find((t) => t.kind === kind && t.enabled) ?? null;
 }
 
 export async function addDocumentTemplate(

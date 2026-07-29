@@ -138,7 +138,7 @@ export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPaylo
   const pdfDoc = await PDFDocument.create();
   let embeddedTemplate: PDFEmbeddedPage | null = null;
   try {
-    const res = await fetch("/templates/navayu-invoice-template.pdf");
+    const res = await fetch("/templates/60984.pdf");
     if (res.ok) {
       const bytes = await res.arrayBuffer();
       const templateDoc = await PDFDocument.load(bytes);

@@ -8,6 +8,7 @@ import {
   type LabTemplateOverlayField,
 } from "@/design-system/lab-data";
 import { CLINIC_BRAND } from "@/design-system/document-templates";
+import { loadTemplateFile } from "@/lib/pdf-template-loader";
 import {
   resolveAge,
   getApplicableRange,
@@ -39,14 +40,6 @@ export type LabReportTemplateSpec = {
   marginRight: number;
   overlayFields: LabTemplateOverlayField[];
 };
-
-function dataUrlToBytes(dataUrl: string): Uint8Array | undefined {
-  const comma = dataUrl.indexOf(",");
-  if (comma === -1) return undefined;
-  const base64 = dataUrl.slice(comma + 1).trim();
-  if (!base64) return undefined;
-  return Buffer.from(base64, "base64");
-}
 
 function evaluateLabResultFlag(
   fieldMaster: LabFieldMaster,
@@ -171,6 +164,16 @@ function overlayFieldValue(
 ): string {
   const value = (() => {
     switch (field.key) {
+      case "hospitalName":
+        return CLINIC_BRAND.name;
+      case "hospitalAddress":
+        return CLINIC_BRAND.address;
+      case "hospitalPhone":
+        return CLINIC_BRAND.phone;
+      case "hospitalEmail":
+        return CLINIC_BRAND.email;
+      case "hospitalGst":
+        return CLINIC_BRAND.gstNumber ? `GST: ${CLINIC_BRAND.gstNumber}` : "";
       case "patientName":
         return patient.name;
       case "uhid":
@@ -189,6 +192,8 @@ function overlayFieldValue(
       }
       case "collectionTime":
         return order?.sampleCollectedAt ? dateLabel(order.sampleCollectedAt) : "";
+      case "receivingTime":
+        return order?.sampleCollectedAt ? dateLabel(order.sampleCollectedAt) : "";
       case "reportingTime":
         return order?.completedAt ? dateLabel(order.completedAt) : dateLabel(new Date().toISOString());
       case "sampleId":
@@ -196,6 +201,8 @@ function overlayFieldValue(
         return order?.id ?? "";
       case "doctorName":
         return order?.orderedByName ?? "";
+      case "generatedOn":
+        return dateLabel(new Date().toISOString());
       case "sampleType":
         return order?.items.map((i) => i.sampleType).filter(Boolean).join(", ") ?? "";
       case "pregnancy":
@@ -295,7 +302,7 @@ export async function buildLabReportPdfBytes(
   let embeddedImage: any = undefined;
 
   if (template?.fileData) {
-    const bytes = dataUrlToBytes(template.fileData);
+    const bytes = await loadTemplateFile(template.fileData);
     if (bytes) {
       const mime = (template.mimeType ?? "application/pdf").toLowerCase();
       if (mime === "application/pdf") {
@@ -335,28 +342,38 @@ export async function buildLabReportPdfBytes(
   let page = newPage(orders[0]);
   let y = top;
 
-  // Header
-  page.drawText("Laboratory Report", { x: marginLeft, y, size: 20, font: boldFont, color: accent });
-  y -= 26;
+  const hasOverlayHeader = (template?.overlayFields ?? []).some((f) =>
+    ["patientName", "uhid", "ageGender", "sampleId", "collectionTime", "receivingTime", "reportingTime"].includes(f.key),
+  );
 
-  const age = resolveAge(patient, new Date());
-  const info = [
-    `Patient: ${patient.name}`,
-    `UHID: ${patient.uhid}`,
-    `Age / Gender: ${formatAge(age)} / ${patient.gender?.toUpperCase() ?? "—"}`,
-    patient.phone ? `Phone: ${patient.phone}` : "",
-  ]
-    .filter(Boolean)
-    .join("   ·   ");
-  page.drawText(info, { x: marginLeft, y, size: 10, font: normalFont, color: secondary });
-  y -= 22;
+  if (!hasOverlayHeader) {
+    // Fallback header when no overlay header is configured
+    page.drawText("Laboratory Report", { x: marginLeft, y, size: 20, font: boldFont, color: accent });
+    y -= 26;
 
-  const generatedAt = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-  page.drawText(`Generated: ${generatedAt}`, { x: marginLeft, y, size: 9, font: normalFont, color: secondary });
-  y -= 20;
+    const age = resolveAge(patient, new Date());
+    const info = [
+      `Patient: ${patient.name}`,
+      `UHID: ${patient.uhid}`,
+      `Age / Gender: ${formatAge(age)} / ${patient.gender?.toUpperCase() ?? "—"}`,
+      patient.phone ? `Phone: ${patient.phone}` : "",
+    ]
+      .filter(Boolean)
+      .join("   ·   ");
+    page.drawText(info, { x: marginLeft, y, size: 10, font: normalFont, color: secondary });
+    y -= 22;
 
-  page.drawLine({ start: { x: marginLeft, y }, end: { x: rightX, y }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
-  y -= 18;
+    const generatedAt = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+    page.drawText(`Generated: ${generatedAt}`, { x: marginLeft, y, size: 9, font: normalFont, color: secondary });
+    y -= 20;
+
+    page.drawLine({ start: { x: marginLeft, y }, end: { x: rightX, y }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
+    y -= 18;
+  } else {
+    y -= 8;
+    page.drawLine({ start: { x: marginLeft, y }, end: { x: rightX, y }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
+    y -= 12;
+  }
 
   if (orders.length === 0) {
     page.drawText("No laboratory orders to display.", { x: marginLeft, y, size: 11, font: normalFont, color: secondary });

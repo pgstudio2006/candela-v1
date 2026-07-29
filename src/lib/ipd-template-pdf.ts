@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
-import type { DocumentTemplate, DocumentTemplateOverlayField } from "@/design-system/document-templates";
+import { CLINIC_BRAND, type DocumentTemplate, type DocumentTemplateOverlayField } from "@/design-system/document-templates";
+import { loadTemplateFile } from "@/lib/pdf-template-loader";
 
 export type IpdDischargeSummary = {
   admissionDate?: string;
@@ -10,24 +11,33 @@ export type IpdDischargeSummary = {
   medications?: string;
   followUp?: string;
   notes?: string;
+  chiefComplaints?: string;
+  historyOfPresentIllness?: string;
+  examination?: string;
+  otNotes?: string;
+  generalExamination?: string;
+  localExamination?: string;
+  investigations?: string;
+  hospitalCourse?: string;
+  conditionOnDischarge?: string;
+  advice?: string;
+  emergencyContact?: string;
+  doctorSignature?: string;
+  doctorRegistrationNo?: string;
 };
 
-const TEMPLATES = {
-  fileSticker: "/templates/filepagesticker.pdf",
+const DEFAULT_TEMPLATES = {
+  fileSticker: "/templates/60984.pdf",
   roomPlate: "/templates/patientroomsticker.pdf",
-  overview: "/templates/1.pdf",
-  discharge: "/templates/KAMLESH%2068YRS%2020-07-26.pdf",
+  overview: "/templates/60984.pdf",
+  discharge: "/templates/60984.pdf",
 } as const;
 
-async function loadTemplate(path: string): Promise<PDFDocument> {
-  const response = await fetch(path);
-  if (!response.ok) throw new Error(`Template not found: ${path}`);
-  return PDFDocument.load(await response.arrayBuffer());
-}
-
 async function loadSource(template: DocumentTemplate | undefined, fallback: string): Promise<PDFDocument> {
-  if (template?.fileData) return PDFDocument.load(await fetch(template.fileData).then((response) => response.arrayBuffer()));
-  return loadTemplate(fallback);
+  const fileData = template?.fileData ?? fallback;
+  const bytes = await loadTemplateFile(fileData);
+  if (!bytes) throw new Error(`Template not found: ${fileData}`);
+  return PDFDocument.load(bytes);
 }
 
 function safe(value: unknown): string {
@@ -42,6 +52,16 @@ function formatDate(value: unknown): string {
 
 function overlayValue(field: DocumentTemplateOverlayField, admission: IpdAdmissionDetail, summary?: IpdDischargeSummary): string {
   switch (field.key) {
+    case "hospitalName":
+      return CLINIC_BRAND.name;
+    case "hospitalAddress":
+      return CLINIC_BRAND.address;
+    case "hospitalPhone":
+      return CLINIC_BRAND.phone;
+    case "hospitalEmail":
+      return CLINIC_BRAND.email;
+    case "hospitalGst":
+      return CLINIC_BRAND.gstNumber ? `GST: ${CLINIC_BRAND.gstNumber}` : "";
     case "patientName":
       return admission.patientName;
     case "uhid":
@@ -49,11 +69,16 @@ function overlayValue(field: DocumentTemplateOverlayField, admission: IpdAdmissi
     case "ageGender":
       return `${safe(admission.age)} / ${safe(admission.gender)}`;
     case "mobileNo":
+    case "phone":
       return admission.phone ?? "";
     case "ward":
       return admission.ward;
     case "bed":
       return admission.bed;
+    case "wardBed":
+      return `${admission.ward} / ${admission.bed}`;
+    case "ipdNo":
+      return admission.id ?? "";
     case "doctorName":
       return admission.doctorName;
     case "diagnosis":
@@ -62,6 +87,8 @@ function overlayValue(field: DocumentTemplateOverlayField, admission: IpdAdmissi
       return formatDate(admission.admittedAt);
     case "dischargeDate":
       return summary ? formatDate(summary.dischargeDate) : "";
+    case "expectedDischarge":
+      return formatDate(admission.expectedDischarge);
     case "procedures":
       return summary?.procedures ?? "";
     case "medications":
@@ -70,9 +97,24 @@ function overlayValue(field: DocumentTemplateOverlayField, admission: IpdAdmissi
       return summary?.followUp ?? "";
     case "notes":
       return summary?.notes ?? "";
+    case "address":
+      return "";
+    case "patientType":
+      return admission.patientType;
+    case "billingMode":
+      return admission.billingMode;
+    case "status":
+      return admission.status;
     default:
-      return field.label;
+      return summary && (field.key as keyof IpdDischargeSummary) in summary
+        ? String(summary[field.key as keyof IpdDischargeSummary] ?? "")
+        : field.label;
   }
+}
+
+function resolveFont(field: DocumentTemplateOverlayField, normal: PDFFont, bold: PDFFont): PDFFont {
+  if (field.fontStyle === "bold" || field.fontStyle === "bold-italic") return bold;
+  return normal;
 }
 
 function renderOverlayFields(
@@ -87,17 +129,24 @@ function renderOverlayFields(
   const height = page.getHeight();
   for (const field of fields) {
     const value = overlayValue(field, admission, summary);
-    const font = field.key === "patientName" || field.key === "doctorName" || field.key === "ward" ? bold : normal;
+    if (!value && !field.label) continue;
+    const font = resolveFont(field, normal, bold);
     const size = Math.max(6, Math.min(16, field.fontSize ?? 10));
     const boxLeft = (field.x / 100) * width;
     const boxTop = height - (field.y / 100) * height;
-    const boxWidth = (field.width / 100) * width;
+    const boxWidth = Math.max(20, (field.width / 100) * width);
+    const yStart = boxTop - size * 0.8;
+
+    if (field.wrap) {
+      drawLines(page, value, boxLeft, yStart, boxWidth, font, size, size * 1.2);
+      continue;
+    }
+
     const textWidth = font.widthOfTextAtSize(value, size);
     let x = boxLeft;
     if (field.align === "center") x = boxLeft + boxWidth / 2 - textWidth / 2;
     if (field.align === "right") x = boxLeft + boxWidth - textWidth;
-    const y = boxTop - size;
-    page.drawText(value, { x: Math.max(0, x), y: Math.max(0, y), size, font, color: rgb(0.08, 0.08, 0.08) });
+    page.drawText(value, { x: Math.max(0, x), y: Math.max(0, yStart), size, font, color: rgb(0.08, 0.08, 0.08) });
   }
 }
 
@@ -105,7 +154,7 @@ function draw(page: PDFPage, text: unknown, x: number, y: number, font: PDFFont,
   page.drawText(safe(text), { x, y, size, font, color: rgb(0.08, 0.08, 0.08) });
 }
 
-function drawLines(page: PDFPage, text: unknown, x: number, y: number, width: number, font: PDFFont, size = 9, lineHeight = 12) {
+function drawLines(page: PDFPage, text: unknown, x: number, y: number, width: number, font: PDFFont, size = 9, lineHeight = 12): number {
   const words = safe(text).split(/\s+/);
   let line = "";
   let row = 0;
@@ -118,6 +167,7 @@ function drawLines(page: PDFPage, text: unknown, x: number, y: number, width: nu
     } else line = candidate;
   }
   if (line) draw(page, line, x, y - row * lineHeight, font, size);
+  return row + (line ? 1 : 0);
 }
 
 function patientMeta(admission: IpdAdmissionDetail): string {
@@ -132,7 +182,7 @@ async function fonts(pdf: PDFDocument) {
 }
 
 export async function generateIpdFileStickerPdf(admission: IpdAdmissionDetail, template?: DocumentTemplate): Promise<Uint8Array> {
-  const source = await loadSource(template, TEMPLATES.fileSticker);
+  const source = await loadSource(template, DEFAULT_TEMPLATES.fileSticker);
   const pdf = await PDFDocument.create();
   const [page] = await pdf.copyPages(source, [0]);
   pdf.addPage(page);
@@ -152,7 +202,7 @@ export async function generateIpdFileStickerPdf(admission: IpdAdmissionDetail, t
 }
 
 export async function generateIpdRoomPlatePdf(admission: IpdAdmissionDetail, template?: DocumentTemplate): Promise<Uint8Array> {
-  const source = await loadSource(template, TEMPLATES.roomPlate);
+  const source = await loadSource(template, DEFAULT_TEMPLATES.roomPlate);
   const pdf = await PDFDocument.create();
   const [page] = await pdf.copyPages(source, [0]);
   pdf.addPage(page);
@@ -172,7 +222,7 @@ export async function generateIpdRoomPlatePdf(admission: IpdAdmissionDetail, tem
 }
 
 export async function generateIpdOverviewPdf(admission: IpdAdmissionDetail, template?: DocumentTemplate): Promise<Uint8Array> {
-  const source = await loadSource(template, TEMPLATES.overview);
+  const source = await loadSource(template, DEFAULT_TEMPLATES.overview);
   const pdf = await PDFDocument.create();
   const pages = await pdf.copyPages(source, source.getPageIndices().slice(0, 1));
   pdf.addPage(pages[0]);
@@ -208,12 +258,12 @@ export async function generateIpdOverviewPdf(admission: IpdAdmissionDetail, temp
 }
 
 export async function generateIpdDischargeSummaryPdf(admission: IpdAdmissionDetail, summary: IpdDischargeSummary, template?: DocumentTemplate): Promise<Uint8Array> {
-  const source = await loadSource(template, TEMPLATES.discharge);
+  const source = await loadSource(template, DEFAULT_TEMPLATES.discharge);
   const pdf = await PDFDocument.create();
   const [page] = await pdf.copyPages(source, [0]);
   pdf.addPage(page);
   const { normal, bold } = await fonts(pdf);
-  const target = pdf.getPages()[0];
+  let target = pdf.getPages()[0];
   if (template?.overlayFields?.length) {
     renderOverlayFields(target, template.overlayFields, admission, summary, normal, bold);
     return pdf.save();
@@ -224,19 +274,53 @@ export async function generateIpdDischargeSummaryPdf(admission: IpdAdmissionDeta
   y -= 24;
   drawLines(target, patientMeta(admission), left, y, target.getWidth() - 116, normal, 10);
   y -= 30;
-  const fields: Array<[string, unknown]> = [
-    ["Admission date", summary.admissionDate],
-    ["Discharge date", summary.dischargeDate ?? new Date().toISOString()],
+  const sections: Array<[string, unknown]> = [
+    ["Admission date", formatDate(summary.admissionDate)],
+    ["Discharge date", formatDate(summary.dischargeDate)],
+    ["IPD Number", admission.id],
     ["Diagnosis", summary.diagnosis],
-    ["Procedures", summary.procedures],
+    ["Treatment Given", summary.procedures],
+    ["Chief Complaints", summary.chiefComplaints],
+    ["History of Present Illness", summary.historyOfPresentIllness],
+    ["Examination", summary.examination],
+    ["OT / Procedure Notes", summary.otNotes],
+    ["General Examination", summary.generalExamination],
+    ["Local Examination", summary.localExamination],
+    ["Investigations", summary.investigations],
+    ["Hospital Course", summary.hospitalCourse],
+    ["Condition on Discharge", summary.conditionOnDischarge],
     ["Medications", summary.medications],
-    ["Follow up", summary.followUp],
+    ["Advice", summary.advice],
+    ["Follow Up", summary.followUp],
+    ["Emergency Contact", summary.emergencyContact],
     ["Notes", summary.notes],
   ];
-  for (const [label, value] of fields) {
-    draw(target, `${label}:`, left, y, bold, 10);
-    drawLines(target, value, left + 105, y, target.getWidth() - 165, normal, 10);
-    y -= 28;
+
+  for (const [label, value] of sections) {
+    const text = safe(value);
+    if (!text || text === "—") continue;
+    if (y < 90) {
+      target = pdf.addPage([target.getWidth(), target.getHeight()]);
+      y = target.getHeight() - 120;
+    }
+    draw(target, `${label}`, left, y, bold, 11);
+    y -= 18;
+    const lines = drawLines(target, text, left, y, target.getWidth() - left * 2, normal, 10, 13);
+    y -= Math.max(14, lines * 13 + 10);
   }
+
+  if (summary.doctorSignature || admission.doctorName) {
+    if (y < 80) {
+      target = pdf.addPage([target.getWidth(), target.getHeight()]);
+      y = target.getHeight() - 120;
+    }
+    y -= 20;
+    draw(target, "_________________________", left + target.getWidth() / 2 - 140, y, normal, 10);
+    y -= 16;
+    draw(target, summary.doctorSignature || admission.doctorName, left + target.getWidth() / 2 - 140, y, bold, 10);
+    y -= 14;
+    draw(target, `Reg. No: ${safe(summary.doctorRegistrationNo)}`, left + target.getWidth() / 2 - 140, y, normal, 9);
+  }
+
   return pdf.save();
 }
