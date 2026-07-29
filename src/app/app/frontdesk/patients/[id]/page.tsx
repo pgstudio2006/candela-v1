@@ -18,10 +18,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
 import { getPatientInvoicesAction, getPatientInvoiceReceiptsAction } from "@/app/actions/clinical-actions";
 import { getIpdAdmissionsByPatientAction } from "@/app/actions/ipd-actions";
+import { listDocumentTemplatesAction } from "@/app/actions/doctor-actions";
 import { getPendingLabOrdersForVisitAction } from "@/app/actions/lab-actions";
 import type { LabOrder } from "@/design-system/lab-data";
-import { downloadPdfBytes } from "@/lib/invoice-pdf";
+import { downloadPdfBytes, printPdfBytes } from "@/lib/invoice-pdf";
 import { generatePatientInvoiceSummaryPdf } from "@/lib/patient-invoice-summary-pdf";
+import { generateIpdDischargeSummaryPdf, type IpdDischargeSummary } from "@/lib/ipd-template-pdf";
+import { loadDocumentTemplates, type DocumentTemplate } from "@/design-system/document-templates";
+import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 
 export default function PatientRecordPage() {
   const params = useParams();
@@ -68,8 +72,10 @@ export default function PatientRecordPage() {
   const [patientStatus, setPatientStatus] = useState<string>("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [ipdAdmissions, setIpdAdmissions] = useState<Extract<Awaited<ReturnType<typeof getIpdAdmissionsByPatientAction>>, { ok: true }>["data"]>([]);
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
   const [cart, setCart] = useState<LabOrder[]>([]);
   const [cartLoading, setCartLoading] = useState(false);
+  const [printingSummaryId, setPrintingSummaryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (patient) setActivePatientId(patient.id);
@@ -85,6 +91,11 @@ export default function PatientRecordPage() {
     void getIpdAdmissionsByPatientAction(patient.id).then((result) => {
       if (cancelled) return;
       if (result.ok && result.data) setIpdAdmissions(result.data);
+    });
+    void listDocumentTemplatesAction().then((result) => {
+      if (cancelled) return;
+      if (result.ok && result.data?.length) setDocumentTemplates(result.data);
+      else setDocumentTemplates(loadDocumentTemplates());
     });
     return () => {
       cancelled = true;
@@ -164,6 +175,61 @@ export default function PatientRecordPage() {
       setTimeout(() => setReassignToast(null), 3000);
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  const buildIpdDetail = (admission: (typeof ipdAdmissions)[number]): IpdAdmissionDetail => {
+    return {
+      ...admission,
+      id: admission.id,
+      visitId: admission.visitId ?? "",
+      patientId: patient?.id ?? "",
+      patientName: patient?.name ?? "",
+      uhid: patient?.uhid ?? null,
+      phone: patient?.phone ?? null,
+      age: resolvePatientAge(patient?.age, patient?.dateOfBirth),
+      gender: patient?.gender ?? null,
+      patientType: "general",
+      billingMode: "postpaid",
+      attendingDoctorId: "",
+      lastRoundAt: null,
+      lastRoundNote: null,
+      cart: [],
+      advancePayments: [],
+      refundVouchers: [],
+    } as unknown as IpdAdmissionDetail;
+  };
+
+  const handleDownloadDischargeSummary = async (admission: (typeof ipdAdmissions)[number], summary: IpdDischargeSummary) => {
+    setPrintingSummaryId(admission.id);
+    try {
+      const detail = buildIpdDetail(admission);
+      const template =
+        documentTemplates.find((t) => t.kind === "discharge_summary" && t.isDefault) ??
+        documentTemplates.find((t) => t.kind === "discharge_summary");
+      const bytes = await generateIpdDischargeSummaryPdf(detail, summary, template);
+      const filename = `${patient?.uhid ?? patient?.id ?? "discharge"}_discharge_summary_${new Date().toISOString().slice(0, 10)}.pdf`;
+      downloadPdfBytes(bytes, filename);
+    } catch (err) {
+      console.error("Download discharge summary failed", err);
+    } finally {
+      setPrintingSummaryId(null);
+    }
+  };
+
+  const handlePrintDischargeSummary = async (admission: (typeof ipdAdmissions)[number], summary: IpdDischargeSummary) => {
+    setPrintingSummaryId(admission.id);
+    try {
+      const detail = buildIpdDetail(admission);
+      const template =
+        documentTemplates.find((t) => t.kind === "discharge_summary" && t.isDefault) ??
+        documentTemplates.find((t) => t.kind === "discharge_summary");
+      const bytes = await generateIpdDischargeSummaryPdf(detail, summary, template);
+      printPdfBytes(bytes, "Discharge Summary");
+    } catch (err) {
+      console.error("Print discharge summary failed", err);
+    } finally {
+      setPrintingSummaryId(null);
     }
   };
 
@@ -428,10 +494,31 @@ export default function PatientRecordPage() {
                     <p className="mt-1 text-[var(--attio-text-secondary)]">Diagnosis: {a.diagnosis}</p>
                     {(() => {
                       const summary = a.dischargeSummary;
-                      return typeof summary === "object" && summary !== null && Object.keys(summary).length > 0;
-                    })() && (
-                      <p className="mt-1 text-[11px] text-[var(--attio-text-tertiary)]">Discharge summary on file</p>
-                    )}
+                      const hasSummary = typeof summary === "object" && summary !== null && Object.keys(summary).length > 0;
+                      return hasSummary ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">Discharge summary on file</p>
+                          <AttioButton
+                            variant="secondary"
+                            className="!h-7 !text-[11px] gap-1"
+                            disabled={printingSummaryId === a.id}
+                            onClick={() => void handleDownloadDischargeSummary(a, summary as IpdDischargeSummary)}
+                          >
+                            <Download className="size-3.5" />
+                            {printingSummaryId === a.id ? "Preparing…" : "Download"}
+                          </AttioButton>
+                          <AttioButton
+                            variant="secondary"
+                            className="!h-7 !text-[11px] gap-1"
+                            disabled={printingSummaryId === a.id}
+                            onClick={() => void handlePrintDischargeSummary(a, summary as IpdDischargeSummary)}
+                          >
+                            <Printer className="size-3.5" />
+                            Print
+                          </AttioButton>
+                        </div>
+                      ) : null;
+                    })()}
                     {a.visitId && (
                       <Link href={`/app/frontdesk/ipd-billing?visit=${a.visitId}`} className="mt-2 inline-block text-[12px] text-[var(--attio-accent)] hover:underline">
                         View billing →
