@@ -45,6 +45,7 @@ export default function LabReportCatalogPage() {
   const [editing, setEditing] = useState<ReportForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [openFieldIdx, setOpenFieldIdx] = useState<number | null>(null);
+  const [fieldSearches, setFieldSearches] = useState<Record<number, string>>({});
   const [serviceCharges, setServiceCharges] = useState<{ id: string; label: string; category: string; rate: number }[]>([]);
 
   useEffect(() => {
@@ -269,6 +270,7 @@ export default function LabReportCatalogPage() {
                       <Label className="text-[11px]">Field</Label>
                       {(() => {
                         const selectedMaster = fieldMasters.find((fm) => fm.id === f.fieldMasterId);
+                        const inputValue = fieldSearches[idx] ?? (selectedMaster ? `${selectedMaster.name} (${selectedMaster.code ?? ""})` : "");
                         return (
                           <Command
                             value={f.fieldMasterId || undefined}
@@ -277,7 +279,9 @@ export default function LabReportCatalogPage() {
                           >
                             <CommandInput
                               placeholder={selectedMaster ? `${selectedMaster.name} (${selectedMaster.code ?? ""})` : "Search field..."}
-                              onFocus={() => setOpenFieldIdx(idx)}
+                              value={inputValue}
+                              onValueChange={(s) => setFieldSearches((prev) => ({ ...prev, [idx]: s }))}
+                              onFocus={() => { setOpenFieldIdx(idx); setFieldSearches((prev) => ({ ...prev, [idx]: "" })); }}
                             />
                             {openFieldIdx === idx && (
                               <CommandList className="max-h-40">
@@ -290,6 +294,7 @@ export default function LabReportCatalogPage() {
                                       keywords={[fm.name, fm.code ?? ""]}
                                       onSelect={() => {
                                         updateField(idx, { fieldMasterId: fm.id });
+                                        setFieldSearches((prev) => ({ ...prev, [idx]: `${fm.name} (${fm.code ?? ""})` }));
                                         setOpenFieldIdx(null);
                                       }}
                                       className="text-[12px]"

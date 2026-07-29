@@ -30,6 +30,7 @@ export default function PatientRecordPage() {
   const patient = getPatient(id);
   const patientVisits = patient ? getPatientVisits(patient.id) : [];
   const activeVisit = patientVisits.find((v) => !["completed", "with_doctor"].includes(v.stage));
+  const cartVisit = patientVisits.find((v) => !["completed", "cancelled", "no_show"].includes(v.stage)) ?? null;
   const billingTotals = useMemo(() => {
     const billed = patientVisits.filter((v) => v.billAmount);
     const paid = billed.reduce((sum, v) => sum + (v.amountPaid ?? 0), 0);
@@ -74,13 +75,13 @@ export default function PatientRecordPage() {
   }, [patient]);
 
   useEffect(() => {
-    if (!activeVisit?.id) {
+    if (!cartVisit?.id) {
       setCart([]);
       return;
     }
     let cancelled = false;
     setCartLoading(true);
-    void getPendingLabOrdersForVisitAction(activeVisit.id).then((result) => {
+    void getPendingLabOrdersForVisitAction(cartVisit.id).then((result) => {
       if (cancelled) return;
       setCart(result.ok ? (result.data ?? []) : []);
       setCartLoading(false);
@@ -88,7 +89,7 @@ export default function PatientRecordPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeVisit?.id]);
+  }, [cartVisit?.id]);
 
   useEffect(() => {
     if (patient) {
@@ -338,8 +339,8 @@ export default function PatientRecordPage() {
           <Panel
             title="Current visit cart"
             action={
-              activeVisit ? (
-                <Link href={`/app/frontdesk/billing?visit=${activeVisit.id}`}>
+              cartVisit ? (
+                <Link href={`/app/frontdesk/billing?visit=${cartVisit.id}`}>
                   <AttioButton variant="primary" className="h-8 gap-1.5 text-[12px]">
                     <CreditCard className="size-3.5" /> Go to billing
                   </AttioButton>
