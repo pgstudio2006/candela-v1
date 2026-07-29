@@ -421,7 +421,7 @@ export async function getClinicalSnapshot(ctx: ServerContext): Promise<ClinicalS
 
   const [patientsRows, visitsRows, appointmentRows, handoffRows, roster, branchPatientCounter] = await Promise.all([
     prisma.patient.findMany({
-      where: { ...clinicalWhere, status: { not: "emergency" } },
+      where: clinicalWhere,
       orderBy: { createdAt: "asc" },
     }),
     prisma.opdVisit.findMany({ where: clinicalWhere, orderBy: { createdAt: "asc" } }),

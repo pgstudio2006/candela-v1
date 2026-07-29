@@ -14,7 +14,7 @@ import { problemLabelForValue } from "@/lib/department-problems";
 import { ArrowLeft, CreditCard, Download, ListOrdered, Pencil, Printer, UserCog } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
 import { getPatientInvoicesAction, getPatientInvoiceReceiptsAction } from "@/app/actions/clinical-actions";
 import { getIpdAdmissionsByPatientAction } from "@/app/actions/ipd-actions";
@@ -26,11 +26,28 @@ import { generatePatientInvoiceSummaryPdf } from "@/lib/patient-invoice-summary-
 export default function PatientRecordPage() {
   const params = useParams();
   const id = params.id as string;
-  const { getPatient, getPatientVisits, visits } = useFrontdeskStore();
+  const { getPatient, getPatientVisits, visits, ready, refresh } = useFrontdeskStore();
+  const [loadingPatient, setLoadingPatient] = useState(true);
+  const triedRefresh = useRef(false);
   const patient = getPatient(id);
   const patientVisits = patient ? getPatientVisits(patient.id) : [];
   const activeVisit = patientVisits.find((v) => !["completed", "with_doctor"].includes(v.stage));
   const cartVisit = patientVisits.find((v) => !["completed", "cancelled", "no_show"].includes(v.stage)) ?? null;
+
+  useEffect(() => {
+    if (patient) {
+      setLoadingPatient(false);
+      return;
+    }
+    if (!ready) return;
+    if (triedRefresh.current) {
+      setLoadingPatient(false);
+      return;
+    }
+    triedRefresh.current = true;
+    setLoadingPatient(true);
+    refresh().finally(() => setLoadingPatient(false));
+  }, [patient, ready, refresh]);
   const billingTotals = useMemo(() => {
     const billed = patientVisits.filter((v) => v.billAmount);
     const paid = billed.reduce((sum, v) => sum + (v.amountPaid ?? 0), 0);
@@ -149,6 +166,14 @@ export default function PatientRecordPage() {
       setUpdatingStatus(false);
     }
   };
+
+  if (loadingPatient) {
+    return (
+      <PageChrome breadcrumbs={[{ label: "Front Desk", href: "/app/frontdesk" }, { label: "Patients" }]} title="Loading patient">
+        <p className="text-[13px] text-[var(--attio-text-secondary)]">Loading patient record…</p>
+      </PageChrome>
+    );
+  }
 
   if (!patient) {
     return (
