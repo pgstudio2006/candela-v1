@@ -14,7 +14,12 @@ import {
 } from "@/lib/billing-packages";
 import { getVisitBillingAction } from "@/app/actions/clinical-actions";
 import { getIpdCartAction } from "@/app/actions/ipd-actions";
-import { getPendingLabOrdersForVisitAction, listActiveLabCatalogsAction } from "@/app/actions/lab-actions";
+import {
+  createLabOrderFromModuleAction,
+  getPendingLabOrdersForVisitAction,
+  listActiveLabCatalogsAction,
+} from "@/app/actions/lab-actions";
+import { useToast } from "@/components/ui/toast-provider";
 import { computeGstInvoice } from "@/lib/gst-invoicing";
 import type { BillingPackageLine, PaymentSplit } from "@/lib/opd-billing";
 import { resolveBillingDiscount } from "@/lib/opd-billing";
@@ -131,6 +136,8 @@ export function OpdBillingForm({
   const [existingInvoice, setExistingInvoice] = useState<null | Awaited<ReturnType<typeof getVisitBillingAction>>>(null);
   const [isBalancePayment, setIsBalancePayment] = useState(false);
   const [billingMeta, setBillingMeta] = useState<Record<string, string | number | boolean>>({});
+
+  const { toast } = useToast();
 
   // Reset local billing state when the visit changes so stale service lines
   // from a prior patient/visit do not leak into the current bill.
@@ -320,6 +327,57 @@ export function OpdBillingForm({
       cancelled = true;
     };
   }, [visit?.id, visit?.amountPaid, visit?.balanceDue, visit?.billing]);
+
+  const handleAddLabOrder = async () => {
+    if (!selectedLabCatalogId || !patient || !visit) return;
+    const catalog = labCatalogs.find((c) => c.id === selectedLabCatalogId);
+    if (!catalog) return;
+    setLabLoading(true);
+    try {
+      const res = await createLabOrderFromModuleAction({
+        patientId: patient.id,
+        visitId: visit.id,
+        source: visit.ipdAdmissionId ? "ipd" : "opd",
+        items: [
+          {
+            reportCatalogId: catalog.id,
+            label: catalog.name,
+            sampleType: catalog.sampleType,
+          },
+        ],
+      });
+      if (!res.ok) {
+        toast(res.error ?? "Failed to create lab order", "error");
+        return;
+      }
+      const order = res.data;
+      const item = order.items.find((i) => i.reportCatalogId === catalog.id);
+      if (!item) {
+        toast("Lab order item not found", "error");
+        return;
+      }
+      const service = item.reportCatalog?.service;
+      setLines((prev) => [
+        ...prev,
+        {
+          key: `lab_${item.id}_${Date.now()}`,
+          packageId: item.serviceId ?? service?.id ?? `lab-${item.reportCatalogId}`,
+          label: item.label,
+          amount: service?.rate != null ? Number(service.rate) : item.price ?? 0,
+          quantity: 1,
+          description: `Lab order #${order.id}`,
+          category: service?.category ?? "Laboratory",
+          gstRatePercent: service?.gstPercent ?? item.gstPercent,
+          labOrderItemId: item.id,
+          labOrderId: order.id,
+        },
+      ]);
+      setSelectedLabCatalogId("");
+      toast("Lab order added to bill", "success");
+    } finally {
+      setLabLoading(false);
+    }
+  };
 
   const handleSubmit = () => {
     if (!patient || !visit) return;
@@ -610,27 +668,10 @@ export function OpdBillingForm({
                     </Select>
                     <AttioButton
                       variant="secondary"
-                      disabled={Boolean(existingInvoice) || !selectedLabCatalogId}
-                      onClick={() => {
-                        const catalog = labCatalogs.find((c) => c.id === selectedLabCatalogId);
-                        if (!catalog) return;
-                        const service = catalog.service;
-                        setLines((prev) => [
-                          ...prev,
-                          {
-                            key: `lab_${catalog.id}_${Date.now()}`,
-                            packageId: service?.id ?? `lab-${catalog.id}`,
-                            label: `Lab: ${catalog.name}`,
-                            amount: service?.rate != null ? Number(service.rate) : 0,
-                            quantity: 1,
-                            category: service?.category ?? "Laboratory",
-                            gstRatePercent: service?.gstPercent,
-                          },
-                        ]);
-                        setSelectedLabCatalogId("");
-                      }}
+                      disabled={Boolean(existingInvoice) || !selectedLabCatalogId || labLoading}
+                      onClick={() => void handleAddLabOrder()}
                     >
-                      Add
+                      {labLoading ? "Creating…" : "Add"}
                     </AttioButton>
                   </div>
                 </div>

@@ -14,8 +14,9 @@ import { useSession } from "@/components/candela/session-provider";
 import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { getNurseOptionsAction, saveIpdTaskAction, updateIpdTaskStatusAction } from "@/app/actions/ipd-actions";
 import { listPatientDocumentsAction, type PatientDocumentListItem } from "@/app/actions/patient-document-actions";
-import { listLabOrdersAction } from "@/app/actions/lab-actions";
+import { listActiveLabCatalogsAction, listLabOrdersAction } from "@/app/actions/lab-actions";
 import type { IpdPatient } from "@/design-system/doctor-data";
+import type { LabReportCatalog } from "@/design-system/lab-data";
 import type { Patient } from "@/design-system/frontdesk-data";
 import type { PrescriptionLine } from "@/design-system/doctor-data";
 import type { LabOrder } from "@/design-system/lab-data";
@@ -304,9 +305,13 @@ export function IpdRoundWorkspace({
   const [nurseOptions, setNurseOptions] = useState<Array<{ id: string; name: string }>>([]);
 
   const [medicationLines, setMedicationLines] = useState<PrescriptionLine[]>([]);
-  const [labOrderText, setLabOrderText] = useState("");
   const [radiologyOrderText, setRadiologyOrderText] = useState("");
   const [orderSaving, setOrderSaving] = useState(false);
+
+  const [labCatalogs, setLabCatalogs] = useState<LabReportCatalog[]>([]);
+  const [labCatalogsLoading, setLabCatalogsLoading] = useState(false);
+  const [labCatalogSearch, setLabCatalogSearch] = useState("");
+  const [selectedLabCatalogs, setSelectedLabCatalogs] = useState<LabReportCatalog[]>([]);
 
   const [patientReports, setPatientReports] = useState<PatientDocumentListItem[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
@@ -345,6 +350,17 @@ export function IpdRoundWorkspace({
     void getNurseOptionsAction().then((res) => {
       if (res.ok && res.data) setNurseOptions(res.data);
     });
+  }, []);
+
+  // Load active lab catalogs for predefined selection
+  useEffect(() => {
+    const load = async () => {
+      setLabCatalogsLoading(true);
+      const res = await listActiveLabCatalogsAction();
+      if (res.ok) setLabCatalogs(res.data ?? []);
+      setLabCatalogsLoading(false);
+    };
+    void load();
   }, []);
 
   // Load frontdesk-uploaded patient reports
@@ -415,12 +431,32 @@ export function IpdRoundWorkspace({
     await onRefresh();
   };
 
+  const filteredLabCatalogs = useMemo(
+    () =>
+      labCatalogs.filter(
+        (c) =>
+          c.name.toLowerCase().includes(labCatalogSearch.toLowerCase()) ||
+          c.code.toLowerCase().includes(labCatalogSearch.toLowerCase()),
+      ),
+    [labCatalogs, labCatalogSearch],
+  );
+
+  const toggleLabCatalog = (catalog: LabReportCatalog) => {
+    setSelectedLabCatalogs((prev) => {
+      if (prev.some((c) => c.id === catalog.id)) {
+        return prev.filter((c) => c.id !== catalog.id);
+      }
+      return [...prev, catalog];
+    });
+  };
+
   const addLabOrder = async () => {
-    if (!labOrderText.trim()) return toast("Enter a lab order", "error");
+    if (selectedLabCatalogs.length === 0) return toast("Select at least one lab test", "error");
     setOrderSaving(true);
-    await onSaveRound({ labReports: labOrderText.trim() });
+    const names = selectedLabCatalogs.map((c) => c.name).join("\n");
+    await onSaveRound({ labReports: names });
     toast("Lab order added", "success");
-    setLabOrderText("");
+    setSelectedLabCatalogs([]);
     setOrderSaving(false);
     await onRefresh();
   };
@@ -739,14 +775,61 @@ export function IpdRoundWorkspace({
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="Lab order">
-              <Textarea
-                value={labOrderText}
-                onChange={(e) => setLabOrderText(e.target.value)}
-                placeholder="e.g. CBC, KFT, LFT, serum electrolytes…"
-                className="min-h-[80px] text-[13px]"
+              <p className="mb-2 text-[12px] text-[var(--attio-text-secondary)]">
+                Select predefined lab reports from the catalog. The round note becomes the lab order source and is matched to the IPD cart.
+              </p>
+              <Input
+                type="text"
+                placeholder="Search lab tests…"
+                value={labCatalogSearch}
+                onChange={(e) => setLabCatalogSearch(e.target.value)}
+                className="h-8 text-[12px]"
               />
+              <div className="mt-2 max-h-[180px] overflow-y-auto rounded border border-[var(--attio-border-subtle)] p-2">
+                {labCatalogsLoading ? (
+                  <p className="text-[12px] text-[var(--attio-text-tertiary)]">Loading catalogs…</p>
+                ) : filteredLabCatalogs.length === 0 ? (
+                  <p className="text-[12px] text-[var(--attio-text-tertiary)]">No lab tests match.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {filteredLabCatalogs.map((c) => {
+                      const checked = selectedLabCatalogs.some((s) => s.id === c.id);
+                      return (
+                        <label
+                          key={c.id}
+                          className={`flex items-center gap-2 rounded p-2 text-[13px] ${
+                            checked
+                              ? "border border-[var(--attio-accent)] bg-[var(--attio-accent)]/5"
+                              : "border border-transparent"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleLabCatalog(c)}
+                          />
+                          <span className="font-medium">{c.name}</span>
+                          <span className="text-[var(--attio-text-tertiary)]">({c.code})</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {selectedLabCatalogs.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {selectedLabCatalogs.map((c) => (
+                    <span
+                      key={c.id}
+                      className="rounded bg-blue-100 px-2 py-0.5 text-[11px] text-blue-700"
+                    >
+                      {c.name}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="mt-3 flex justify-end">
-                <AttioButton onClick={() => void addLabOrder()} disabled={orderSaving}>
+                <AttioButton onClick={() => void addLabOrder()} disabled={orderSaving || selectedLabCatalogs.length === 0}>
                   {orderSaving ? "Adding…" : "Add lab order"}
                 </AttioButton>
               </div>

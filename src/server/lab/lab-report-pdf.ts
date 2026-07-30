@@ -1,6 +1,6 @@
+import zlib from "node:zlib";
 import { PDFDocument, PDFPage, StandardFonts, rgb, type Color } from "pdf-lib";
 import {
-  LAB_RESULT_FLAG_LABELS,
   type LabDataType,
   type LabFieldMaster,
   type LabOrder,
@@ -20,6 +20,10 @@ import {
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
 const MARGIN = 50;
+const HEADER_BODY_PADDING = 16;
+const FULL_WIDTH_LINE_MIN_RATIO = 0.75;
+const LINE_MAX_HEIGHT = 8;
+const HEADER_CLUSTER_GAP = 30;
 
 export type LabReportPdfPatient = {
   name: string;
@@ -269,6 +273,215 @@ function dateLabel(dateStr?: string): string {
   return isNaN(d.getTime()) ? String(dateStr) : d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 }
 
+type CTM = [number, number, number, number, number, number];
+
+function cleanContentStream(input: string): string {
+  let out = "";
+  let i = 0;
+  const n = input.length;
+  while (i < n) {
+    const c = input[i];
+    if (c === "(") {
+      // Balanced literal string with \-escapes
+      let depth = 1;
+      i++;
+      while (i < n && depth > 0) {
+        const ch = input[i];
+        if (ch === "\\") {
+          i += 2;
+          continue;
+        }
+        if (ch === "(") depth++;
+        if (ch === ")") depth--;
+        i++;
+      }
+      continue;
+    }
+    if (c === "<") {
+      if (input[i + 1] === "<") {
+        // Dictionary
+        let depth = 1;
+        i += 2;
+        while (i < n && depth > 0) {
+          if (i + 1 < n && input[i] === "<" && input[i + 1] === "<") {
+            depth++;
+            i += 2;
+          } else if (i + 1 < n && input[i] === ">" && input[i + 1] === ">") {
+            depth--;
+            i += 2;
+          } else {
+            i++;
+          }
+        }
+      } else {
+        // Hex string
+        while (i < n && input[i] !== ">") i++;
+        i++;
+      }
+      continue;
+    }
+    if (c === "[") {
+      // Array, may contain nested strings
+      let depth = 1;
+      i++;
+      while (i < n && depth > 0) {
+        if (input[i] === "(") {
+          let pDepth = 1;
+          i++;
+          while (i < n && pDepth > 0) {
+            const ch = input[i];
+            if (ch === "\\") {
+              i += 2;
+              continue;
+            }
+            if (ch === "(") pDepth++;
+            if (ch === ")") pDepth--;
+            i++;
+          }
+          continue;
+        }
+        if (input[i] === "[") depth++;
+        if (input[i] === "]") depth--;
+        i++;
+      }
+      continue;
+    }
+    if (c === "%") {
+      while (i < n && input[i] !== "\n" && input[i] !== "\r") i++;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+function multiplyCTM(m1: CTM, m2: CTM): CTM {
+  return [
+    m1[0] * m2[0] + m1[1] * m2[2],
+    m1[0] * m2[1] + m1[1] * m2[3],
+    m1[2] * m2[0] + m1[3] * m2[2],
+    m1[2] * m2[1] + m1[3] * m2[3],
+    m1[0] * m2[4] + m1[1] * m2[5] + m1[4],
+    m1[2] * m2[4] + m1[3] * m2[5] + m1[5],
+  ];
+}
+
+function transformX(ctm: CTM, x: number, y: number) {
+  return ctm[0] * x + ctm[1] * y + ctm[4];
+}
+
+function transformY(ctm: CTM, x: number, y: number) {
+  return ctm[2] * x + ctm[3] * y + ctm[5];
+}
+
+async function computeTemplateHeaderHeight(templateBytes: Uint8Array): Promise<number | undefined> {
+  let sourceDoc;
+  try {
+    sourceDoc = await PDFDocument.load(templateBytes);
+  } catch {
+    return undefined;
+  }
+  const sourcePage = sourceDoc.getPage(0);
+  const pageH = sourcePage.getHeight();
+  const pageW = sourcePage.getWidth();
+
+  const contents = (sourcePage as any).node.Contents();
+  if (!contents) return undefined;
+  const refs = (contents as any).asArray ? (contents as any).asArray() : [contents];
+
+  const allTokens: string[] = [];
+  for (const ref of refs) {
+    const obj = sourceDoc.context.lookup(ref) as any;
+    if (!obj?.getContents) continue;
+    const raw = obj.getContents() as Uint8Array;
+    let de = "";
+    try {
+      de = zlib.inflateSync(raw).toString("latin1");
+    } catch {
+      de = Buffer.from(raw).toString("latin1");
+    }
+    const cleaned = cleanContentStream(de);
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+    allTokens.push(...tokens);
+  }
+
+  const ctmStack: CTM[] = [];
+  let ctm: CTM = [1, 0, 0, 1, 0, 0];
+  const fullWidthLines: { minTop: number; maxTop: number }[] = [];
+  const paintOps = new Set(["f", "F", "s", "S", "b", "B", "f*", "B*", "b*"]);
+
+  for (let i = 0; i < allTokens.length; i++) {
+    const t = allTokens[i];
+    if (t === "q") {
+      ctmStack.push(ctm);
+      continue;
+    }
+    if (t === "Q") {
+      ctm = ctmStack.pop() ?? ctm;
+      continue;
+    }
+    if (t === "cm" && i >= 6) {
+      const a = Number(allTokens[i - 6]);
+      const b = Number(allTokens[i - 5]);
+      const c = Number(allTokens[i - 4]);
+      const d = Number(allTokens[i - 3]);
+      const e = Number(allTokens[i - 2]);
+      const f = Number(allTokens[i - 1]);
+      if (!Number.isNaN(a + b + c + d + e + f)) {
+        ctm = multiplyCTM(ctm, [a, b, c, d, e, f]);
+      }
+      continue;
+    }
+    if (t === "re" && i >= 4) {
+      const x = Number(allTokens[i - 4]);
+      const y = Number(allTokens[i - 3]);
+      const w = Number(allTokens[i - 2]);
+      const h = Number(allTokens[i - 1]);
+      if (!Number.isNaN(x + y + w + h)) {
+        const paint = allTokens[i + 1];
+        if (paintOps.has(paint)) {
+          const ys = [
+            transformY(ctm, x, y),
+            transformY(ctm, x + w, y),
+            transformY(ctm, x, y + h),
+            transformY(ctm, x + w, y + h),
+          ];
+          const xs = [
+            transformX(ctm, x, y),
+            transformX(ctm, x + w, y),
+            transformX(ctm, x, y + h),
+            transformX(ctm, x + w, y + h),
+          ];
+          const minPageY = Math.min(...ys);
+          const maxTop = pageH - minPageY;
+          const maxPageY = Math.max(...ys);
+          const minTop = pageH - maxPageY;
+          const width = Math.max(...xs) - Math.min(...xs);
+          const height = maxTop - minTop;
+          if (width >= pageW * FULL_WIDTH_LINE_MIN_RATIO && height < LINE_MAX_HEIGHT) {
+            fullWidthLines.push({ minTop, maxTop });
+          }
+        }
+      }
+      continue;
+    }
+  }
+
+  if (fullWidthLines.length === 0) return undefined;
+
+  fullWidthLines.sort((a, b) => a.minTop - b.minTop);
+  let headerBottom = fullWidthLines[0].maxTop;
+  for (let k = 1; k < fullWidthLines.length; k++) {
+    if (fullWidthLines[k].minTop - fullWidthLines[k - 1].minTop > HEADER_CLUSTER_GAP) {
+      break;
+    }
+    headerBottom = Math.max(headerBottom, fullWidthLines[k].maxTop);
+  }
+
+  return (headerBottom / pageH) * PAGE_HEIGHT;
+}
+
 export async function buildLabReportPdfBytes(
   patient: LabReportPdfPatient,
   orders: LabOrder[],
@@ -283,16 +496,7 @@ export async function buildLabReportPdfBytes(
 
   const primary = rgb(0.12, 0.12, 0.12);
   const secondary = rgb(0.4, 0.4, 0.4);
-  const accent = rgb(0.1, 0.45, 0.76);
   const critical = rgb(0.75, 0.1, 0.1);
-  const low = rgb(0.75, 0.45, 0.1);
-  const high = rgb(0.75, 0.45, 0.1);
-
-  function flagColor(flag?: string) {
-    if (flag === "critical_low" || flag === "critical_high") return critical;
-    if (flag === "low" || flag === "high") return high;
-    return primary;
-  }
 
   let marginLeft = MARGIN;
   let marginRight = MARGIN;
@@ -303,9 +507,11 @@ export async function buildLabReportPdfBytes(
 
   if (template?.fileData) {
     const bytes = await loadTemplateFile(template.fileData);
+    let headerHeightFromTemplate: number | undefined;
     if (bytes) {
       const mime = (template.mimeType ?? "application/pdf").toLowerCase();
       if (mime === "application/pdf") {
+        headerHeightFromTemplate = await computeTemplateHeaderHeight(bytes);
         const [first] = await pdfDoc.embedPdf(bytes, [0]);
         embeddedTemplate = first;
       } else if (mime === "image/png") {
@@ -316,7 +522,11 @@ export async function buildLabReportPdfBytes(
       const headerOverlayBottom = template.overlayFields
         ?.filter((f) => f.y < 50)
         .reduce((max, f) => Math.max(max, ((f.y + (f.height ?? 0)) / 100) * PAGE_HEIGHT), 0) ?? 0;
-      marginTop = Math.max(template.marginTop, headerOverlayBottom + 20);
+      marginTop = Math.max(
+        template.marginTop,
+        headerOverlayBottom + 20,
+        (headerHeightFromTemplate ?? 0) + HEADER_BODY_PADDING,
+      );
       marginBottom = template.marginBottom;
       marginLeft = template.marginLeft;
       marginRight = template.marginRight;
@@ -345,228 +555,211 @@ export async function buildLabReportPdfBytes(
   let page = newPage(orders[0]);
   let y = top;
 
-  const hasOverlayHeader = (template?.overlayFields ?? []).some((f) =>
-    ["patientName", "uhid", "ageGender", "sampleId", "collectionTime", "receivingTime", "reportingTime"].includes(f.key),
-  );
-
-  if (!hasOverlayHeader) {
-    // Fallback header when no overlay header is configured
-    page.drawText("Laboratory Report", { x: marginLeft, y, size: 20, font: boldFont, color: accent });
-    y -= 26;
-
-    const age = resolveAge(patient, new Date());
-    const info = [
-      `Patient: ${patient.name}`,
-      `UHID: ${patient.uhid}`,
-      `Age / Gender: ${formatAge(age)} / ${patient.gender?.toUpperCase() ?? "—"}`,
-      patient.phone ? `Phone: ${patient.phone}` : "",
-    ]
-      .filter(Boolean)
-      .join("   ·   ");
-    page.drawText(info, { x: marginLeft, y, size: 10, font: normalFont, color: secondary });
-    y -= 22;
-
-    const generatedAt = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-    page.drawText(`Generated: ${generatedAt}`, { x: marginLeft, y, size: 9, font: normalFont, color: secondary });
-    y -= 20;
-
-    page.drawLine({ start: { x: marginLeft, y }, end: { x: rightX, y }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
-    y -= 18;
-  } else {
-    y -= 8;
-    page.drawLine({ start: { x: marginLeft, y }, end: { x: rightX, y }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
-    y -= 12;
-  }
-
   if (orders.length === 0) {
     page.drawText("No laboratory orders to display.", { x: marginLeft, y, size: 11, font: normalFont, color: secondary });
     return pdfDoc.save();
   }
 
-  const baseColWidths = [150, 60, 45, 60, 125, 100];
-  const colWidthTotal = baseColWidths.reduce((a, b) => a + b, 0);
-  const colScale = Math.min(1, usableWidth / colWidthTotal);
-  const colWidths = baseColWidths.map((w) => w * colScale);
+  const colWidths = [usableWidth * 0.42, usableWidth * 0.18, usableWidth * 0.16, usableWidth * 0.24];
   const colX = [
     marginLeft,
     marginLeft + colWidths[0],
     marginLeft + colWidths[0] + colWidths[1],
     marginLeft + colWidths[0] + colWidths[1] + colWidths[2],
-    marginLeft + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3],
-    marginLeft + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4],
   ];
-  const lineHeight = 11;
-  const rowPadding = 6;
+  const headers = ["Test Name", "Result", "Unit", "Normal Value"];
+  const lineHeight = 12;
+  const rowPadding = 5;
+  const flagRed = rgb(0.78, 0.08, 0.08);
+  const ruleColor = rgb(0.2, 0.2, 0.2);
+
+  function flagPrefix(flag?: LabResultFlag): string {
+    if (flag === "critical_low") return "LL ";
+    if (flag === "critical_high") return "HH ";
+    if (flag === "low") return "L ";
+    if (flag === "high") return "H ";
+    return "";
+  }
+
+  function drawTableHeader(p: PDFPage, yPos: number): number {
+    p.drawLine({ start: { x: marginLeft, y: yPos + 3 }, end: { x: rightX, y: yPos + 3 }, thickness: 0.75, color: ruleColor });
+    for (let i = 0; i < headers.length; i++) {
+      p.drawText(headers[i], { x: colX[i], y: yPos - 10, size: 9.5, font: boldFont, color: primary });
+    }
+    const afterY = yPos - 14;
+    p.drawLine({ start: { x: marginLeft, y: afterY }, end: { x: rightX, y: afterY }, thickness: 0.75, color: ruleColor });
+    return afterY - 12;
+  }
+
+  function ageGenderText(order: LabOrder): string {
+    const age = resolveAge(patient, new Date());
+    const gender = patient.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1).toLowerCase() : "—";
+    const pregnant = patient.gender?.toLowerCase() === "female" && order.pregnancy ? " (Pregnant)" : "";
+    return `${formatAge(age)} / ${gender}${pregnant}`;
+  }
+
+  function drawPatientInfoBlock(p: PDFPage, yPos: number, order: LabOrder): number {
+    const half = usableWidth / 2;
+    const labelWidth = 78;
+    const rowGap = 14;
+    const leftRows: [string, string][] = [
+      ["UHID No.", patient.uhid || "—"],
+      ["Patient Name", patient.name || "—"],
+      ["Age/Gender", ageGenderText(order)],
+      ["Mobile No", patient.phone || "—"],
+    ];
+    const rightRows: [string, string][] = [
+      ["Collection Time", order.sampleCollectedAt ? dateLabel(order.sampleCollectedAt) : "—"],
+      ["Receiving Time", order.sampleCollectedAt ? dateLabel(order.sampleCollectedAt) : "—"],
+      ["Reporting Time", order.completedAt ? dateLabel(order.completedAt) : dateLabel(new Date().toISOString())],
+      ["Sample ID", order.id.slice(-8).toUpperCase()],
+    ];
+    let rowY = yPos;
+    for (let i = 0; i < leftRows.length; i++) {
+      const [leftLabel, leftValue] = leftRows[i];
+      p.drawText(`${leftLabel} :`, { x: marginLeft, y: rowY, size: 9, font: boldFont, color: primary });
+      p.drawText(leftValue, { x: marginLeft + labelWidth, y: rowY, size: 9, font: normalFont, color: primary });
+      const [rightLabel, rightValue] = rightRows[i];
+      p.drawText(`${rightLabel} :`, { x: marginLeft + half, y: rowY, size: 9, font: boldFont, color: primary });
+      p.drawText(rightValue, { x: marginLeft + half + labelWidth, y: rowY, size: 9, font: normalFont, color: primary });
+      rowY -= rowGap;
+    }
+    rowY -= 4;
+    p.drawLine({ start: { x: marginLeft, y: rowY }, end: { x: rightX, y: rowY }, thickness: 0.75, color: ruleColor });
+    return rowY - 16;
+  }
 
   for (const order of orders) {
-    // Order header
-    if (y < bottom + 60) {
+    if (y < bottom + 140) {
       page = newPage(order);
       y = top;
     }
-    const tests = order.items.map((i) => i.label).join(", ");
-    page.drawText(`Order #${order.id.slice(-6).toUpperCase()} · ${tests}`, {
-      x: marginLeft,
-      y,
-      size: 12,
-      font: boldFont,
-      color: primary,
-    });
-    y -= 14;
-    page.drawText(`Ordered: ${dateLabel(order.orderedAt)} · Status: ${order.status.toUpperCase()} · Source: ${order.source.toUpperCase()}`, {
-      x: marginLeft,
-      y,
-      size: 9,
-      font: normalFont,
-      color: secondary,
-    });
-    y -= 18;
 
+    y = drawPatientInfoBlock(page, y, order);
+    y = drawTableHeader(page, y);
+
+    let lastSection = "";
     for (const item of order.items) {
-      if (y < bottom + 100) {
-        page = newPage(order);
-        y = top;
+      const catalog = item.reportCatalog;
+      const fields = catalog?.fields.filter((f) => f.isVisible) ?? [];
+
+      const section = fields.find((f) => f.section?.trim())?.section?.trim() ?? "";
+      if (section && section !== lastSection) {
+        if (y - 20 < bottom) {
+          page = newPage(order);
+          y = top;
+          y = drawTableHeader(page, y);
+        }
+        const sectionWidth = boldFont.widthOfTextAtSize(section, 10.5);
+        page.drawText(section, { x: marginLeft + usableWidth / 2 - sectionWidth / 2, y, size: 10.5, font: boldFont, color: primary });
+        y -= 18;
+        lastSection = section;
       }
 
-      const catalog = item.reportCatalog;
-
+      if (y - 16 < bottom) {
+        page = newPage(order);
+        y = top;
+        y = drawTableHeader(page, y);
+      }
       page.drawText(`${item.label}${item.sampleType ? ` · ${item.sampleType}` : ""}`, {
         x: marginLeft,
         y,
-        size: 11,
+        size: 9.5,
         font: boldFont,
-        color: accent,
+        color: primary,
       });
       y -= 16;
 
-      // Catalog description & header note
-      const catalogNotes = [
-        catalog?.description?.trim() ?? "",
-        catalog?.headerNote?.trim() ?? "",
-      ].filter(Boolean);
-      for (const text of catalogNotes) {
-        const noteHeight = measureHeight(text, normalFont, 9, usableWidth, 11) + 6;
-        if (y - noteHeight < bottom) {
-          page = newPage(order);
-          y = top;
-        }
-        y = drawWrapped(page, text, marginLeft, y, usableWidth, 9, normalFont, 11, secondary);
-        y -= 6;
-      }
-
-      // Table header
-      if (y - 22 < bottom) {
-        page = newPage(order);
-        y = top;
-      }
-      page.drawLine({ start: { x: marginLeft, y: y + 2 }, end: { x: rightX, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
-      const headers = ["Test", "Result", "Unit", "Flag", "Reference range", "Note"];
-      for (let i = 0; i < headers.length; i++) {
-        page.drawText(headers[i], { x: colX[i], y, size: 9, font: boldFont, color: primary });
-      }
-      y -= 14;
-      page.drawLine({ start: { x: marginLeft, y: y + 2 }, end: { x: rightX, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
-
-      const fields = catalog?.fields.filter((f) => f.isVisible) ?? [];
       if (fields.length === 0) {
         page.drawText("No visible fields.", { x: marginLeft, y, size: 9, font: normalFont, color: secondary });
-        y -= 20;
-      } else {
-        for (const field of fields) {
-          if (!field.fieldMaster) continue;
-          const recordedAt = new Date();
-          const result = item.results.find((r) => r.fieldMasterId === field.fieldMasterId);
-          const value = result?.value ?? "";
-          const note = result?.note ?? "";
-          const defaultNote = field.fieldMaster.defaultNote?.trim() ?? "";
-          let flag = result?.flag;
-          if (!flag && value) {
-            flag = evaluateLabResultFlag(
-              field.fieldMaster,
-              value,
-              { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age, sampleType: item.sampleType, pregnancy: order.pregnancy },
-              recordedAt,
-            );
-          }
-          const range = getApplicableRange(
-            field.fieldMaster,
-            { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age, pregnancy: order.pregnancy },
-            result ? new Date(result.recordedAt) : recordedAt,
-            item.sampleType,
-          );
-
-          const nameText = field.fieldMaster.name;
-          const testMaxWidth = colWidths[0] - 8;
-          const nameHeight = measureHeight(nameText, boldFont, 9, testMaxWidth, lineHeight);
-          const defaultNoteHeight = defaultNote ? measureHeight(defaultNote, normalFont, 8, testMaxWidth, 10) + 2 : 0;
-          const testCellHeight = nameHeight + defaultNoteHeight;
-
-          const rowCells = [
-            nameText,
-            value || "—",
-            field.fieldMaster.unit || "—",
-            flag ? LAB_RESULT_FLAG_LABELS[flag] : "—",
-            formatReferenceRange(range, field.fieldMaster.unit, true),
-            note,
-          ];
-
-          const cellHeights = rowCells.map((cell, idx) => {
-            if (idx === 0) return testCellHeight;
-            return measureHeight(cell, idx === 1 && flag ? boldFont : normalFont, 9, colWidths[idx] - 8, lineHeight);
-          });
-          const rowHeight = Math.max(...cellHeights, lineHeight) + rowPadding;
-
-          if (y - rowHeight < bottom) {
-            page = newPage(order);
-            y = top - 18;
-            page.drawLine({ start: { x: marginLeft, y: y + 16 }, end: { x: rightX, y: y + 16 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
-            for (let i = 0; i < headers.length; i++) {
-              page.drawText(headers[i], { x: colX[i], y, size: 9, font: boldFont, color: primary });
-            }
-            y -= 14;
-            page.drawLine({ start: { x: marginLeft, y: y + 2 }, end: { x: rightX, y: y + 2 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
-          }
-
-          const baseline = y - lineHeight - rowPadding / 2;
-
-          // Test column: field name with default note printed directly below it
-          const nameBottomY = drawWrapped(page, nameText, colX[0] + 4, baseline, testMaxWidth, 9, boldFont, lineHeight, primary);
-          if (defaultNote) {
-            drawWrapped(page, defaultNote, colX[0] + 4, nameBottomY - 2, testMaxWidth, 8, normalFont, 10, secondary);
-          }
-
-          for (let i = 1; i < rowCells.length; i++) {
-            const color = i === 3 && flag ? flagColor(flag) : i === 1 && flag ? flagColor(flag) : primary;
-            const font = i === 1 && flag ? boldFont : normalFont;
-            drawWrapped(page, rowCells[i], colX[i] + 4, baseline, colWidths[i] - 8, 9, font, lineHeight, color);
-          }
-          y -= rowHeight;
-        }
+        y -= 16;
+        continue;
       }
 
-      // Catalog footer note
+      for (const field of fields) {
+        if (!field.fieldMaster) continue;
+        const recordedAt = new Date();
+        const result = item.results.find((r) => r.fieldMasterId === field.fieldMasterId);
+        const value = result?.value ?? "";
+        let flag = result?.flag;
+        if (!flag && value) {
+          flag = evaluateLabResultFlag(
+            field.fieldMaster,
+            value,
+            { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age, sampleType: item.sampleType, pregnancy: order.pregnancy },
+            recordedAt,
+          );
+        }
+        const range = getApplicableRange(
+          field.fieldMaster,
+          { gender: patient.gender, dateOfBirth: patient.dateOfBirth, age: patient.age, pregnancy: order.pregnancy },
+          result ? new Date(result.recordedAt) : recordedAt,
+          item.sampleType,
+        );
+        const isAbnormal = Boolean(flag && flag !== "normal");
+        const resultText = `${flagPrefix(flag)}${value || "—"}`;
+
+        const rowCells = [
+          field.fieldMaster.name,
+          resultText,
+          field.fieldMaster.unit || "—",
+          formatReferenceRange(range, field.fieldMaster.unit, true),
+        ];
+
+        const cellHeights = rowCells.map((cell, idx) =>
+          measureHeight(cell, idx === 1 && isAbnormal ? boldFont : normalFont, 9, colWidths[idx] - 8, lineHeight),
+        );
+        const rowHeight = Math.max(...cellHeights, lineHeight) + rowPadding;
+
+        if (y - rowHeight < bottom) {
+          page = newPage(order);
+          y = top;
+          y = drawTableHeader(page, y);
+        }
+
+        const baseline = y - lineHeight + 2;
+        for (let i = 0; i < rowCells.length; i++) {
+          const color = i === 1 && isAbnormal ? flagRed : primary;
+          const font = i === 1 && isAbnormal ? boldFont : normalFont;
+          drawWrapped(page, rowCells[i], colX[i], baseline, colWidths[i] - 8, 9, font, lineHeight, color);
+        }
+        y -= rowHeight;
+      }
+
       if (catalog?.footerNote?.trim()) {
-        const footerHeight = measureHeight(catalog.footerNote, normalFont, 9, usableWidth, 11) + 6;
+        const footerHeight = measureHeight(catalog.footerNote, normalFont, 8, usableWidth, 10) + 6;
         if (y - footerHeight < bottom) {
           page = newPage(order);
           y = top;
         }
-        y = drawWrapped(page, catalog.footerNote, marginLeft, y, usableWidth, 9, normalFont, 11, secondary);
+        y = drawWrapped(page, catalog.footerNote, marginLeft, y, usableWidth, 8, normalFont, 10, secondary);
         y -= 6;
       }
 
-      y -= 10;
+      y -= 8;
     }
 
     if (order.cancelReason) {
       page.drawText(`Cancellation reason: ${order.cancelReason}`, { x: marginLeft, y, size: 9, font: normalFont, color: critical });
       y -= 16;
     }
-    y -= 12;
-  }
 
-  // Footer
-  page.drawText("End of report", { x: marginLeft, y: Math.max(y, bottom + 10), size: 9, font: normalFont, color: secondary });
+    if (y - 40 < bottom) {
+      page = newPage(order);
+      y = top;
+    }
+    y -= 10;
+    if (order.orderedByName) {
+      const authorizedLabel = `Authorized by: ${order.orderedByName}`;
+      const authorizedWidth = normalFont.widthOfTextAtSize(authorizedLabel, 9);
+      page.drawText(authorizedLabel, { x: rightX - authorizedWidth, y, size: 9, font: normalFont, color: secondary });
+      y -= 14;
+    }
+    const endLabel = "**END OF REPORT**";
+    const endWidth = boldFont.widthOfTextAtSize(endLabel, 9);
+    page.drawText(endLabel, { x: marginLeft + usableWidth / 2 - endWidth / 2, y, size: 9, font: boldFont, color: secondary });
+    y -= 24;
+  }
 
   return pdfDoc.save();
 }
