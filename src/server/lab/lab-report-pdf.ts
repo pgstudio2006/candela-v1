@@ -270,7 +270,7 @@ function drawOverlayFields(
 function dateLabel(dateStr?: string): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? String(dateStr) : d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  return isNaN(d.getTime()) ? String(dateStr) : d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 }
 
 type CTM = [number, number, number, number, number, number];
@@ -533,6 +533,8 @@ export async function buildLabReportPdfBytes(
     }
   }
 
+  const hasOverlayPatientInfo = (template?.overlayFields ?? []).some((f) => f.key === "patientName");
+
   const top = PAGE_HEIGHT - marginTop;
   const bottom = marginBottom;
   const usableWidth = PAGE_WIDTH - marginLeft - marginRight;
@@ -635,7 +637,9 @@ export async function buildLabReportPdfBytes(
       y = top;
     }
 
-    y = drawPatientInfoBlock(page, y, order);
+    if (!hasOverlayPatientInfo) {
+      y = drawPatientInfoBlock(page, y, order);
+    }
     y = drawTableHeader(page, y);
 
     let lastSection = "";
@@ -749,7 +753,7 @@ export async function buildLabReportPdfBytes(
       y = top;
     }
     y -= 10;
-    if (order.orderedByName) {
+    if (!hasOverlayPatientInfo && order.orderedByName) {
       const authorizedLabel = `Authorized by: ${order.orderedByName}`;
       const authorizedWidth = normalFont.widthOfTextAtSize(authorizedLabel, 9);
       page.drawText(authorizedLabel, { x: rightX - authorizedWidth, y, size: 9, font: normalFont, color: secondary });
