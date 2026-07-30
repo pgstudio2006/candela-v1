@@ -1,0 +1,116 @@
+GLOBAL HOSPITAL & TRAUMA CENTRE
+A Unit of ASP Global Health & Educare Pvt. Ltd.
+GST NO. : 06AAZCA2057M1Z3
+Opp. New Bus Stand, Near Civil Hospital Pataudi, Gurugram (Hr.)
+Mobile No. : 0124-2672124, 9996888124 , Email-ID : globalhospitalpataudi@gmail.com
+OPD RECEIPT
+UHID No. :
+GHTC015083
+Date :
+24-07-2026 11:30:00 AM
+Name :
+SUSHILA SAINI
+Receipt No. :
+OPD54094
+Age/Sex :
+45Yrs.- / Female
+PayMode :
+CASH
+Mobile No. :
+9813782750
+Token No. :
+2
+Address :
+BHORA-KALAN , PATAUDI
+Patient Type :
+NEW PATIENT
+Doctor :
+Dr. Sunil Saini MBBS, MS(Orthopaedics) (Ex.
+Consultant Fortis Hospital Ggn)
+Sr.No.
+Item Name
+Item Code
+Qty.
+*
+Amount
+Discount
+Net.Amount
+1
+CBC-Complete
+Blood Count
+CBC
+1
+*
+200
+0
+200
+2
+HBA1C
+1
+*
+400
+0
+400
+3
+RA FACTOR-
+QUANTITATIVE
+1
+*
+400
+0
+400
+4
+CRP - Serum For
+C-reactive protein
+1
+*
+300
+0
+300
+5
+S.CREATININE
+1
+*
+150
+0
+150
+Sub Amount
+1450
+Sub Discount
+0
+Total Amount
+1450
+Paid Amount : One Thousand, Four Hundred
+Fifty
+GLOBAL HOSPITAL & TRAUMA CENTRE
+Authorised Signatory
+UHID No. :
+GHTC015035
+Collection Time :
+20-07-2026 05:15 PM
+Patient Name :
+Kamlesh
+Receiving Time :
+20-07-2026 05:15 PM
+Age/Gender :
+68Yrs.- / Female
+Reporting Time :
+20-07-2026 07:31 PM
+Mobile No :
+8168781466
+Sample ID :
+ORD_0001
+Test Name
+Result
+Unit
+Normal Value
+Serology
+CRP (Quantitative)
+H 8.37
+—
+0 - 5
+• CRP is a classic acute phase protein of human serum.
+________________________
+Dr. Mahak Sharma
+**END OF REPORT**
+2 of 2
