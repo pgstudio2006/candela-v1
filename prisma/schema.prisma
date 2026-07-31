@@ -2212,7 +2212,7 @@ model WhatsAppLog {
   status     String   @default("queued")
   error      String?
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  updatedAt  DateTime @default(now()) @updatedAt
   branch     Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId, createdAt])
