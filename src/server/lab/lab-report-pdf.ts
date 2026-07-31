@@ -261,7 +261,7 @@ export async function buildLabReportPdfBytes(
   const usableWidth = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 
   // Results table column widths: Test Name | Result | Unit | Normal Value
-  const colWidths = [usableWidth * 0.42, usableWidth * 0.18, usableWidth * 0.15, usableWidth * 0.25];
+  const colWidths = [usableWidth * 0.46, usableWidth * 0.16, usableWidth * 0.14, usableWidth * 0.24];
   const colX = [
     MARGIN_LEFT,
     MARGIN_LEFT + colWidths[0],
@@ -269,8 +269,8 @@ export async function buildLabReportPdfBytes(
     MARGIN_LEFT + colWidths[0] + colWidths[1] + colWidths[2],
   ];
 
-  const LINE_HEIGHT = 13;
-  const ROW_PADDING = 5;
+  const ROW_HEIGHT = 22;       // fixed height per test row
+  const ROW_FONT_SIZE = 9;
   const PATIENT_ROW_GAP = 14;
   const LABEL_WIDTH = 90;
   const HALF_W = usableWidth / 2;
@@ -334,11 +334,77 @@ export async function buildLabReportPdfBytes(
     drawHRule(p, y + 2, 0.75, ruleColor);
     const headerLabels = ["Test Name", "Result", "Unit", "Normal Value"];
     for (let i = 0; i < headerLabels.length; i++) {
-      p.drawText(headerLabels[i], { x: colX[i] + 2, y: y - 10, size: 9.5, font: boldFont, color: textPrimary });
+      const align = i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left";
+      const textW = boldFont.widthOfTextAtSize(headerLabels[i], 9.5);
+      let drawX = colX[i] + 2;
+      if (align === "right") drawX = colX[i] + colWidths[i] - textW - 4;
+      else if (align === "center") drawX = colX[i] + (colWidths[i] - textW) / 2;
+      p.drawText(headerLabels[i], { x: drawX, y: y - 10, size: 9.5, font: boldFont, color: textPrimary });
     }
     const afterY = y - 14;
     drawHRule(p, afterY, 0.75, ruleColor);
-    return afterY - 10;
+    return afterY - 8;
+  }
+
+  function drawPanelHeader(p: PDFPage, y: number, label: string): number {
+    // Full-width top border
+    drawHRule(p, y, 0.75, ruleColor);
+    // Panel title — left aligned, bold
+    p.drawText(label, { x: MARGIN_LEFT + 2, y: y - 12, size: 10, font: boldFont, color: textPrimary });
+    // Full-width bottom border
+    drawHRule(p, y - 16, 0.75, ruleColor);
+    return y - 16 - 8;
+  }
+
+  function drawCategoryHeader(p: PDFPage, y: number, label: string): number {
+    const sW = boldFont.widthOfTextAtSize(label, 11);
+    p.drawText(label, {
+      x: MARGIN_LEFT + usableWidth / 2 - sW / 2,
+      y: y - 12,
+      size: 11,
+      font: boldFont,
+      color: textPrimary,
+    });
+    return y - 22;
+  }
+
+  function drawTestRow(p: PDFPage, y: number, cells: string[], isAbnormal: boolean): number {
+    const baseline = y - ROW_HEIGHT + 6;
+    for (let i = 0; i < cells.length; i++) {
+      const color = i === 1 && isAbnormal ? flagRed : textPrimary;
+      const font = i === 1 && isAbnormal ? boldFont : normalFont;
+      const align = i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left";
+      // Truncate text to fit column width
+      let text = cells[i];
+      const maxW = colWidths[i] - 8;
+      let textW = font.widthOfTextAtSize(text, ROW_FONT_SIZE);
+      if (textW > maxW) {
+        // Truncate with ellipsis
+        while (text.length > 1 && font.widthOfTextAtSize(text + "…", ROW_FONT_SIZE) > maxW) {
+          text = text.slice(0, -1);
+        }
+        text += "…";
+        textW = font.widthOfTextAtSize(text, ROW_FONT_SIZE);
+      }
+      let drawX = colX[i] + 4;
+      if (align === "right") drawX = colX[i] + colWidths[i] - textW - 4;
+      else if (align === "center") drawX = colX[i] + (colWidths[i] - textW) / 2;
+      p.drawText(text, { x: drawX, y: baseline, size: ROW_FONT_SIZE, font, color });
+    }
+    return y - ROW_HEIGHT;
+  }
+
+  function drawNotes(p: PDFPage, y: number, notes: string[]): number {
+    if (notes.length === 0) return y;
+    y -= 4;
+    for (const note of notes) {
+      const lines = wrapText("• " + note, normalFont, 8, usableWidth - 8);
+      for (const line of lines) {
+        p.drawText(line, { x: MARGIN_LEFT + 4, y, size: 8, font: normalFont, color: textSecondary });
+        y -= 11;
+      }
+    }
+    return y - 4;
   }
 
   function drawFooter(p: PDFPage, y: number, doctorName: string | undefined, isLastPage: boolean) {
@@ -402,56 +468,47 @@ export async function buildLabReportPdfBytes(
     y = drawTableHeader(page, y);
 
     // ------------------------------------------------------------------
-    // Render items
+    // Render items — structured as Category > Panel > Rows > Notes
     // ------------------------------------------------------------------
     let lastSection = "";
     for (const item of ord.items) {
       const catalog = item.reportCatalog;
       const fields = catalog?.fields.filter((f) => f.isVisible) ?? [];
 
-      // Section header (e.g. "Biochemistry", "Hematology")
+      // Category header (e.g. "Biochemistry", "Hematology")
       const section = fields.find((f) => f.section?.trim())?.section?.trim() ?? "";
       if (section && section !== lastSection) {
+        if (y - 28 < MARGIN_BOTTOM + 40) {
+          drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
+          page = newPage();
+          y = drawHeader(page, { normal: normalFont, bold: boldFont });
+          y = drawTableHeader(page, y);
+        }
+        y = drawCategoryHeader(page, y, section);
+        lastSection = section;
+      }
+
+      // Panel header with full-width borders (e.g. "LFT - Liver Function Test")
+      if (item.label) {
         if (y - 24 < MARGIN_BOTTOM + 40) {
           drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
           page = newPage();
           y = drawHeader(page, { normal: normalFont, bold: boldFont });
           y = drawTableHeader(page, y);
         }
-        drawHRule(page, y + 2, 0.4, ruleLight);
-        const sW = boldFont.widthOfTextAtSize(section, 10);
-        page.drawText(section, {
-          x: MARGIN_LEFT + usableWidth / 2 - sW / 2,
-          y: y - 10,
-          size: 10,
-          font: boldFont,
-          color: textPrimary,
-        });
-        y -= 22;
-        lastSection = section;
-      }
-
-      // Panel / catalog label (e.g. "LFT - Liver Function Test")
-      if (item.label) {
-        if (y - 18 < MARGIN_BOTTOM + 40) {
-          drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
-          page = newPage();
-          y = drawHeader(page, { normal: normalFont, bold: boldFont });
-          y = drawTableHeader(page, y);
-        }
-        page.drawText(item.label + (item.sampleType ? ` \u00b7 ${item.sampleType}` : ""), {
-          x: MARGIN_LEFT, y, size: 9.5, font: boldFont, color: textPrimary,
-        });
-        y -= 16;
+        y = drawPanelHeader(page, y, item.label + (item.sampleType ? ` \u00b7 ${item.sampleType}` : ""));
       }
 
       if (fields.length === 0) {
         page.drawText("No visible fields.", { x: MARGIN_LEFT, y, size: 9, font: normalFont, color: textSecondary });
-        y -= LINE_HEIGHT;
+        y -= ROW_HEIGHT;
         continue;
       }
 
-      // Field rows
+      // Collect notes for this panel (critical ranges, qualifiers, footer notes)
+      const panelNotes: string[] = [];
+
+      // Field rows — fixed height, single line, truncated
       for (const field of fields) {
         if (!field.fieldMaster) continue;
         const recordedAt = new Date();
@@ -476,48 +533,47 @@ export async function buildLabReportPdfBytes(
 
         const isAbnormal = Boolean(flag && flag !== "normal");
         const resultText = `${flagPrefix(flag)}${value || "\u2014"}`;
-        const refText = formatReferenceRange(range, field.fieldMaster.unit, true);
+        // Use simple range only (no qualifiers) for the table cell
+        const refText = formatReferenceRange(range, field.fieldMaster.unit, false);
 
         const rowCells = [field.fieldMaster.name, resultText, field.fieldMaster.unit || "\u2014", refText];
-        const cellHeights = rowCells.map((cell, idx) =>
-          measureHeight(cell, idx === 1 && isAbnormal ? boldFont : normalFont, 9, colWidths[idx] - 6, LINE_HEIGHT),
-        );
-        const rowHeight = Math.max(...cellHeights, LINE_HEIGHT) + ROW_PADDING;
 
-        if (y - rowHeight < MARGIN_BOTTOM + 40) {
+        // Collect critical values as notes
+        if (range?.criticalLow != null) panelNotes.push(`${field.fieldMaster.name}: critical < ${range.criticalLow}`);
+        if (range?.criticalHigh != null) panelNotes.push(`${field.fieldMaster.name}: critical > ${range.criticalHigh}`);
+
+        // Check page break before each row
+        if (y - ROW_HEIGHT < MARGIN_BOTTOM + 40) {
+          // Draw notes before page break
+          if (panelNotes.length > 0) {
+            y = drawNotes(page, y, panelNotes);
+            panelNotes.length = 0;
+          }
           drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
           page = newPage();
           y = drawHeader(page, { normal: normalFont, bold: boldFont });
           y = drawTableHeader(page, y);
         }
 
-        const baseline = y - LINE_HEIGHT + 2;
-        for (let i = 0; i < rowCells.length; i++) {
-          const color = i === 1 && isAbnormal ? flagRed : textPrimary;
-          const font = i === 1 && isAbnormal ? boldFont : normalFont;
-          const align = i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left";
-          const textW = font.widthOfTextAtSize(rowCells[i], 9);
-          let drawX = colX[i] + 2;
-          if (align === "right") drawX = colX[i] + colWidths[i] - textW - 4;
-          else if (align === "center") drawX = colX[i] + (colWidths[i] - textW) / 2;
-          drawWrapped(page, rowCells[i], drawX, baseline, colWidths[i] - 6, 9, font, LINE_HEIGHT, color);
-        }
-        y -= rowHeight;
+        y = drawTestRow(page, y, rowCells, isAbnormal);
       }
 
-      // Catalog footer note
+      // Catalog footer note -> add to panel notes
       if (catalog?.footerNote?.trim()) {
-        const fh = measureHeight(catalog.footerNote, normalFont, 7.5, usableWidth, 10) + 6;
-        if (y - fh < MARGIN_BOTTOM + 40) {
+        panelNotes.push(catalog.footerNote.trim());
+      }
+
+      // Render notes below the panel table
+      if (panelNotes.length > 0) {
+        if (y - panelNotes.length * 12 - 8 < MARGIN_BOTTOM + 40) {
           drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
           page = newPage();
           y = drawHeader(page, { normal: normalFont, bold: boldFont });
         }
-        y = drawWrapped(page, catalog.footerNote, MARGIN_LEFT, y, usableWidth, 7.5, normalFont, 10, textSecondary);
-        y -= 6;
+        y = drawNotes(page, y, panelNotes);
       }
 
-      y -= 6;
+      y -= 8;
     }
 
     // Cancel reason
