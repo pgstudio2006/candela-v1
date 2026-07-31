@@ -135,10 +135,13 @@ function drawTableHeader(page: PDFPage, y: number, bold: PDFFont) {
 export async function generatePatientInvoiceSummaryPdf(receipts: OpdReceiptPayload[]): Promise<Uint8Array> {
   if (receipts.length === 0) throw new Error("No invoices to summarize.");
 
+  const isPataudi = receipts.some((r) => r.branchId === "branch_pataudi");
+  const templateUrl = isPataudi ? "/templates/60984.pdf" : "/templates/navayu-invoice-template.pdf";
+
   const pdfDoc = await PDFDocument.create();
   let embeddedTemplate: PDFEmbeddedPage | null = null;
   try {
-    const res = await fetch("/templates/navayu-invoice-template.pdf");
+    const res = await fetch(templateUrl);
     if (res.ok) {
       const bytes = await res.arrayBuffer();
       const templateDoc = await PDFDocument.load(bytes);

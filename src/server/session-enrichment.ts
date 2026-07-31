@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { resolveEffectiveRoleForUser } from "@/server/admin/role-sync";
 import { ensureRevenueSeeded } from "@/server/revenue/bootstrap";
 
 export type CompatSession = {
@@ -22,19 +23,29 @@ export async function enrichCompatSession(session: CompatSession): Promise<Compa
   const enriched = { ...session };
 
   try {
-    if (session.role === "pharmacy" && !enriched.pharmacyOperatorId) {
+    const user = await prisma.user.findFirst({
+      where: { email, tenant: { slug: session.tenant } },
+      select: { id: true, tenantId: true, activeRole: { select: { key: true } } },
+    });
+    if (user) {
+      enriched.role = await resolveEffectiveRoleForUser(user.id, session.branchId);
+    } else if (session.role) {
+      enriched.role = session.role;
+    }
+
+    if (enriched.role === "pharmacy" && !enriched.pharmacyOperatorId) {
       await ensureRevenueSeeded();
       const cred = await prisma.pharmacyOperatorCredential.findUnique({ where: { email } });
       if (cred?.active) enriched.pharmacyOperatorId = cred.id;
     }
 
-    if (session.role === "crm" && !enriched.crmOperatorId) {
+    if (enriched.role === "crm" && !enriched.crmOperatorId) {
       await ensureRevenueSeeded();
       const cred = await prisma.crmOperatorCredential.findUnique({ where: { email } });
       if (cred?.active) enriched.crmOperatorId = cred.id;
     }
 
-    if (session.role === "hr" && !enriched.hrOperatorId) {
+    if (enriched.role === "hr" && !enriched.hrOperatorId) {
       const employee = await prisma.hrEmployee.findFirst({
         where: { email, active: true },
         select: { id: true },

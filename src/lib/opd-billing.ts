@@ -7,6 +7,10 @@ export type BillingPackageLine = {
   amount: number;
   quantity: number;
   description?: string;
+  category?: string;
+  gstRatePercent?: number;
+  labOrderItemId?: string;
+  labOrderId?: string;
 };
 
 export type PaymentSplit = {

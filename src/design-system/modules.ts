@@ -6,6 +6,7 @@ export type CandelaModuleId =
   | "nurse"
   | "doctor"
   | "pharmacy"
+  | "laboratory"
   | "counsellor"
   | "crm"
   | "hr";
@@ -107,6 +108,20 @@ export const CANDELA_MODULES: CandelaModule[] = [
     ],
   },
   {
+    id: "laboratory",
+    label: "Laboratory",
+    shortLabel: "Lab",
+    path: "/app/laboratory",
+    description: "Lab orders, sample collection, report preparation and catalog",
+    roles: ["laboratory"],
+    views: [
+      { id: "orders", label: "Orders" },
+      { id: "prepare", label: "Prepare report" },
+      { id: "fields", label: "Fields master" },
+      { id: "reports", label: "Report catalog" },
+    ],
+  },
+  {
     id: "counsellor",
     label: "Counsellor",
     shortLabel: "Counsel",
@@ -172,6 +187,7 @@ export const ROLE_LABELS: Record<CandelaRole, string> = {
   nurse: "Nurse",
   doctor: "Doctor",
   pharmacy: "Pharmacy",
+  laboratory: "Laboratory",
   counsellor: "Counsellor",
   crm: "CRM",
   hr: "HR",

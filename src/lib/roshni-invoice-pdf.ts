@@ -129,11 +129,46 @@ function drawTable(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bol
   return tableBottom;
 }
 
+function drawAdvancePayments(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont, tableBottom: number) {
+  const payments = receipt.advancePayments ?? [];
+  if (payments.length === 0) return;
+
+  const left = COLUMNS[0];
+  const right = 350;
+  let y = tableBottom - 18;
+  line(page, left, right, y + 8, 0.6);
+  drawText(page, "Advance & Paid Receipt", left, y, bold, FONT.header);
+  y -= 13;
+  const headers = ["Sr No.", "Receipt No.", "Name", "Qty", "Amount", "Net Amount"];
+  const columns = [left, 55, 145, 252, 285, 350];
+  headers.forEach((header, index) => {
+    if (index >= 4) drawRight(page, header, columns[index], y, bold, FONT.header);
+    else drawText(page, header, columns[index], y, bold, FONT.header);
+  });
+  y -= 5;
+  line(page, left, right, y, 0.5);
+  y -= 10;
+
+  payments.forEach((payment, index) => {
+    const amount = payment.receivedAmount > 0 ? payment.receivedAmount : payment.amount;
+    drawText(page, String(index + 1), columns[0], y, font, FONT.body);
+    drawText(page, safe(payment.receiptNo), columns[1], y, font, FONT.body);
+    drawText(page, "IPD ADVANCE", columns[2], y, font, FONT.body);
+    drawText(page, "1", columns[3], y, font, FONT.body);
+    drawRight(page, money(amount), columns[4] + 28, y, font, FONT.body);
+    drawRight(page, money(amount), columns[5], y, font, FONT.body);
+    y -= 13;
+  });
+  line(page, left, right, y + 5, 0.5);
+}
+
 function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bold: PDFFont, tableBottom: number): number {
   const labelX = 372;
   const valueX = 575;
   let y = tableBottom - 40;
-  drawRight(page, "Subtotal", labelX + 80, y, bold, FONT.body);
+  const showSettlement = !!(receipt.paymentStatus && receipt.settlementType);
+
+  drawRight(page, showSettlement ? "Gross Amount" : "Subtotal", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.subtotal), valueX, y, bold, FONT.body);
   y -= 13;
   if (receipt.discount > 0) {
@@ -156,28 +191,64 @@ function drawTotals(page: PDFPage, receipt: OpdReceiptPayload, font: PDFFont, bo
     drawRight(page, money(receipt.igstTotal), valueX, y, bold, FONT.body);
     y -= 13;
   }
-  drawRight(page, "Grand total", labelX + 80, y, bold, FONT.body);
+  drawRight(page, showSettlement ? "Net Bill Amount" : "Grand total", labelX + 80, y, bold, FONT.body);
   drawRight(page, money(receipt.total), valueX, y, bold, FONT.body);
   y -= 13;
-  drawRight(page, "Collected", labelX + 80, y, bold, FONT.body);
-  drawRight(page, money(receipt.amountPaid), valueX, y, bold, FONT.body);
-  y -= 13;
-  if (receipt.balanceDue > 0) {
-    drawRight(page, "Balance due", labelX + 80, y, bold, FONT.body);
-    drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
-    y -= 13;
-  }
-  if (receipt.paymentBreakdown && receipt.paymentBreakdown.length > 0) {
-    for (const split of receipt.paymentBreakdown) {
-      drawRight(page, `Payment - ${split.mode.toUpperCase()}`, labelX + 80, y, bold, FONT.body);
-      drawRight(page, money(split.amount), valueX, y, font, FONT.body);
+
+  if (showSettlement) {
+    if (receipt.advanceUsed && receipt.advanceUsed > 0) {
+      drawRight(page, "Less: Advance Adjusted", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.advanceUsed), valueX, y, font, FONT.body);
       y -= 13;
     }
-  } else if (receipt.paymentMode) {
-    drawRight(page, "Payment mode", labelX + 80, y, bold, FONT.body);
-    drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
+    if (receipt.balanceDue > 0) {
+      drawRight(page, "Outstanding Amount", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
+      y -= 13;
+    }
+    if (receipt.refundAmount && receipt.refundAmount > 0) {
+      drawRight(page, "Refund Amount", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.refundAmount), valueX, y, bold, FONT.body);
+      y -= 13;
+    }
+    drawRight(page, "Payment Status", labelX + 80, y, bold, FONT.body);
+    drawRight(page, receipt.paymentStatus!.toUpperCase(), valueX, y, font, FONT.body);
     y -= 13;
+    drawRight(page, "Settlement Type", labelX + 80, y, bold, FONT.body);
+    drawRight(page, receipt.settlementType!, valueX, y, font, FONT.body);
+    y -= 13;
+  } else {
+    drawRight(page, "Collected", labelX + 80, y, bold, FONT.body);
+    drawRight(page, money(receipt.amountPaid), valueX, y, bold, FONT.body);
+    y -= 13;
+    if (receipt.balanceDue > 0) {
+      drawRight(page, "Balance due", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.balanceDue), valueX, y, bold, FONT.body);
+      y -= 13;
+    }
+    if (receipt.advanceUsed && receipt.advanceUsed > 0) {
+      drawRight(page, "Advance used", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.advanceUsed), valueX, y, font, FONT.body);
+      y -= 13;
+    }
+    if (receipt.refundAmount && receipt.refundAmount > 0) {
+      drawRight(page, "Refund due", labelX + 80, y, bold, FONT.body);
+      drawRight(page, money(receipt.refundAmount), valueX, y, bold, FONT.body);
+      y -= 13;
+    }
+    if (receipt.paymentBreakdown && receipt.paymentBreakdown.length > 0) {
+      for (const split of receipt.paymentBreakdown) {
+        drawRight(page, `Payment - ${split.mode.toUpperCase()}`, labelX + 80, y, bold, FONT.body);
+        drawRight(page, money(split.amount), valueX, y, font, FONT.body);
+        y -= 13;
+      }
+    } else if (receipt.paymentMode) {
+      drawRight(page, "Payment mode", labelX + 80, y, bold, FONT.body);
+      drawRight(page, receipt.paymentMode.toUpperCase(), valueX, y, font, FONT.body);
+      y -= 13;
+    }
   }
+
   line(page, 15, 575, y, 0.5);
   y -= 13;
   drawRight(page, "GLOBAL HOSPITAL & TRAUMA CENTRE", 575, y, font, FONT.body);
@@ -233,6 +304,7 @@ export async function generateRoshniInvoicePdf(receipt: OpdReceiptPayload): Prom
   line(page, 15, 575, 735, 0.8);
   drawInfo(page, receipt, font, bold);
   const tableBottom = drawTable(page, receipt, font, bold);
+  drawAdvancePayments(page, receipt, font, bold, tableBottom);
   const totalsBottom = drawTotals(page, receipt, font, bold, tableBottom);
   drawNotes(page, receipt, font, totalsBottom);
 

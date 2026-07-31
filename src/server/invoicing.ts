@@ -182,7 +182,7 @@ export async function createVisitInvoice(
   return { invoiceId, invoiceNumber, status: balance > 0 ? "partial" : input.collected > 0 ? "paid" : "pending" };
 }
 
-const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "cheque", "wallet", "other"]);
+const VALID_PAYMENT_MODES = new Set(["cash", "card", "upi", "netbanking", "cheque", "wallet", "advance", "other"]);
 
 export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoiceId?: string): Promise<OpdReceiptPayload> {
   if (invoiceId) {
@@ -296,6 +296,30 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
 
   const receiptInvoice = targetSession?.serviceInvoice ?? requestedInvoice ?? allInvoices[allInvoices.length - 1] ?? null;
   const sessionInvoices = targetSession?.invoices ?? (receiptInvoice ? [receiptInvoice] : []);
+  const admission = await prisma.ipdAdmission.findFirst({
+    where: { visitId, ...branchScope(ctx) },
+    select: { id: true },
+  });
+  const advancePayments = admission
+    ? await prisma.ipdAdvancePayment.findMany({
+        where: {
+          admissionId: admission.id,
+          tenantId: ctx.tenantId,
+          branchId: ctx.branchId,
+          status: "received",
+        },
+        orderBy: { receivedAt: "asc" },
+        select: {
+          id: true,
+          amount: true,
+          receivedAmount: true,
+          mode: true,
+          status: true,
+          referenceNo: true,
+          receivedAt: true,
+        },
+      })
+    : [];
 
   // Use the current bill/session totals, not the cumulative visit totals.
   const receiptTotal = Number(receiptInvoice?.totalAmount ?? visit.billAmount ?? 0);
@@ -359,6 +383,8 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
 
   const base = {
     branchId: ctx.branchId,
+    patientId: patient.id,
+    visitId,
     invoiceNumber: receiptInvoice?.invoiceNumber ?? `NV-${visitId.slice(-8).toUpperCase()}`,
     issuedAt: (receiptInvoice?.createdAt ?? visit.updatedAt ?? new Date()).toISOString(),
     patientName: patientDisplayName(patient),
@@ -379,6 +405,32 @@ export async function getVisitReceipt(ctx: ServerContext, visitId: string, invoi
     paymentBreakdown,
     amountPaid: aggregateAmountPaid,
     balanceDue: aggregateBalanceDue,
+    refundAmount: Number((targetSession?.serviceInvoice ?? receiptInvoice)?.refundAmount ?? 0),
+    advanceUsed: Number(
+      ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.advanceUsed ?? 0,
+    ),
+    advanceAvailable: Number(
+      ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.advanceAvailable ?? 0,
+    ),
+    paymentStatus:
+      String(
+        ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.paymentStatus ??
+          "",
+      ) || undefined,
+    settlementType:
+      String(
+        ((targetSession?.serviceInvoice ?? receiptInvoice)?.payload as Record<string, unknown> | null)?.settlementType ??
+          "",
+      ) || undefined,
+    advancePayments: advancePayments.map((payment) => ({
+      receiptNo: payment.referenceNo?.trim() || `ADV-${payment.id.slice(-8).toUpperCase()}`,
+      receivedAt: payment.receivedAt.toISOString(),
+      amount: Number(payment.amount),
+      receivedAmount: Number(payment.receivedAmount),
+      mode: payment.mode,
+      status: payment.status,
+      referenceNo: payment.referenceNo ?? undefined,
+    })),
     routingNote: visit.routingNote ?? undefined,
   };
 

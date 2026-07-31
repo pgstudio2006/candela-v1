@@ -3,6 +3,7 @@
 import { AttioButton } from "@/components/frontdesk/ui";
 import type { OpdReceiptPayload } from "@/lib/opd-receipt";
 import { downloadPdfBytes, generateInvoicePdf, printPdfBytes } from "@/lib/invoice-pdf";
+import { savePdfAsPatientDocument } from "@/lib/patient-documents";
 import { Download, Loader2, Printer, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -55,11 +56,20 @@ export function InvoicePdfPreviewModal({
     setGenError("");
 
     void generateInvoicePdf(receipt)
-      .then((bytes) => {
+      .then(async (bytes) => {
         if (cancelled) return;
         setPdfBytes(bytes);
         const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
         setPdfUrl(URL.createObjectURL(blob));
+        if (receipt.branchId === "branch_pataudi" && receipt.patientId) {
+          await savePdfAsPatientDocument(
+            receipt.patientId,
+            "bill",
+            `invoice-${receipt.invoiceNumber}.pdf`,
+            bytes,
+            { visitId: receipt.visitId, label: `OPD invoice · ${receipt.invoiceNumber}` },
+          );
+        }
       })
       .catch(() => {
         if (!cancelled) setGenError("Could not prepare invoice PDF.");

@@ -16,6 +16,11 @@ const KIND_LABELS: Record<DocumentTemplateKind, string> = {
   prescription: "Prescription",
   invoice: "Invoice",
   consult_summary: "Consult summary",
+  lab_report: "Lab report",
+  file_sticker: "Patient file sticker",
+  room_plate: "Room plate",
+  ipd_overview: "IPD file overview",
+  discharge_summary: "Discharge summary",
 };
 
 export default function DoctorDocumentTemplatesPage() {

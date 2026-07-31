@@ -8,26 +8,51 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PatientDocumentsPanel } from "@/components/patient-documents";
 import { PatientConsentsPanel } from "@/components/patient-consents";
+import { PatientLabReportsPanel } from "@/components/candela/patient-lab-reports-panel";
 import { PatientPrescriptionsPanel } from "@/components/frontdesk/patient-prescriptions-panel";
 import { formatStageStatus, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { problemLabelForValue } from "@/lib/department-problems";
 import { ArrowLeft, CreditCard, Download, ListOrdered, Pencil, Printer, UserCog } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { assignCounsellorToPatientAction } from "@/server/crm/online-counsellor-actions";
 import { getPatientInvoicesAction, getPatientInvoiceReceiptsAction } from "@/app/actions/clinical-actions";
 import { getIpdAdmissionsByPatientAction } from "@/app/actions/ipd-actions";
-import { downloadPdfBytes } from "@/lib/invoice-pdf";
+import { listDocumentTemplatesAction } from "@/app/actions/doctor-actions";
+import { getPendingLabOrdersForVisitAction } from "@/app/actions/lab-actions";
+import type { LabOrder } from "@/design-system/lab-data";
+import { downloadPdfBytes, printPdfBytes } from "@/lib/invoice-pdf";
 import { generatePatientInvoiceSummaryPdf } from "@/lib/patient-invoice-summary-pdf";
+import { generateIpdDischargeSummaryPdf, type IpdDischargeSummary } from "@/lib/ipd-template-pdf";
+import { loadDocumentTemplates, type DocumentTemplate } from "@/design-system/document-templates";
+import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 
 export default function PatientRecordPage() {
   const params = useParams();
   const id = params.id as string;
-  const { getPatient, getPatientVisits, visits } = useFrontdeskStore();
+  const { getPatient, getPatientVisits, visits, ready, refresh } = useFrontdeskStore();
+  const [loadingPatient, setLoadingPatient] = useState(true);
+  const triedRefresh = useRef(false);
   const patient = getPatient(id);
   const patientVisits = patient ? getPatientVisits(patient.id) : [];
   const activeVisit = patientVisits.find((v) => !["completed", "with_doctor"].includes(v.stage));
+  const cartVisit = patientVisits.find((v) => !["completed", "cancelled", "no_show"].includes(v.stage)) ?? null;
+
+  useEffect(() => {
+    if (patient) {
+      setLoadingPatient(false);
+      return;
+    }
+    if (!ready) return;
+    if (triedRefresh.current) {
+      setLoadingPatient(false);
+      return;
+    }
+    triedRefresh.current = true;
+    setLoadingPatient(true);
+    refresh().finally(() => setLoadingPatient(false));
+  }, [patient, ready, refresh]);
   const billingTotals = useMemo(() => {
     const billed = patientVisits.filter((v) => v.billAmount);
     const paid = billed.reduce((sum, v) => sum + (v.amountPaid ?? 0), 0);
@@ -48,6 +73,10 @@ export default function PatientRecordPage() {
   const [patientStatus, setPatientStatus] = useState<string>("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [ipdAdmissions, setIpdAdmissions] = useState<Extract<Awaited<ReturnType<typeof getIpdAdmissionsByPatientAction>>, { ok: true }>["data"]>([]);
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
+  const [cart, setCart] = useState<LabOrder[]>([]);
+  const [cartLoading, setCartLoading] = useState(false);
+  const [printingSummaryId, setPrintingSummaryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (patient) setActivePatientId(patient.id);
@@ -64,10 +93,32 @@ export default function PatientRecordPage() {
       if (cancelled) return;
       if (result.ok && result.data) setIpdAdmissions(result.data);
     });
+    void listDocumentTemplatesAction().then((result) => {
+      if (cancelled) return;
+      if (result.ok && result.data?.length) setDocumentTemplates(result.data);
+      else setDocumentTemplates(loadDocumentTemplates());
+    });
     return () => {
       cancelled = true;
     };
   }, [patient]);
+
+  useEffect(() => {
+    if (!cartVisit?.id) {
+      setCart([]);
+      return;
+    }
+    let cancelled = false;
+    setCartLoading(true);
+    void getPendingLabOrdersForVisitAction(cartVisit.id).then((result) => {
+      if (cancelled) return;
+      setCart(result.ok ? (result.data ?? []) : []);
+      setCartLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cartVisit?.id]);
 
   useEffect(() => {
     if (patient) {
@@ -128,49 +179,68 @@ export default function PatientRecordPage() {
     }
   };
 
-  const handleViewDischargeSummary = (admission: (typeof ipdAdmissions)[number], summary: Record<string, string>) => {
-    const name = patient?.name ?? "";
-    const uhid = patient?.uhid ?? "";
-    const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const formatDate = (value?: string) => {
-      if (!value) return "—";
-      const d = new Date(value);
-      return isNaN(d.getTime()) ? value : d.toLocaleDateString("en-IN");
-    };
-    const fields = [
-      { label: "Admission date", value: formatDate(summary.admissionDate) },
-      { label: "Discharge date", value: formatDate(summary.dischargeDate) },
-      { label: "Diagnosis", value: summary.diagnosis },
-      { label: "Procedures", value: summary.procedures },
-      { label: "Medications", value: summary.medications },
-      { label: "Follow up", value: summary.followUp },
-      { label: "Notes", value: summary.notes },
-    ];
-    const body = fields
-      .filter((f) => typeof f.value === "string" && f.value.trim() !== "" && f.value !== "—")
-      .map((f) => `<div class="section"><div class="label">${escape(f.label)}</div><div class="value">${escape(f.value)}</div></div>`)
-      .join("");
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html>
-        <head><title>Discharge Summary - ${escape(name)}</title>
-          <style>body{font-family:system-ui,sans-serif;padding:24px;color:#111;}h1{font-size:18px;margin:0 0 8px;}.meta{color:#555;font-size:12px;margin-bottom:16px;}.section{margin-bottom:12px;}.label{font-weight:600;font-size:12px;color:#444;}.value{font-size:12px;white-space:pre-wrap;}</style>
-        </head>
-        <body>
-          <h1>Discharge Summary</h1>
-          <div class="meta">${escape(name)} · ${escape(uhid)} · ${escape(admission.ward)} Bed ${escape(admission.bed)}</div>
-          ${body}
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+  const buildIpdDetail = (admission: (typeof ipdAdmissions)[number]): IpdAdmissionDetail => {
+    return {
+      ...admission,
+      id: admission.id,
+      visitId: admission.visitId ?? "",
+      patientId: patient?.id ?? "",
+      patientName: patient?.name ?? "",
+      uhid: patient?.uhid ?? null,
+      phone: patient?.phone ?? null,
+      age: resolvePatientAge(patient?.age, patient?.dateOfBirth),
+      gender: patient?.gender ?? null,
+      patientType: "general",
+      billingMode: "postpaid",
+      attendingDoctorId: "",
+      lastRoundAt: null,
+      lastRoundNote: null,
+      cart: [],
+      advancePayments: [],
+      refundVouchers: [],
+    } as unknown as IpdAdmissionDetail;
   };
+
+  const handleDownloadDischargeSummary = async (admission: (typeof ipdAdmissions)[number], summary: IpdDischargeSummary) => {
+    setPrintingSummaryId(admission.id);
+    try {
+      const detail = buildIpdDetail(admission);
+      const template =
+        documentTemplates.find((t) => t.kind === "discharge_summary" && t.isDefault) ??
+        documentTemplates.find((t) => t.kind === "discharge_summary");
+      const bytes = await generateIpdDischargeSummaryPdf(detail, summary, template);
+      const filename = `${patient?.uhid ?? patient?.id ?? "discharge"}_discharge_summary_${new Date().toISOString().slice(0, 10)}.pdf`;
+      downloadPdfBytes(bytes, filename);
+    } catch (err) {
+      console.error("Download discharge summary failed", err);
+    } finally {
+      setPrintingSummaryId(null);
+    }
+  };
+
+  const handlePrintDischargeSummary = async (admission: (typeof ipdAdmissions)[number], summary: IpdDischargeSummary) => {
+    setPrintingSummaryId(admission.id);
+    try {
+      const detail = buildIpdDetail(admission);
+      const template =
+        documentTemplates.find((t) => t.kind === "discharge_summary" && t.isDefault) ??
+        documentTemplates.find((t) => t.kind === "discharge_summary");
+      const bytes = await generateIpdDischargeSummaryPdf(detail, summary, template);
+      printPdfBytes(bytes, "Discharge Summary");
+    } catch (err) {
+      console.error("Print discharge summary failed", err);
+    } finally {
+      setPrintingSummaryId(null);
+    }
+  };
+
+  if (loadingPatient) {
+    return (
+      <PageChrome breadcrumbs={[{ label: "Front Desk", href: "/app/frontdesk" }, { label: "Patients" }]} title="Loading patient">
+        <p className="text-[13px] text-[var(--attio-text-secondary)]">Loading patient record…</p>
+      </PageChrome>
+    );
+  }
 
   if (!patient) {
     return (
@@ -227,10 +297,12 @@ export default function PatientRecordPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="visits">Visits</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsTrigger value="cart">Cart</TabsTrigger>
           <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
           <TabsTrigger value="ipd">IPD</TabsTrigger>
           <TabsTrigger value="counsellor">Counsellor</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="labs">Lab Reports</TabsTrigger>
           <TabsTrigger value="consents">Consents</TabsTrigger>
         </TabsList>
 
@@ -346,13 +418,57 @@ export default function PatientRecordPage() {
               {patientVisits.map((v) => (
                 <li key={v.id} className="flex items-center justify-between rounded-lg border border-[var(--attio-border-subtle)] p-3 text-[13px]">
                   <div>
-                    <p className="font-medium">{v.doctorName || "Unassigned"}</p>
+                    <p className="font-medium">{v.doctorName || formatStageStatus(v.stage)}</p>
                     <p className="text-[var(--attio-text-tertiary)]">Token #{v.token ?? "—"} · {formatStageStatus(v.stage)}</p>
                   </div>
                   <StatusBadge label={v.billing} variant={v.billing === "paid" ? "success" : "warning"} />
                 </li>
               ))}
             </ul>
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="cart" className="mt-4">
+          <Panel
+            title="Current visit cart"
+            action={
+              cartVisit ? (
+                <Link href={`/app/frontdesk/billing?visit=${cartVisit.id}`}>
+                  <AttioButton variant="primary" className="h-8 gap-1.5 text-[12px]">
+                    <CreditCard className="size-3.5" /> Go to billing
+                  </AttioButton>
+                </Link>
+              ) : null
+            }
+          >
+            {cartLoading ? (
+              <p className="text-[13px] text-[var(--attio-text-secondary)]">Loading cart…</p>
+            ) : cart.length === 0 ? (
+              <p className="text-[13px] text-[var(--attio-text-secondary)]">No pending lab orders in the cart for this visit.</p>
+            ) : (
+              <div className="space-y-3">
+                {cart.map((order) => (
+                  <div key={order.id} className="rounded-lg border border-[var(--attio-border-subtle)] p-3">
+                    <p className="text-[12px] text-[var(--attio-text-tertiary)]">Order · {new Date(order.orderedAt).toLocaleString("en-IN")}</p>
+                    <ul className="mt-2 space-y-2">
+                      {order.items.map((item) => (
+                        <li key={item.id} className="flex items-center justify-between text-[13px]">
+                          <div>
+                            <p className="font-medium">{item.label}</p>
+                            <p className="text-[11px] text-[var(--attio-text-tertiary)]">{item.reportCatalog?.code ?? item.reportCatalogId}</p>
+                          </div>
+                          <p className="font-semibold text-[var(--attio-accent)]">₹{(item.price ?? 0).toLocaleString("en-IN")}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-[var(--attio-border)] pt-2 text-[13px] font-semibold">
+                  <span>Cart total</span>
+                  <span>₹{cart.reduce((sum, o) => sum + o.items.reduce((s, i) => s + (i.price ?? 0), 0), 0).toLocaleString("en-IN")}</span>
+                </div>
+              </div>
+            )}
           </Panel>
         </TabsContent>
 
@@ -387,10 +503,20 @@ export default function PatientRecordPage() {
                           <AttioButton
                             variant="secondary"
                             className="!h-7 !text-[11px] gap-1"
-                            onClick={() => void handleViewDischargeSummary(a, summary as Record<string, string>)}
+                            disabled={printingSummaryId === a.id}
+                            onClick={() => void handleDownloadDischargeSummary(a, summary as IpdDischargeSummary)}
+                          >
+                            <Download className="size-3.5" />
+                            {printingSummaryId === a.id ? "Preparing…" : "Download"}
+                          </AttioButton>
+                          <AttioButton
+                            variant="secondary"
+                            className="!h-7 !text-[11px] gap-1"
+                            disabled={printingSummaryId === a.id}
+                            onClick={() => void handlePrintDischargeSummary(a, summary as IpdDischargeSummary)}
                           >
                             <Printer className="size-3.5" />
-                            View / Print
+                            Print
                           </AttioButton>
                         </div>
                       ) : null;
@@ -637,6 +763,10 @@ export default function PatientRecordPage() {
 
         <TabsContent value="documents" className="mt-4">
           <PatientDocumentsPanel patientId={patient.id} />
+        </TabsContent>
+
+        <TabsContent value="labs" className="mt-4">
+          <PatientLabReportsPanel patientId={patient.id} />
         </TabsContent>
 
         <TabsContent value="consents" className="mt-4">

@@ -20,7 +20,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     pathname.startsWith("/app/admin") ||
     pathname.startsWith("/app/crm") ||
     pathname.startsWith("/app/pharmacy") ||
-    pathname.startsWith("/app/hr");
+    pathname.startsWith("/app/hr") ||
+    pathname.startsWith("/app/laboratory");
 
   useEffect(() => {
     if (loading || !session) return;

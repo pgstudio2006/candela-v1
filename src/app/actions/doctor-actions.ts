@@ -14,6 +14,8 @@ import {
   getDoctorSnapshot,
   getIpdRoundHistory,
   listDoctorAuditLogs,
+  listDocumentTemplates,
+  deleteDocumentTemplate,
   saveConsultSection,
   saveDocumentTemplate,
   saveIpdRound,
@@ -123,12 +125,28 @@ export async function listDoctorAuditLogsAction(input?: { limit?: number; cursor
   return listDoctorAuditLogs(ctx, input ?? {});
 }
 
+export async function listDocumentTemplatesAction(): Promise<ActionResult<DocumentTemplate[]>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("admin", "doctor", "frontdesk");
+    return listDocumentTemplates(ctx);
+  });
+}
+
+export async function deleteDocumentTemplateAction(id: string): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("admin", "doctor");
+    return deleteDocumentTemplate(ctx, id);
+  });
+}
+
 export async function addDocumentTemplateAction(kind: DocumentTemplate["kind"], label: string, description: string) {
   const ctx = await requireModule("doctor");
   return addDocumentTemplate(ctx, kind, label, description);
 }
 
-export async function saveDocumentTemplateAction(template: DocumentTemplate) {
-  const ctx = await requireModule("doctor");
-  return saveDocumentTemplate(ctx, template);
+export async function saveDocumentTemplateAction(template: DocumentTemplate): Promise<ActionResult<DocumentTemplate>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("admin", "doctor");
+    return saveDocumentTemplate(ctx, template);
+  });
 }

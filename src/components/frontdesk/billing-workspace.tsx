@@ -12,9 +12,13 @@ import { useToast } from "@/components/ui/toast-provider";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
+import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 import { getVisitForBillingAction } from "@/app/actions/clinical-actions";
+import { getIpdAdmissionAction } from "@/app/actions/ipd-actions";
+import { IpdAdmissionWorkspace } from "@/components/frontdesk/ipd-admission-workspace";
+import { LabOrderButton } from "@/components/lab/lab-order-modal";
 
 type BillingMode = "opd" | "ipd";
 
@@ -63,6 +67,33 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
   const [selectedPatient, setSelectedPatient] = useState<Patient | undefined>(activePatient);
   const [directVisit, setDirectVisit] = useState<Visit | undefined>(undefined);
   const [directPatient, setDirectPatient] = useState<Patient | undefined>(undefined);
+  const [ipdAdmission, setIpdAdmission] = useState<IpdAdmissionDetail | null>(null);
+
+  const refreshIpdAdmission = useCallback(
+    async (admissionId?: string) => {
+      if (!admissionId) {
+        setIpdAdmission(null);
+        return;
+      }
+      const res = await getIpdAdmissionAction(admissionId);
+      if (res.ok && res.data) {
+        setIpdAdmission(res.data as IpdAdmissionDetail);
+      } else {
+        setIpdAdmission(null);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (mode !== "ipd") {
+      setIpdAdmission(null);
+      return;
+    }
+    const visit = directVisit ?? (selectedVisitId ? getVisit(selectedVisitId) : undefined);
+    const admissionId = visit?.ipdAdmissionId;
+    void refreshIpdAdmission(admissionId);
+  }, [mode, selectedVisitId, directVisit, getVisit, refreshIpdAdmission]);
 
   useEffect(() => {
     if (visitParam) setSelectedVisitId(visitParam);
@@ -190,7 +221,7 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+        <div className={cn("grid gap-6", mode === "ipd" && ipdAdmission ? "grid-cols-1" : "lg:grid-cols-[1fr_280px]")}>
           <div>
             {activeVisit && counselForVisit ? (
               <Panel title={`Package closure · ${activePatient?.name ?? "Patient"}`}>
@@ -205,6 +236,8 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
                   }}
                 />
               </Panel>
+            ) : mode === "ipd" && ipdAdmission ? (
+              <IpdAdmissionWorkspace admission={ipdAdmission} />
             ) : (
               <OpdBillingForm
                 branchId={session?.branchId}
@@ -302,15 +335,35 @@ export function BillingWorkspace({ mode, defaultTitle, defaultMeta }: BillingWor
               )}
             </Panel>
 
-            <Panel title="Routing guide">
-              <p className="text-[13px] text-[var(--attio-text-secondary)]">{routingGuideText}</p>
-              <Link
-                href={queueHref}
-                className="mt-2 inline-block text-[13px] font-medium text-[var(--attio-accent)] hover:underline"
-              >
-                {queueLabel}
-              </Link>
-            </Panel>
+            {selectedPatient && (
+              <Panel title="Laboratory">
+                <p className="text-[13px] text-[var(--attio-text-secondary)]">
+                  {selectedVisit ? "Order tests for this visit." : "Order tests for this patient."}
+                </p>
+                <div className="mt-2">
+                  <LabOrderButton
+                    patientId={selectedPatient.id}
+                    patientName={selectedPatient.name}
+                    visitId={selectedVisit?.id}
+                    admissionId={selectedVisit?.ipdAdmissionId}
+                    source={selectedVisit && isVisitIpd(selectedVisit) ? "ipd" : selectedVisit ? "opd" : "direct"}
+                    onCreated={(orderId) => toast(`Lab order ${orderId} created`, "success")}
+                  />
+                </div>
+              </Panel>
+            )}
+
+            {!(mode === "ipd" && ipdAdmission) && (
+              <Panel title="Routing guide">
+                <p className="text-[13px] text-[var(--attio-text-secondary)]">{routingGuideText}</p>
+                <Link
+                  href={queueHref}
+                  className="mt-2 inline-block text-[13px] font-medium text-[var(--attio-accent)] hover:underline"
+                >
+                  {queueLabel}
+                </Link>
+              </Panel>
+            )}
           </div>
         </div>
       </PageChrome>

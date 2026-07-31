@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import { resolveEffectiveRoleForUser } from "@/server/admin/role-sync";
 import { ServerActionError } from "@/server/errors";
 
 export type ServerContext = {
@@ -48,12 +49,24 @@ export async function getServerContext(): Promise<ServerContext> {
     }
   }
 
+  let effectiveRole = session.user.role;
+  try {
+    effectiveRole = await resolveEffectiveRoleForUser(
+      session.user.id,
+      session.user.branchId,
+    );
+  } catch (err) {
+    // Role resolution failed (DB transient or schema issue). Keep the JWT role
+    // so the page can load and surface a user-facing error instead of 500.
+    console.error("[getServerContext] resolveEffectiveRoleForUser failed, falling back to JWT role:", err);
+  }
+
   return {
     userId: session.user.id,
     tenantId: session.user.tenantId,
     branchId: session.user.branchId,
     branchName: session.user.branchName ?? "",
-    role: session.user.role,
+    role: effectiveRole,
     sessionToken: session.user.sessionToken,
   };
 }

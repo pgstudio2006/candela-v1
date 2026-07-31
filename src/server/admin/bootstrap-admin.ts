@@ -71,7 +71,7 @@ export async function ensureAdminAccount(input?: {
     });
   }
 
-  const modules = ["admin", "frontdesk", "nurse", "doctor", "pharmacy", "counsellor", "crm", "hr"] as const;
+  const modules = ["admin", "frontdesk", "nurse", "doctor", "pharmacy", "laboratory", "counsellor", "crm", "hr"] as const;
   if (!(await db.role.count({ where: { tenantId: tenant.id } }))) {
     const permissions = modules.flatMap((module) => [
       {
@@ -107,6 +107,33 @@ export async function ensureAdminAccount(input?: {
       skipDuplicates: true,
     });
   }
+
+  await db.permission.createMany({
+    data: [
+      { id: "perm_laboratory_read", module: "LABORATORY", action: "read", description: "laboratory read" },
+      { id: "perm_laboratory_write", module: "LABORATORY", action: "write", description: "laboratory write" },
+    ],
+    skipDuplicates: true,
+  });
+  const laboratoryRole = await db.role.upsert({
+    where: { tenantId_key: { tenantId: tenant.id, key: "laboratory" } },
+    update: {},
+    create: {
+      id: `role_laboratory_${tenant.id}`,
+      tenantId: tenant.id,
+      name: "LABORATORY Role",
+      key: "laboratory",
+      module: "LABORATORY",
+      isSystem: true,
+    },
+  });
+  await db.rolePermission.createMany({
+    data: [
+      { roleId: laboratoryRole.id, permissionId: "perm_laboratory_read" },
+      { roleId: laboratoryRole.id, permissionId: "perm_laboratory_write" },
+    ],
+    skipDuplicates: true,
+  });
 
   const adminRole = await db.role.findFirst({ where: { tenantId: tenant.id, key: "admin" } });
   const passwordHash = await hash(password.trim(), 10);

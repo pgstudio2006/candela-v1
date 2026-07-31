@@ -6,7 +6,7 @@ export type BillingPackage = {
   id: string;
   label: string;
   description?: string;
-  category: "opd" | "injection" | "therapy" | "procedure" | "admission";
+  category: string;
   amount: number;
   amountMax?: number;
   /** Display hint when list price is a range */
@@ -53,7 +53,7 @@ export async function fetchServiceChargesFromAPI(branchId?: string): Promise<Bil
         id: charge.id,
         label: charge.label,
         description: charge.description,
-        category: (charge.category as BillingPackage["category"]) ?? "opd",
+        category: charge.category ?? "opd",
         amount: Number(charge.rate),
         gstPercent: Number(charge.gstPercent ?? 0),
       }));

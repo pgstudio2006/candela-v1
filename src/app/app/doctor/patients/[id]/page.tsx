@@ -5,6 +5,7 @@ import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { PatientDocumentsPanel } from "@/components/patient-documents";
 import { PatientConsentsPanel } from "@/components/patient-consents";
+import { PatientLabReportsPanel } from "@/components/candela/patient-lab-reports-panel";
 import { PatientIpdRecord } from "@/components/doctor/patient-ipd-record";
 import { consultPrimaryDiagnosis, formatConsultDate } from "@/lib/doctor-records";
 import { parseScribeSessions } from "@/lib/scribe-transcript";
@@ -56,6 +57,7 @@ export default function DoctorPatientDetailPage() {
         { id: "scribe", label: "AI Scribe" },
         { id: "overview", label: "Overview" },
         { id: "documents", label: "Documents" },
+        { id: "labs", label: "Lab Reports" },
         { id: "consents", label: "Consents" },
       ]}
       activeTab={tab}
@@ -275,6 +277,10 @@ export default function DoctorPatientDetailPage() {
 
       {tab === "documents" && (
         <PatientDocumentsPanel patientId={patientId} />
+      )}
+
+      {tab === "labs" && (
+        <PatientLabReportsPanel patientId={patientId} />
       )}
 
       {tab === "consents" && (

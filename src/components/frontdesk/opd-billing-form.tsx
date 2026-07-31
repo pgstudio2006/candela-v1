@@ -4,6 +4,7 @@ import { PublishedSchemaForm } from "@/components/candela/published-schema-form"
 import { PatientSearchField } from "@/components/frontdesk/patient-search-field";
 import { AttioButton, Panel } from "@/components/frontdesk/ui";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
+import type { LabReportCatalog } from "@/design-system/lab-data";
 import type { PaymentScope } from "@/lib/billing-routing";
 import {
   formatPackagePrice,
@@ -13,6 +14,12 @@ import {
 } from "@/lib/billing-packages";
 import { getVisitBillingAction } from "@/app/actions/clinical-actions";
 import { getIpdCartAction } from "@/app/actions/ipd-actions";
+import {
+  createLabOrderFromModuleAction,
+  getPendingLabOrdersForVisitAction,
+  listActiveLabCatalogsAction,
+} from "@/app/actions/lab-actions";
+import { useToast } from "@/components/ui/toast-provider";
 import { computeGstInvoice } from "@/lib/gst-invoicing";
 import type { BillingPackageLine, PaymentSplit } from "@/lib/opd-billing";
 import { resolveBillingDiscount } from "@/lib/opd-billing";
@@ -21,13 +28,15 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Plus, Trash2, X, Search, Package as PackageIcon } from "lucide-react";
+import { Plus, Trash2, X, Search, Package as PackageIcon, FlaskConical } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
 
 const PAYMENT_MODES = [
@@ -61,6 +70,7 @@ function lineFromPackage(pkg: BillingPackage): SelectedLine {
     amount: pkg.amount,
     quantity: 1,
     description: pkg.description,
+    gstRatePercent: pkg.gstPercent,
   };
 }
 
@@ -81,21 +91,33 @@ export function OpdBillingForm({
   const [loading, setLoading] = useState(true);
   const [packageSearch, setPackageSearch] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
-  const [tab, setTab] = useState<"packages" | "services">("services");
+  const [serviceCategory, setServiceCategory] = useState("");
+  const [labCatalogs, setLabCatalogs] = useState<LabReportCatalog[]>([]);
+  const [labLoading, setLabLoading] = useState(false);
+  const [labSearch, setLabSearch] = useState("");
+  const [selectedLabCatalogId, setSelectedLabCatalogId] = useState("");
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
+
+  const serviceCategories = useMemo(
+    () => Array.from(new Set(services.map((s) => s.category).filter((c): c is string => Boolean(c)))).sort(),
+    [services],
+  );
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      const [pkgs, svcs] = await Promise.all([
+      const [pkgs, svcs, labs] = await Promise.all([
         fetchBillingPackagesFromAPI(branchId),
         fetchServiceChargesFromAPI(branchId),
+        listActiveLabCatalogsAction(),
       ]);
       setPackages(pkgs);
       setServices(svcs);
+      if (labs.ok) setLabCatalogs(labs.data ?? []);
       setLoading(false);
+      setLabLoading(false);
     };
-    loadData();
+    void loadData();
   }, [branchId]);
 
   const [lines, setLines] = useState<SelectedLine[]>([]);
@@ -115,6 +137,8 @@ export function OpdBillingForm({
   const [isBalancePayment, setIsBalancePayment] = useState(false);
   const [billingMeta, setBillingMeta] = useState<Record<string, string | number | boolean>>({});
 
+  const { toast } = useToast();
+
   // Reset local billing state when the visit changes so stale service lines
   // from a prior patient/visit do not leak into the current bill.
   useEffect(() => {
@@ -131,7 +155,44 @@ export function OpdBillingForm({
     setExistingInvoice(null);
     setIsBalancePayment(false);
     setBillingMeta({});
+    setSelectedLabCatalogId("");
+    setLabSearch("");
+    setServiceCategory("");
   }, [visit?.id]);
+
+  // Auto-load pending lab orders for the current OPD visit into the billing cart.
+  useEffect(() => {
+    if (!visit?.id || visit.ipdAdmissionId || existingInvoice || lines.length > 0) return;
+    let cancelled = false;
+    void getPendingLabOrdersForVisitAction(visit.id).then((res) => {
+      if (cancelled) return;
+      if (res.ok && res.data?.length) {
+        const pendingLines: SelectedLine[] = [];
+        for (const order of res.data) {
+          for (const item of order.items) {
+            if (item.status !== "pending_billing") continue;
+            const liveService = item.reportCatalog?.service;
+            pendingLines.push({
+              key: `lab_${item.id}_${Date.now()}`,
+              packageId: item.serviceId ?? `lab-${item.reportCatalogId}`,
+              label: item.label,
+              amount: liveService?.rate ?? item.price ?? 0,
+              quantity: 1,
+              description: `Lab order #${order.id}`,
+              category: liveService?.category ?? "Laboratory",
+              gstRatePercent: liveService?.gstPercent ?? item.gstPercent,
+              labOrderItemId: item.id,
+              labOrderId: order.id,
+            });
+          }
+        }
+        if (pendingLines.length) setLines((prev) => [...prev, ...pendingLines]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visit?.id, visit?.ipdAdmissionId, existingInvoice]);
 
   const subtotal = lines.reduce((s, l) => s + l.amount * l.quantity, 0);
   const discountResolved = resolveBillingDiscount(subtotal, {
@@ -155,6 +216,8 @@ export function OpdBillingForm({
       label: l.label,
       quantity: l.quantity,
       taxableAmount: l.amount * l.quantity,
+      gstRatePercent: l.gstRatePercent,
+      category: l.category,
     })),
     discount: discountAmount,
   });
@@ -264,6 +327,57 @@ export function OpdBillingForm({
       cancelled = true;
     };
   }, [visit?.id, visit?.amountPaid, visit?.balanceDue, visit?.billing]);
+
+  const handleAddLabOrder = async () => {
+    if (!selectedLabCatalogId || !patient || !visit) return;
+    const catalog = labCatalogs.find((c) => c.id === selectedLabCatalogId);
+    if (!catalog) return;
+    setLabLoading(true);
+    try {
+      const res = await createLabOrderFromModuleAction({
+        patientId: patient.id,
+        visitId: visit.id,
+        source: visit.ipdAdmissionId ? "ipd" : "opd",
+        items: [
+          {
+            reportCatalogId: catalog.id,
+            label: catalog.name,
+            sampleType: catalog.sampleType,
+          },
+        ],
+      });
+      if (!res.ok) {
+        toast(res.error ?? "Failed to create lab order", "error");
+        return;
+      }
+      const order = res.data;
+      const item = order.items.find((i) => i.reportCatalogId === catalog.id);
+      if (!item) {
+        toast("Lab order item not found", "error");
+        return;
+      }
+      const service = item.reportCatalog?.service;
+      setLines((prev) => [
+        ...prev,
+        {
+          key: `lab_${item.id}_${Date.now()}`,
+          packageId: item.serviceId ?? service?.id ?? `lab-${item.reportCatalogId}`,
+          label: item.label,
+          amount: service?.rate != null ? Number(service.rate) : item.price ?? 0,
+          quantity: 1,
+          description: `Lab order #${order.id}`,
+          category: service?.category ?? "Laboratory",
+          gstRatePercent: service?.gstPercent ?? item.gstPercent,
+          labOrderItemId: item.id,
+          labOrderId: order.id,
+        },
+      ]);
+      setSelectedLabCatalogId("");
+      toast("Lab order added to bill", "success");
+    } finally {
+      setLabLoading(false);
+    }
+  };
 
   const handleSubmit = () => {
     if (!patient || !visit) return;
@@ -379,6 +493,17 @@ export function OpdBillingForm({
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-[12px]">Select service</Label>
+                  <select
+                    value={serviceCategory}
+                    disabled={Boolean(existingInvoice)}
+                    onChange={(e) => setServiceCategory(e.target.value)}
+                    className="h-9 w-full rounded-md border px-2 text-[13px]"
+                  >
+                    <option value="">All categories</option>
+                    {serviceCategories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                   <Select
                     value=""
                     disabled={Boolean(existingInvoice)}
@@ -402,26 +527,37 @@ export function OpdBillingForm({
                           className="h-8 text-[12px]"
                         />
                       </div>
-                      {services
-                        .filter((svc: BillingPackage) =>
-                          svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
-                          (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase()))
-                        )
-                        .map((svc: BillingPackage) => (
-                          <SelectItem
-                            key={svc.id}
-                            value={svc.id}
-                            className="py-3 [&>[data-slot=select-item-text]]:whitespace-normal"
-                          >
-                            <div className="flex flex-col gap-0.5">
-                              <p className="text-[13px] font-medium leading-tight">{svc.label}</p>
-                              {svc.description && (
-                                <p className="text-[11px] text-[var(--attio-text-tertiary)] leading-tight">{svc.description}</p>
-                              )}
-                              <p className="text-[12px] font-semibold text-[var(--attio-accent)]">{formatPackagePrice(svc)}</p>
-                            </div>
-                          </SelectItem>
-                        ))}
+                      {Object.entries(
+                        services
+                          .filter((svc: BillingPackage) =>
+                            (!serviceCategory || svc.category === serviceCategory) &&
+                            (svc.label.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+                              (svc.description && svc.description.toLowerCase().includes(serviceSearch.toLowerCase())))
+                          )
+                          .reduce((acc, svc) => {
+                            (acc[svc.category] ??= []).push(svc);
+                            return acc;
+                          }, {} as Record<string, BillingPackage[]>)
+                      ).map(([category, group]) => (
+                        <SelectGroup key={category}>
+                          <SelectLabel className="text-[11px] font-semibold uppercase text-[var(--attio-text-tertiary)]">{category}</SelectLabel>
+                          {group.map((svc) => (
+                            <SelectItem
+                              key={svc.id}
+                              value={svc.id}
+                              className="py-3 [&>[data-slot=select-item-text]]:whitespace-normal"
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <p className="text-[13px] font-medium leading-tight">{svc.label}</p>
+                                {svc.description && (
+                                  <p className="text-[11px] text-[var(--attio-text-tertiary)] leading-tight">{svc.description}</p>
+                                )}
+                                <p className="text-[12px] font-semibold text-[var(--attio-accent)]">{formatPackagePrice(svc)}</p>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -476,6 +612,71 @@ export function OpdBillingForm({
                 </div>
               </div>
 
+              <Panel title="Lab orders">
+                <div className="space-y-3">
+                  <p className="text-[12px] text-[var(--attio-text-secondary)]">
+                    Price is taken from the lab catalog&apos;s linked admin service charge.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-[1fr_100px]">
+                    <Select
+                      value={selectedLabCatalogId}
+                      disabled={Boolean(existingInvoice) || labLoading}
+                      onValueChange={(value) => {
+                        setSelectedLabCatalogId(value ?? "");
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-[13px]">
+                        <SelectValue placeholder={labLoading ? "Loading labs…" : "Select lab test…"} />
+                      </SelectTrigger>
+                      <SelectContent className="min-w-[320px]">
+                        <div className="sticky top-0 z-10 bg-popover px-2 py-2">
+                          <Input
+                            type="text"
+                            placeholder="Search lab tests..."
+                            value={labSearch}
+                            onChange={(e) => setLabSearch(e.target.value)}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            onKeyUp={(e) => e.stopPropagation()}
+                            className="h-8 text-[12px]"
+                          />
+                        </div>
+                        {labCatalogs
+                          .filter((c) =>
+                            c.name.toLowerCase().includes(labSearch.toLowerCase()) ||
+                            c.code.toLowerCase().includes(labSearch.toLowerCase())
+                          )
+                          .map((c) => (
+                            <SelectItem key={c.id} value={c.id} className="py-3">
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-[13px] font-medium leading-tight">{c.name}</p>
+                                  <p className="text-[12px] font-semibold text-[var(--attio-accent)]">
+                                    {c.service?.rate != null ? `₹${Number(c.service.rate).toLocaleString("en-IN")}` : "No price"}
+                                  </p>
+                                </div>
+                                <p className="text-[11px] text-[var(--attio-text-tertiary)]">{c.code} · {c.service?.label ?? "No service linked"}</p>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        {labCatalogs.filter((c) =>
+                          c.name.toLowerCase().includes(labSearch.toLowerCase()) ||
+                          c.code.toLowerCase().includes(labSearch.toLowerCase())
+                        ).length === 0 && (
+                          <p className="px-2 py-2 text-[12px] text-[var(--attio-text-tertiary)]">No lab tests match.</p>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <AttioButton
+                      variant="secondary"
+                      disabled={Boolean(existingInvoice) || !selectedLabCatalogId || labLoading}
+                      onClick={() => void handleAddLabOrder()}
+                    >
+                      {labLoading ? "Creating…" : "Add"}
+                    </AttioButton>
+                  </div>
+                </div>
+              </Panel>
+
               {lines.length > 0 && (
                 <Panel title="Selected packages">
                   <ul className="space-y-2">
@@ -486,7 +687,12 @@ export function OpdBillingForm({
                       >
                         <div>
                           <p className="text-[13px] font-medium">{line.label}</p>
-                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">{line.packageId}</p>
+                          <p className="text-[11px] text-[var(--attio-text-tertiary)]">
+                            {line.packageId}
+                            {(line.category === "Laboratory" || line.category === "lab") && (
+                              <span className="ml-1.5 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">Lab</span>
+                            )}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-[11px]">Qty</Label>

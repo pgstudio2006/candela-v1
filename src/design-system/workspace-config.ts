@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   Building2,
+  FlaskConical,
   HeartPulse,
   Pill,
   Stethoscope,
@@ -64,6 +65,20 @@ export const WORKSPACES: WorkspaceConfig[] = [
       { id: "queue", label: "Queue", href: "/app/frontdesk/queue" },
       { id: "billing", label: "Billing", href: "/app/frontdesk/billing" },
       { id: "junior-exam", label: "Junior exam", href: "/app/frontdesk/junior-exam" },
+    ],
+  },
+  {
+    role: "laboratory",
+    label: "Laboratory",
+    shortLabel: "Lab",
+    description: "Fields master, report catalog and lab orders",
+    homePath: "/app/laboratory",
+    icon: FlaskConical,
+    sidebarItems: [
+      { id: "dashboard", label: "Dashboard", href: "/app/laboratory" },
+      { id: "orders", label: "Orders", href: "/app/laboratory/orders" },
+      { id: "fields", label: "Fields master", href: "/app/laboratory/fields" },
+      { id: "reports", label: "Report catalog", href: "/app/laboratory/reports" },
     ],
   },
   {

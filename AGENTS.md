@@ -36,6 +36,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 **Prisma clients:** both `src/lib/prisma.ts` (`export const prisma`) and `src/lib/db.ts` (`export const db`) exist and are equivalent singletons. Code currently imports either; prefer `@/lib/prisma` for consistency.
 
+**Deployment infrastructure:** The project is connected to GitHub for source control and deployed via Coolify (self-hosted PaaS) on a Hostinger VPS. Pushes to the `main` branch trigger automatic rebuilds on Coolify. PostgreSQL runs on the VPS, managed by Coolify. Prisma schema changes require migrations to run during the deploy build step (`prisma migrate deploy` or `db push`). See `DEPLOY.md` for the detailed manual deployment guide (PM2/Nginx fallback).
+
 ---
 
 ## 2. Repository layout

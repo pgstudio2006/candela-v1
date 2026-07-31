@@ -9,7 +9,7 @@ import type {
 } from "@/design-system/doctor-data";
 import { DEMO_DOCTOR_ID } from "@/design-system/doctor-data";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
-import type { DocumentTemplate } from "@/design-system/document-templates";
+import { DEFAULT_DOCUMENT_TEMPLATES, type DocumentTemplate } from "@/design-system/document-templates";
 import { validateCompleteConsultation } from "@/lib/doctor-validation";
 import { visitVisibleInDoctorWorkspace } from "@/lib/doctor-queue";
 import { isInReceptionQueue, isRedFlagVisit, patientDisplayName } from "@/lib/frontdesk-workflow";
@@ -25,7 +25,7 @@ import {
   requireDoctorVisit,
 } from "@/server/doctor/guards";
 import { ensureVisitDoctorAssignment } from "@/server/doctor/visit-claim";
-import { ensureIpdWardBed, writeIpdRoundLog, getIpdRoundLog, findOnDutyNurseForWard } from "@/server/ipd";
+import { ensureIpdWardBed, writeIpdRoundLog, getIpdRoundLog, findOnDutyNurseForWard, createLabOrdersFromIpdRounds } from "@/server/ipd";
 import { ServerActionError } from "@/server/errors";
 import { notifyPrescriptionWhatsapp } from "@/server/notifications";
 import { sendWhatsAppAsync } from "@/server/whatsapp/service";
@@ -281,6 +281,14 @@ export async function getDoctorSnapshot(
       label: row.label,
       layout: row.layout as DocumentTemplate["layout"],
       description: row.description ?? "",
+      fileData: row.fileData,
+      mimeType: row.mimeType,
+      marginTop: row.marginTop,
+      marginBottom: row.marginBottom,
+      marginLeft: row.marginLeft,
+      marginRight: row.marginRight,
+      overlayFields: (Array.isArray(row.overlayFields) ? row.overlayFields : []) as unknown as NonNullable<DocumentTemplate["overlayFields"]>,
+      isDefault: row.isDefault,
       enabled: row.enabled,
       isSystem: row.isSystem,
     })),
@@ -959,6 +967,7 @@ export async function saveIpdRound(
     `A: ${note.assessment || ""}`,
     `P: ${note.plan || ""}`,
     note.medicines ? `Medicines:\n${note.medicines}` : "",
+    note.discontinuedMedicines ? `Discontinued medicines:\n${note.discontinuedMedicines}` : "",
     note.labReports ? `Lab reports:\n${note.labReports}` : "",
     note.radiologyReports ? `Radiology reports:\n${note.radiologyReports}` : "",
     note.progress ? `Progress: ${note.progress}` : "",
@@ -1005,6 +1014,12 @@ export async function saveIpdRound(
       },
     }),
   ]);
+
+  if (ipd.visitId) {
+    void createLabOrdersFromIpdRounds(ctx, prisma, ipd.id, ipd.visitId, ipd.patientId).catch((err) => {
+      console.error("[doctor saveIpdRound] Failed to create lab orders from round:", err);
+    });
+  }
 
   const medicineText = typeof note.medicines === "string" ? note.medicines.trim() : "";
   if (medicineText || (medicationLines && medicationLines.length > 0)) {
@@ -1126,13 +1141,63 @@ export async function listDoctorAuditLogs(
   }));
 }
 
+function serializeDocumentTemplate(row: any): DocumentTemplate {
+  return {
+    id: row.id,
+    kind: row.kind as DocumentTemplate["kind"],
+    label: row.label,
+    layout: row.layout as DocumentTemplate["layout"],
+    description: row.description ?? "",
+    fileData: row.fileData,
+    mimeType: row.mimeType,
+    marginTop: row.marginTop,
+    marginBottom: row.marginBottom,
+    marginLeft: row.marginLeft,
+    marginRight: row.marginRight,
+    overlayFields: Array.isArray(row.overlayFields) ? row.overlayFields : [],
+    isDefault: row.isDefault,
+    enabled: row.enabled,
+    isSystem: row.isSystem,
+  };
+}
+
+export async function listDocumentTemplates(ctx: ServerContext): Promise<DocumentTemplate[]> {
+  const rows = await prisma.documentTemplate.findMany({
+    where: { ...tenantScope(ctx), OR: [{ branchId: ctx.branchId }, { branchId: null }] },
+    orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
+  });
+  return rows.map(serializeDocumentTemplate);
+}
+
+export async function getDefaultDocumentTemplate(
+  ctx: ServerContext,
+  kind: DocumentTemplate["kind"],
+): Promise<DocumentTemplate | null> {
+  const rows = await prisma.documentTemplate.findMany({
+    where: {
+      ...tenantScope(ctx),
+      kind,
+      enabled: true,
+      OR: [{ branchId: ctx.branchId }, { branchId: null }],
+    },
+    orderBy: [{ isDefault: "desc" }, { branchId: "desc" }, { createdAt: "desc" }],
+    take: 1,
+  });
+  if (rows.length) return serializeDocumentTemplate(rows[0]);
+  // Only use 60984.pdf-based default templates for Pataudi branch.
+  // Other branches (e.g. Gurgaon) should use navayu-invoice-template.pdf fallbacks.
+  if (ctx.branchId === PATAUDI_BRANCH_ID) {
+    return DEFAULT_DOCUMENT_TEMPLATES.find((t) => t.kind === kind && t.enabled) ?? null;
+  }
+  return null;
+}
+
 export async function addDocumentTemplate(
   ctx: ServerContext,
   kind: DocumentTemplate["kind"],
   label: string,
   description: string,
 ) {
-  await resolveDoctorIdForContext(ctx);
   await prisma.documentTemplate.create({
     data: {
       id: `doc_custom_${Date.now()}`,
@@ -1149,29 +1214,40 @@ export async function addDocumentTemplate(
 }
 
 export async function saveDocumentTemplate(ctx: ServerContext, template: DocumentTemplate) {
-  await resolveDoctorIdForContext(ctx);
-  await prisma.documentTemplate.upsert({
-    where: { id: template.id },
-    update: {
-      kind: template.kind,
-      label: template.label,
-      layout: template.layout,
-      description: template.description,
-      enabled: template.enabled,
-      isSystem: template.isSystem,
-      tenantId: ctx.tenantId,
-      branchId: ctx.branchId,
-    },
-    create: {
-      id: template.id,
-      tenantId: ctx.tenantId,
-      branchId: ctx.branchId,
-      kind: template.kind,
-      label: template.label,
-      layout: template.layout,
-      description: template.description,
-      enabled: template.enabled,
-      isSystem: template.isSystem,
-    },
+  const scope = { tenantId: ctx.tenantId, branchId: ctx.branchId };
+  const data = {
+    kind: template.kind,
+    label: template.label.trim(),
+    layout: template.layout,
+    description: template.description,
+    fileData: template.fileData ?? null,
+    mimeType: template.mimeType ?? null,
+    marginTop: template.marginTop ?? 50,
+    marginBottom: template.marginBottom ?? 50,
+    marginLeft: template.marginLeft ?? 50,
+    marginRight: template.marginRight ?? 50,
+    overlayFields: template.overlayFields ?? [],
+    isDefault: template.isDefault ?? false,
+    enabled: template.enabled,
+    isSystem: template.isSystem,
+    ...scope,
+  };
+  const row = await prisma.$transaction(async (tx) => {
+    if (data.isDefault) {
+      await tx.documentTemplate.updateMany({ where: scope, data: { isDefault: false } });
+    }
+    return tx.documentTemplate.upsert({
+      where: { id: template.id },
+      update: data,
+      create: { id: template.id, ...data },
+    });
   });
+  return serializeDocumentTemplate(row);
+}
+
+export async function deleteDocumentTemplate(ctx: ServerContext, id: string) {
+  const result = await prisma.documentTemplate.deleteMany({
+    where: { id, tenantId: ctx.tenantId, branchId: ctx.branchId },
+  });
+  if (result.count === 0) throw new ServerActionError("NOT_FOUND", "Template not found.");
 }
