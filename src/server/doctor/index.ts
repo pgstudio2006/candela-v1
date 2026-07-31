@@ -1184,7 +1184,12 @@ export async function getDefaultDocumentTemplate(
     take: 1,
   });
   if (rows.length) return serializeDocumentTemplate(rows[0]);
-  return DEFAULT_DOCUMENT_TEMPLATES.find((t) => t.kind === kind && t.enabled) ?? null;
+  // Only use 60984.pdf-based default templates for Pataudi branch.
+  // Other branches (e.g. Gurgaon) should use navayu-invoice-template.pdf fallbacks.
+  if (ctx.branchId === PATAUDI_BRANCH_ID) {
+    return DEFAULT_DOCUMENT_TEMPLATES.find((t) => t.kind === kind && t.enabled) ?? null;
+  }
+  return null;
 }
 
 export async function addDocumentTemplate(

@@ -3,7 +3,7 @@ import type { OpdReceiptPayload } from "@/lib/opd-receipt";
 import { generateRoshniInvoicePdf } from "@/lib/roshni-invoice-pdf";
 import { loadTemplateFile } from "@/lib/pdf-template-loader";
 
-const TEMPLATE_URL = "/templates/60984.pdf";
+const TEMPLATE_URL = "/templates/navayu-invoice-template.pdf";
 const PATAUDI_BRANCH_ID = "branch_pataudi";
 
 const COLORS = {

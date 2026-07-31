@@ -198,10 +198,6 @@ export default function FrontdeskIpdPage() {
   const handleUpdate = async (formData: FormData) => {
     if (!selectedAdmission) return;
     const status = formData.get("status") as IpdAdmissionStatus;
-    if (status === "discharged") {
-      const confirmed = window.confirm("This will discharge the patient and free the bed. Continue?");
-      if (!confirmed) return;
-    }
     const expectedDischarge = formData.get("expectedDischarge") as string;
     const result = await updateIpdAdmissionAction(selectedAdmission.id, {
       status,
@@ -974,7 +970,7 @@ export default function FrontdeskIpdPage() {
                     >
                       <option value="admitted">Admitted</option>
                       <option value="discharge_planned">Discharge planned</option>
-                      <option value="discharged">Discharged</option>
+                      <option value="doctor_ready">Doctor ready</option>
                     </select>
                   </label>
                   <label className="block text-[12px]">

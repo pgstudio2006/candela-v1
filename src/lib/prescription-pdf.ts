@@ -16,7 +16,7 @@ import {
   formatDuration,
 } from "@/lib/prescription-pdf-shared";
 
-const TEMPLATE_URL = "/templates/60984.pdf";
+const TEMPLATE_URL = "/templates/navayu-invoice-template.pdf";
 
 const LAYOUT = {
   marginLeft: 42,

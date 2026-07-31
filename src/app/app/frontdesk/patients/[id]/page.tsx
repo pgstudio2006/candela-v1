@@ -8,6 +8,7 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PatientDocumentsPanel } from "@/components/patient-documents";
 import { PatientConsentsPanel } from "@/components/patient-consents";
+import { PatientLabReportsPanel } from "@/components/candela/patient-lab-reports-panel";
 import { PatientPrescriptionsPanel } from "@/components/frontdesk/patient-prescriptions-panel";
 import { formatStageStatus, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { problemLabelForValue } from "@/lib/department-problems";
@@ -301,6 +302,7 @@ export default function PatientRecordPage() {
           <TabsTrigger value="ipd">IPD</TabsTrigger>
           <TabsTrigger value="counsellor">Counsellor</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="labs">Lab Reports</TabsTrigger>
           <TabsTrigger value="consents">Consents</TabsTrigger>
         </TabsList>
 
@@ -761,6 +763,10 @@ export default function PatientRecordPage() {
 
         <TabsContent value="documents" className="mt-4">
           <PatientDocumentsPanel patientId={patient.id} />
+        </TabsContent>
+
+        <TabsContent value="labs" className="mt-4">
+          <PatientLabReportsPanel patientId={patient.id} />
         </TabsContent>
 
         <TabsContent value="consents" className="mt-4">

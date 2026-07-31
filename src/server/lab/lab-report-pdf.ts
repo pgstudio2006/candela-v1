@@ -402,8 +402,8 @@ export async function buildLabReportPdfBytes(
   let detectedHeaderHeight: number | undefined;
   let hasOverlayPatientInfo = false;
 
-  // Default template path: use /templates/60984.pdf if no template provided
-  const effectiveFileData = template?.fileData ?? "/templates/60984.pdf";
+  // Default template path: use navayu-invoice-template.pdf if no template provided
+  const effectiveFileData = template?.fileData ?? "/templates/navayu-invoice-template.pdf";
   const effectiveMimeType = template?.mimeType ?? "application/pdf";
 
   const bytes = await loadTemplateFile(effectiveFileData).catch(() => undefined);

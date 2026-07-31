@@ -109,6 +109,13 @@ export async function listLabOrdersAction(patientId?: string): Promise<ActionRes
   });
 }
 
+export async function listPatientLabOrdersAction(patientId: string): Promise<ActionResult<LabOrder[]>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("laboratory", "doctor", "frontdesk", "admin");
+    return listLabOrders(ctx, patientId);
+  });
+}
+
 export async function getLabOrderAction(id: string): Promise<ActionResult<LabOrder | null>> {
   return runAction(async () => {
     const ctx = await requireModule("laboratory");
