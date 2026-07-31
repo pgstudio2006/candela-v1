@@ -25,7 +25,7 @@ import { validateFormValues } from "@/lib/schema-registry";
 import { useToast } from "@/components/ui/toast-provider";
 import { getNurseScoresAction, getPatientConsultationsAction } from "@/app/actions/clinical-actions";
 import { getIpdWardsAction } from "@/app/actions/ipd-actions";
-import { listLabOrdersAction } from "@/app/actions/lab-actions";
+import { listPatientLabOrdersAction } from "@/app/actions/lab-actions";
 import { LabOrderButton } from "@/components/lab/lab-order-modal";
 import { usePublishedFormSchema } from "@/hooks/use-published-form-schema";
 import {
@@ -226,7 +226,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     setHistoryLoading(true);
     Promise.all([
       getPatientConsultationsAction(patient.id),
-      listLabOrdersAction(patient.id),
+      listPatientLabOrdersAction(patient.id),
     ]).then(([consultRes, labRes]) => {
       if (consultRes.ok) setHistoryConsultations(consultRes.data.filter((c) => c.visitId !== visitId));
       if (labRes.ok) setHistoryLabOrders(labRes.data.filter((o) => o.visitId !== visitId));

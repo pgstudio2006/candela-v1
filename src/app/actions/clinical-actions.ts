@@ -48,7 +48,7 @@ export async function getClinicalSnapshotAction(): Promise<ActionResult<Clinical
 
 export async function getPatientConsultationsAction(patientId: string): Promise<ActionResult<ConsultationRecord[]>> {
   return runAction(async () => {
-    const ctx = await requireModule("frontdesk");
+    const ctx = await requireAnyModule("frontdesk", "doctor", "admin");
     const visits = await prisma.opdVisit.findMany({
       where: { patientId, ...branchScope(ctx) },
       select: { id: true },
