@@ -76,7 +76,6 @@ export default function AdminIpdRoundsPage() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return toast("Round name is required", "error");
     setBusy(true);
     const res = await saveIpdRoundConfigAction({
       id: editing?.id,

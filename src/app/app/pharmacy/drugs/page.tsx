@@ -65,7 +65,6 @@ export default function PharmacyDrugsPage() {
   };
 
   const save = async () => {
-    if (!form.brandName || !form.genericName) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -166,16 +165,16 @@ export default function PharmacyDrugsPage() {
           onClose={() => { setOpen(false); reset(); }}
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <FormRow label="Brand name" required>
+            <FormRow label="Brand name">
               <PharmacyInput value={form.brandName} onChange={(e) => setForm({ ...form, brandName: e.target.value })} placeholder="Brand name" />
             </FormRow>
-            <FormRow label="Generic name" required>
+            <FormRow label="Generic name">
               <PharmacyInput value={form.genericName} onChange={(e) => setForm({ ...form, genericName: e.target.value })} placeholder="Generic name" />
             </FormRow>
-            <FormRow label="Strength / power" required>
+            <FormRow label="Strength / power">
               <PharmacyInput value={form.strength} onChange={(e) => setForm({ ...form, strength: e.target.value })} placeholder="e.g. 75mg" />
             </FormRow>
-            <FormRow label="Form" required>
+            <FormRow label="Form">
               <PharmacySelect value={form.form} onChange={(e) => setForm({ ...form, form: e.target.value })}>
                 <option>Tablet</option>
                 <option>Capsule</option>
@@ -189,7 +188,7 @@ export default function PharmacyDrugsPage() {
                 <option>Patch</option>
               </PharmacySelect>
             </FormRow>
-            <FormRow label="Route" required>
+            <FormRow label="Route">
               <PharmacySelect value={form.route} onChange={(e) => setForm({ ...form, route: e.target.value })}>
                 <option>Oral</option>
                 <option>IV</option>
@@ -200,21 +199,21 @@ export default function PharmacyDrugsPage() {
                 <option>Sublingual</option>
               </PharmacySelect>
             </FormRow>
-            <FormRow label="Therapeutic class" required>
+            <FormRow label="Therapeutic class">
               <PharmacyInput value={form.therapeuticClass} onChange={(e) => setForm({ ...form, therapeuticClass: e.target.value })} placeholder="e.g. Analgesic" />
             </FormRow>
-            <FormRow label="Schedule" required>
+            <FormRow label="Schedule">
               <PharmacySelect value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value as DrugSchedule })}>
                 {SCHEDULES.map((s) => <option key={s} value={s}>{s}</option>)}
               </PharmacySelect>
             </FormRow>
-            <FormRow label="HSN" required>
+            <FormRow label="HSN">
               <PharmacyInput value={form.hsn} onChange={(e) => setForm({ ...form, hsn: e.target.value })} placeholder="3004" />
             </FormRow>
-            <FormRow label="GST %" required>
+            <FormRow label="GST %">
               <PharmacyInput type="number" value={form.gstPercent} onChange={(e) => setForm({ ...form, gstPercent: Number(e.target.value) })} placeholder="12" />
             </FormRow>
-            <FormRow label="Unit" required>
+            <FormRow label="Unit">
               <PharmacySelect value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
                 <option value="strip">strip</option>
                 <option value="bottle">bottle</option>
@@ -226,13 +225,13 @@ export default function PharmacyDrugsPage() {
                 <option value="gm">gm</option>
               </PharmacySelect>
             </FormRow>
-            <FormRow label="Default MRP" required>
+            <FormRow label="Default MRP">
               <PharmacyInput type="number" value={form.defaultMrp} onChange={(e) => setForm({ ...form, defaultMrp: Number(e.target.value) })} placeholder="100" />
             </FormRow>
-            <FormRow label="Purchase price" required>
+            <FormRow label="Purchase price">
               <PharmacyInput type="number" value={form.purchasePrice ?? 0} onChange={(e) => setForm({ ...form, purchasePrice: Number(e.target.value) })} placeholder="80" />
             </FormRow>
-            <FormRow label="Reorder level" required>
+            <FormRow label="Reorder level">
               <PharmacyInput type="number" value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: Number(e.target.value) })} placeholder="20" />
             </FormRow>
             <FormRow label="Requires Rx">
