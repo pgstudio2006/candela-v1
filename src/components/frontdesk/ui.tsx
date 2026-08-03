@@ -176,13 +176,14 @@ export function AttioButton({
   children,
   variant = "primary",
   className,
+  type = "button",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost";
-}) {
+  }) {
   return (
     <button
-      type="button"
+      type={type}
       className={cn(
         "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[12px] font-medium transition-colors",
         variant === "primary" && "bg-[var(--attio-text)] text-white hover:bg-[#333]",

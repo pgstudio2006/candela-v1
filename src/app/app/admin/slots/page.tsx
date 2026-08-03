@@ -157,6 +157,10 @@ export default function SlotManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.date || !formData.startTime || !formData.endTime) {
+      alert("Please fill in date, start time, and end time");
+      return;
+    }
     try {
       const slotPayload = {
         ...formData,
@@ -173,6 +177,9 @@ export default function SlotManagementPage() {
         if (json.ok) {
           await loadSlots();
           setEditing(null);
+        } else {
+          alert(json.error || "Failed to update slot");
+          return;
         }
       } else {
         const res = await fetch("/api/admin/slots", {
@@ -184,6 +191,9 @@ export default function SlotManagementPage() {
         const json = await res.json();
         if (json.ok) {
           await loadSlots();
+        } else {
+          alert(json.error || "Failed to create slot");
+          return;
         }
       }
       setShowForm(false);
@@ -202,6 +212,7 @@ export default function SlotManagementPage() {
       });
     } catch (error) {
       console.error("Failed to save slot:", error);
+      alert("Failed to save slot. Please check your connection and try again.");
     }
   };
 
