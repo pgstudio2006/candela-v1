@@ -32,135 +32,137 @@ enum SessionStatus {
 }
 
 model Tenant {
-  id           String        @id
-  slug         String        @unique
-  name         String
-  legalName    String?
-  timezone     String        @default("Asia/Kolkata")
-  locale       String        @default("en-IN")
-  active       Boolean       @default(true)
-  settings     Json?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  branches     Branch[]
-  users        User[]
-  roles        Role[]
-  sessions     Session[]
-  patients     Patient[]
-  appointments Appointment[]
+  id                String             @id
+  slug              String             @unique
+  name              String
+  legalName         String?
+  timezone          String             @default("Asia/Kolkata")
+  locale            String             @default("en-IN")
+  active            Boolean            @default(true)
+  settings          Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  branches          Branch[]
+  users             User[]
+  roles             Role[]
+  sessions          Session[]
+  patients          Patient[]
+  appointments      Appointment[]
   documentTemplates DocumentTemplate[]
 }
 
 model Branch {
-  id             String            @id
-  tenantId       String
-  code           String
-  name           String
-  city           String?
-  state          String?
-  country        String?           @default("India")
-  phone          String?
-  email          String?
-  active         Boolean           @default(true)
-  meta           Json?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users          User[]
-  sessions       Session[]
-  patients       Patient[]
-  appointments   Appointment[]
-  opdVisits      OpdVisit[]
-  queues         Queue[]
-  visits         Visit[]
-  vitals         Vitals[]
-  nursingTasks   NursingTask[]
-  consents       Consent[]
-  prescriptions  Prescription[]
-  consultNotes   ConsultNote[]
-  drugs          Drug[]
-  inventory      Inventory[]
-  fulfillments   PrescriptionFulfillment[]
-  purchaseOrders PurchaseOrder[]
-  stockMoves     StockMovement[]
-  counsellorLogs CounsellorSession[]
-  approvals      Approval[]
-  billingHandoffs BillingHandoff[]
-  leads          Lead[]
-  agents         Agent[]
-  pipelines      Pipeline[]
-  stages         Stage[]
-  activities     Activity[]
-  rules          Rule[]
-  followUps      FollowUp[]
-  integrations   Integration[]
-  userRoles      UserRole[]
-  employees      Employee[]
-  departments    Department[]
-  suppliers      Supplier[]
-  packages       Package[]
-  shifts         Shift[]
-  leaveRequests  LeaveRequest[]
-  attendance     Attendance[]
-  payrollLines   PayrollLine[]
-  invoices       Invoice[]
-  payments       Payment[]
-  auditLogs      AuditLog[]
-  formSchemas    FormSchema[]
-  documentTemplates DocumentTemplate[]
-  staffAccesses  StaffAccess[]
-  geoPins        GeoPin[]
-  misAggregates  MisAggregate[]
-  serviceCharges ServiceCharge[]
+  id                    String                    @id
+  tenantId              String
+  code                  String
+  name                  String
+  city                  String?
+  state                 String?
+  country               String?                   @default("India")
+  phone                 String?
+  email                 String?
+  active                Boolean                   @default(true)
+  meta                  Json?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  tenant                Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users                 User[]
+  sessions              Session[]
+  patients              Patient[]
+  appointments          Appointment[]
+  opdVisits             OpdVisit[]
+  queues                Queue[]
+  visits                Visit[]
+  vitals                Vitals[]
+  nursingTasks          NursingTask[]
+  consents              Consent[]
+  prescriptions         Prescription[]
+  consultNotes          ConsultNote[]
+  drugs                 Drug[]
+  inventory             Inventory[]
+  fulfillments          PrescriptionFulfillment[]
+  purchaseOrders        PurchaseOrder[]
+  stockMoves            StockMovement[]
+  counsellorLogs        CounsellorSession[]
+  approvals             Approval[]
+  billingHandoffs       BillingHandoff[]
+  leads                 Lead[]
+  agents                Agent[]
+  pipelines             Pipeline[]
+  stages                Stage[]
+  activities            Activity[]
+  rules                 Rule[]
+  followUps             FollowUp[]
+  integrations          Integration[]
+  userRoles             UserRole[]
+  employees             Employee[]
+  departments           Department[]
+  suppliers             Supplier[]
+  packages              Package[]
+  shifts                Shift[]
+  leaveRequests         LeaveRequest[]
+  attendance            Attendance[]
+  payrollLines          PayrollLine[]
+  invoices              Invoice[]
+  payments              Payment[]
+  auditLogs             AuditLog[]
+  formSchemas           FormSchema[]
+  documentTemplates     DocumentTemplate[]
+  staffAccesses         StaffAccess[]
+  geoPins               GeoPin[]
+  misAggregates         MisAggregate[]
+  serviceCharges        ServiceCharge[]
   counsellorCommissions CounsellorCommission[]
-  adminDepartments   AdminDepartment[]
-  adminDiseaseNodes  AdminDiseaseNode[]
-  adminDiseaseClusters AdminDiseaseCluster[]
-  adminGeoPins       AdminGeoPin[]
-  adminRevenuePolicies AdminRevenuePolicy[]
-  adminMrdRequests   AdminMrdRequest[]
-  adminMisReports    AdminMisReport[]
-  adminAuditLogs     AdminAuditLog[]
-  doctorTemplates    DoctorTemplate[]
-  formSubmissions    FormSubmission[]
-  ipdWards           IpdWard[]
-  ipdBeds            IpdBed[]
-  ipdAdmissions      IpdAdmission[]
-  ipdRoundConfigs    IpdRoundConfig[]
-  ipdRoundLogs       IpdRoundLog[]
-  referralDoctors    ReferralDoctor[]
-  slots             Slot[]
-  whatsappTemplates WhatsAppTemplate[]
-  whatsappLogs      WhatsAppLog[]
-  labReportTemplates LabReportTemplate[]
-  emergencyReferrals EmergencyReferral[]
-  labFieldMasters    LabFieldMaster[]
-  labReportCatalogs  LabReportCatalog[]
-  labOrders          LabOrder[]
-  ipdAdvancePayments IpdAdvancePayment[]
-  ipdRefundVouchers  IpdRefundVoucher[]
+  adminDepartments      AdminDepartment[]
+  adminDiseaseNodes     AdminDiseaseNode[]
+  adminDiseaseClusters  AdminDiseaseCluster[]
+  adminGeoPins          AdminGeoPin[]
+  adminRevenuePolicies  AdminRevenuePolicy[]
+  adminMrdRequests      AdminMrdRequest[]
+  adminMisReports       AdminMisReport[]
+  adminAuditLogs        AdminAuditLog[]
+  doctorTemplates       DoctorTemplate[]
+  formSubmissions       FormSubmission[]
+  ipdWards              IpdWard[]
+  ipdBeds               IpdBed[]
+  ipdAdmissions         IpdAdmission[]
+  ipdRoundConfigs       IpdRoundConfig[]
+  ipdRoundLogs          IpdRoundLog[]
+  referralDoctors       ReferralDoctor[]
+  slots                 Slot[]
+  whatsappTemplates     WhatsAppTemplate[]
+  whatsappLogs          WhatsAppLog[]
+  whatsappConnections   WhatsappConnection[]
+  conversations         Conversation[]
+  labReportTemplates    LabReportTemplate[]
+  emergencyReferrals    EmergencyReferral[]
+  labFieldMasters       LabFieldMaster[]
+  labReportCatalogs     LabReportCatalog[]
+  labOrders             LabOrder[]
+  ipdAdvancePayments    IpdAdvancePayment[]
+  ipdRefundVouchers     IpdRefundVoucher[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
 }
 
 model User {
-  id            String      @id
+  id            String        @id
   tenantId      String
   branchId      String?
   email         String
   name          String
   passwordHash  String
-  status        UserStatus  @default(ACTIVE)
+  status        UserStatus    @default(ACTIVE)
   phone         String?
   avatarUrl     String?
   lastLoginAt   DateTime?
   activeRoleId  String?
-  activeRole    Role?       @relation("ActiveRole", fields: [activeRoleId], references: [id], onDelete: SetNull)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch        Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  activeRole    Role?         @relation("ActiveRole", fields: [activeRoleId], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch        Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
   sessions      Session[]
   userRoles     UserRole[]
   staffAccesses StaffAccess[]
@@ -171,19 +173,19 @@ model User {
 }
 
 model Role {
-  id          String       @id
+  id          String           @id
   tenantId    String
   name        String
   key         String
   module      CandelaModule
   description String?
-  isSystem    Boolean      @default(false)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   users       UserRole[]
   permissions RolePermission[]
-  activeUsers User[]       @relation("ActiveRole")
+  activeUsers User[]           @relation("ActiveRole")
 
   @@unique([tenantId, key])
   @@index([tenantId, module])
@@ -226,75 +228,76 @@ model UserRole {
 }
 
 model Session {
-  id              String        @id @default(cuid())
-  userId          String
-  tenantId        String
-  branchId        String?
-  sessionToken    String        @unique
-  ipAddress       String?
-  userAgent       String?
-  status          SessionStatus @default(ACTIVE)
-  expiresAt       DateTime
-  revokedAt       DateTime?
-  lastActivityAt  DateTime      @default(now())
-  createdAt       DateTime      @default(now())
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch          Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  id             String        @id @default(cuid())
+  userId         String
+  tenantId       String
+  branchId       String?
+  sessionToken   String        @unique
+  ipAddress      String?
+  userAgent      String?
+  status         SessionStatus @default(ACTIVE)
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  lastActivityAt DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, branchId])
   @@index([userId, status])
 }
 
 model Patient {
-  id              String      @id
-  tenantId        String?
-  branchId        String?
-  uhid            String
-  name            String?
-  fullName        String      @default("")
-  phone           String
-  email           String?
-  age             Int?
-  dateOfBirth     DateTime?
-  gender          String?
-  bloodGroup      String?
-  department      String?
-  departmentId    String?
-  departmentLabel String?
-  tags            String[]
-  balance         Decimal     @default(0)
-  lastVisit       String?
-  lastVisitAt     DateTime?
-  referrer        String?
-  address         Json?
-  meta            Json?
-  status          String      @default("active")
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  tenant          Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch          Branch?     @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  appointments    Appointment[]
-  opdVisits       OpdVisit[]
-  visits          Visit[]
-  ipdAdmissions   IpdAdmission[]
-  ipdAdvancePayments IpdAdvancePayment[]
-  ipdRefundVouchers  IpdRefundVoucher[]
-  queues          Queue[]
-  consents        Consent[]
-  counsellorLogs  CounsellorSession[]
-  leads           Lead[]
-  invoices        Invoice[]
-  billingHandoffs BillingHandoff[]
-  documents       PatientDocument[]
-  emergencyReferrals EmergencyReferral[]
-  emergencyRecords EmergencyPatient[]
-  labOrders        LabOrder[]
-  assignedCounsellorId String?
+  id                     String              @id
+  tenantId               String?
+  branchId               String?
+  uhid                   String
+  name                   String?
+  fullName               String              @default("")
+  phone                  String
+  email                  String?
+  age                    Int?
+  dateOfBirth            DateTime?
+  gender                 String?
+  bloodGroup             String?
+  department             String?
+  departmentId           String?
+  departmentLabel        String?
+  tags                   String[]
+  balance                Decimal             @default(0)
+  lastVisit              String?
+  lastVisitAt            DateTime?
+  referrer               String?
+  address                Json?
+  meta                   Json?
+  status                 String              @default("active")
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  tenant                 Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch                 Branch?             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  conversations          Conversation[]
+  appointments           Appointment[]
+  opdVisits              OpdVisit[]
+  visits                 Visit[]
+  ipdAdmissions          IpdAdmission[]
+  ipdAdvancePayments     IpdAdvancePayment[]
+  ipdRefundVouchers      IpdRefundVoucher[]
+  queues                 Queue[]
+  consents               Consent[]
+  counsellorLogs         CounsellorSession[]
+  leads                  Lead[]
+  invoices               Invoice[]
+  billingHandoffs        BillingHandoff[]
+  documents              PatientDocument[]
+  emergencyReferrals     EmergencyReferral[]
+  emergencyRecords       EmergencyPatient[]
+  labOrders              LabOrder[]
+  assignedCounsellorId   String?
   assignedCounsellorName String?
-  leadSourceId    String?
-  referralDoctorId String?
-  referralDoctorName String?
+  leadSourceId           String?
+  referralDoctorId       String?
+  referralDoctorName     String?
 
   @@unique([tenantId, uhid])
   @@index([branchId, fullName])
@@ -330,68 +333,68 @@ model Appointment {
 }
 
 model OpdVisit {
-  id              String    @id
-  tenantId        String?
-  branchId        String?
-  patientId       String
-  visitId         String?
-  token           Int?
-  departmentId    String?
-  doctorId        String?
-  doctorName      String?
-  billing         String?
-  exam            String?
-  appointment     Boolean   @default(false)
-  appointmentTime String?
-  waitMin         Int       @default(0)
-  checkInAt       String?
-  billAmount      Float?
-  amountPaid      Float?
-  balanceDue      Float?
-  treatmentPath   String?
-  ipdAdmissionId  String?
+  id                  String   @id
+  tenantId            String?
+  branchId            String?
+  patientId           String
+  visitId             String?
+  token               Int?
+  departmentId        String?
+  doctorId            String?
+  doctorName          String?
+  billing             String?
+  exam                String?
+  appointment         Boolean  @default(false)
+  appointmentTime     String?
+  waitMin             Int      @default(0)
+  checkInAt           String?
+  billAmount          Float?
+  amountPaid          Float?
+  balanceDue          Float?
+  treatmentPath       String?
+  ipdAdmissionId      String?
   counselPackageLabel String?
-  deferredReason  String?
-  routingNote     String?
-  complaint       String?
-  stage           String
-  juniorExam      Json?
-  diagnosis       Json?
-  treatment       Json?
-  notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  branch          Branch?   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  deferredReason      String?
+  routingNote         String?
+  complaint           String?
+  stage               String
+  juniorExam          Json?
+  diagnosis           Json?
+  treatment           Json?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  patient             Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  branch              Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, branchId, stage])
 }
 
 model Queue {
-  id              String    @id
-  tenantId        String
-  branchId        String
-  visitId         String?
-  patientId       String
-  token           Int?
-  stage           String
-  priority        String?
-  waitMin         Int       @default(0)
-  billingStatus   String?
-  examStatus      String?
-  doctorName      String?
-  queueMeta       Json?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  visit           Visit?    @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  branch          Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id            String   @id
+  tenantId      String
+  branchId      String
+  visitId       String?
+  patientId     String
+  token         Int?
+  stage         String
+  priority      String?
+  waitMin       Int      @default(0)
+  billingStatus String?
+  examStatus    String?
+  doctorName    String?
+  queueMeta     Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visit         Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, branchId, stage])
 }
 
 model Visit {
-  id                 String       @id
+  id                 String                    @id
   tenantId           String
   branchId           String
   patientId          String
@@ -413,11 +416,11 @@ model Visit {
   routingNote        String?
   packageLabel       String?
   clinicalSummary    Json?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
-  patient            Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  appointment        Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  branch             Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  patient            Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment        Appointment?              @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  branch             Branch                    @relation(fields: [branchId], references: [id], onDelete: Cascade)
   queues             Queue[]
   vitals             Vitals[]
   nursingTasks       NursingTask[]
@@ -494,7 +497,7 @@ model Consent {
   captureMode     String?
   signerRole      String?
   signerName      String?
-  witnessName      String?
+  witnessName     String?
   language        String?
   signedAt        DateTime?
   verifiedAt      DateTime?
@@ -511,83 +514,83 @@ model Consent {
 }
 
 model Prescription {
-  id                String                    @id
-  visitId           String
-  branchId          String
-  patientId         String?
-  doctorId          String?
-  doctorName        String?
-  source            String?
-  priority          String?
-  status            String
-  assigneeId        String?
-  rejectReason      String?
-  counselingNotes   String?
-  witnessName       String?
-  prescriptionDate  DateTime                  @default(now())
-  verifiedAt        DateTime?
-  dispensedAt       DateTime?
-  lines             Json
-  meta              Json?
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
-  visit             Visit                     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  branch            Branch                    @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  fulfillments      PrescriptionFulfillment[]
+  id               String                    @id
+  visitId          String
+  branchId         String
+  patientId        String?
+  doctorId         String?
+  doctorName       String?
+  source           String?
+  priority         String?
+  status           String
+  assigneeId       String?
+  rejectReason     String?
+  counselingNotes  String?
+  witnessName      String?
+  prescriptionDate DateTime                  @default(now())
+  verifiedAt       DateTime?
+  dispensedAt      DateTime?
+  lines            Json
+  meta             Json?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  visit            Visit                     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  branch           Branch                    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  fulfillments     PrescriptionFulfillment[]
 
   @@index([branchId, status])
 }
 
 model ConsultNote {
-  id                 String   @id @default(cuid())
-  visitId            String
-  branchId           String
-  doctorId           String?
-  doctorName         String?
-  status             String
-  treatmentMode      String?
-  recommendCounsellor Boolean @default(false)
-  skipCounsellor     Boolean  @default(false)
-  packageId          String?
-  counsellorNotes    String?
-  doctorAdvice       String?
-  notes              String?
-  examination        Json?
-  diagnosis          Json?
-  treatment          Json?
-  scribeTranscript   String?
-  templateId         String?
-  handoff            Json?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  visit              Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  branch             Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(cuid())
+  visitId             String
+  branchId            String
+  doctorId            String?
+  doctorName          String?
+  status              String
+  treatmentMode       String?
+  recommendCounsellor Boolean  @default(false)
+  skipCounsellor      Boolean  @default(false)
+  packageId           String?
+  counsellorNotes     String?
+  doctorAdvice        String?
+  notes               String?
+  examination         Json?
+  diagnosis           Json?
+  treatment           Json?
+  scribeTranscript    String?
+  templateId          String?
+  handoff             Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  visit               Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  branch              Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId, status])
 }
 
 model DocumentTemplate {
-  id          String   @id
-  tenantId    String?
-  branchId    String?
-  kind        String
-  label       String
-  layout      String
-  description String?
-  fileData    String?  @db.Text
-  mimeType    String?
-  marginTop   Int?
-  marginBottom Int?
-  marginLeft  Int?
-  marginRight Int?
+  id            String   @id
+  tenantId      String?
+  branchId      String?
+  kind          String
+  label         String
+  layout        String
+  description   String?
+  fileData      String?  @db.Text
+  mimeType      String?
+  marginTop     Int?
+  marginBottom  Int?
+  marginLeft    Int?
+  marginRight   Int?
   overlayFields Json?
-  isDefault   Boolean  @default(false)
-  enabled     Boolean  @default(true)
-  isSystem    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  isDefault     Boolean  @default(false)
+  enabled       Boolean  @default(true)
+  isSystem      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch        Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, kind])
 }
@@ -622,50 +625,50 @@ model Drug {
 }
 
 model Inventory {
-  id            String    @id
-  tenantId      String
-  branchId      String
-  drugId        String
-  supplierId    String?
-  batchNo       String
-  expiryDate    DateTime?
-  qtyOnHand     Int
-  reservedQty   Int       @default(0)
-  purchaseRate  Decimal?
-  mrp           Decimal?
-  rack          String?
-  quarantined   Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  branch        Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  drug          Drug      @relation(fields: [drugId], references: [id], onDelete: Cascade)
-  supplier      Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  stockMoves    StockMovement[]
+  id           String          @id
+  tenantId     String
+  branchId     String
+  drugId       String
+  supplierId   String?
+  batchNo      String
+  expiryDate   DateTime?
+  qtyOnHand    Int
+  reservedQty  Int             @default(0)
+  purchaseRate Decimal?
+  mrp          Decimal?
+  rack         String?
+  quarantined  Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  branch       Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  drug         Drug            @relation(fields: [drugId], references: [id], onDelete: Cascade)
+  supplier     Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  stockMoves   StockMovement[]
 
-  @@index([branchId, drugId])
   @@unique([branchId, batchNo])
+  @@index([branchId, drugId])
 }
 
 model PrescriptionFulfillment {
-  id              String       @id
-  branchId        String
-  visitId         String?
-  prescriptionId  String
-  status          String
-  lineItems       Json
-  subtotal        Decimal?
-  gstTotal        Decimal?
-  discount        Decimal?
-  total           Decimal?
-  paymentMode     String?
-  paid            Boolean      @default(false)
-  fulfilledBy     String?
-  fulfilledAt     DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  branch          Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  visit           Visit?       @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  prescription    Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  id             String       @id
+  branchId       String
+  visitId        String?
+  prescriptionId String
+  status         String
+  lineItems      Json
+  subtotal       Decimal?
+  gstTotal       Decimal?
+  discount       Decimal?
+  total          Decimal?
+  paymentMode    String?
+  paid           Boolean      @default(false)
+  fulfilledBy    String?
+  fulfilledAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  visit          Visit?       @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
 
   @@index([branchId, status])
 }
@@ -694,18 +697,18 @@ model Supplier {
 }
 
 model PurchaseOrder {
-  id           String    @id
-  tenantId     String
-  branchId     String
-  supplierId   String
-  status       String
-  expectedAt   DateTime?
-  lines        Json
-  notes        String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  supplier     Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  branch       Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id         String    @id
+  tenantId   String
+  branchId   String
+  supplierId String
+  status     String
+  expectedAt DateTime?
+  lines      Json
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  supplier   Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  branch     Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId, status])
 }
@@ -731,89 +734,89 @@ model StockMovement {
 }
 
 model ServiceCharge {
-  id          String   @id @default(cuid())
-  tenantId    String
-  branchId    String
-  label       String
-  category    String
-  description String?
-  rate        Decimal
-  unit        String?
-  gstPercent  Decimal  @default(18)
-  hsnCode     String?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  packageServices PackageService[]
+  id                String             @id @default(cuid())
+  tenantId          String
+  branchId          String
+  label             String
+  category          String
+  description       String?
+  rate              Decimal
+  unit              String?
+  gstPercent        Decimal            @default(18)
+  hsnCode           String?
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  branch            Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  packageServices   PackageService[]
   labReportCatalogs LabReportCatalog[]
-  labOrderItems LabOrderItem[]
+  labOrderItems     LabOrderItem[]
 
   @@index([tenantId, branchId, category])
   @@index([tenantId, branchId, active])
 }
 
 model PackageService {
-  id         String   @id @default(cuid())
-  packageId  String
-  serviceId  String
-  quantity  Int      @default(1)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  package    Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  service    ServiceCharge @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  id        String        @id @default(cuid())
+  packageId String
+  serviceId String
+  quantity  Int           @default(1)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  package   Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  service   ServiceCharge @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@unique([packageId, serviceId])
 }
 
 model Package {
-  id           String             @id
-  tenantId     String
-  branchId     String
-  label        String
-  amount       Decimal
-  sessions     Int?
-  dept         String?
-  description  String?
-  addons       Json?
-  active       Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  branch       Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  services     PackageService[]
+  id                 String              @id
+  tenantId           String
+  branchId           String
+  label              String
+  amount             Decimal
+  sessions           Int?
+  dept               String?
+  description        String?
+  addons             Json?
+  active             Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  branch             Branch              @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  services           PackageService[]
   counsellorSessions CounsellorSession[]
-  approvals    Approval[]
-  billingHandoffs BillingHandoff[]
+  approvals          Approval[]
+  billingHandoffs    BillingHandoff[]
 
   @@index([tenantId, branchId, active])
 }
 
 model CounsellorSession {
-  id               String    @id
-  tenantId         String
-  branchId         String
-  visitId          String
-  patientId        String
-  packageId        String?
-  counsellorId     String
-  counsellorName   String
-  startedAt        DateTime
-  completedAt      DateTime?
-  outcome          String?
-  quote            Json?
-  internalNotes    String?
+  id                String    @id
+  tenantId          String
+  branchId          String
+  visitId           String
+  patientId         String
+  packageId         String?
+  counsellorId      String
+  counsellorName    String
+  startedAt         DateTime
+  completedAt       DateTime?
+  outcome           String?
+  quote             Json?
+  internalNotes     String?
   patientObjections String[]
-  callbackAt       DateTime?
-  voiceNote        String?
-  aiScript         String?
-  sentToBilling    Boolean   @default(false)
-  billingSentAt    DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  branch           Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  visit            Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  patient          Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  package          Package?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  callbackAt        DateTime?
+  voiceNote         String?
+  aiScript          String?
+  sentToBilling     Boolean   @default(false)
+  billingSentAt     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  branch            Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  visit             Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  patient           Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  package           Package?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
 
   @@index([branchId, outcome])
 }
@@ -842,53 +845,53 @@ model Approval {
 }
 
 model BillingHandoff {
-  id                 String    @id
-  tenantId           String?
-  branchId           String?
-  visitId            String
-  patientId          String
-  patientName        String?
-  uhid               String?
-  packageId          String?
-  quote              Json
-  counsellorName     String
-  counselNotes       String?
-  doctorName         String?
-  doctorId           String?
-  paymentExpectation String?
-  treatmentMode      String?
+  id                   String   @id
+  tenantId             String?
+  branchId             String?
+  visitId              String
+  patientId            String
+  patientName          String?
+  uhid                 String?
+  packageId            String?
+  quote                Json
+  counsellorName       String
+  counselNotes         String?
+  doctorName           String?
+  doctorId             String?
+  paymentExpectation   String?
+  treatmentMode        String?
   admissionRecommended Boolean?
-  diagnosisSummary   String?
-  sentAt             DateTime
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  branch             Branch?   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  visit              Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  patient            Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  package            Package?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  diagnosisSummary     String?
+  sentAt               DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  branch               Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  visit                Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  patient              Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  package              Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
 
   @@index([branchId, sentAt])
 }
 
 model Agent {
-  id               String    @id
-  tenantId         String
-  branchId         String
-  name             String
-  email            String
-  role             String
-  active           Boolean   @default(true)
-  specialtyTags    String[]
-  maxOpenLeads     Int?
-  unavailableUntil DateTime?
+  id                String     @id
+  tenantId          String
+  branchId          String
+  name              String
+  email             String
+  role              String
+  active            Boolean    @default(true)
+  specialtyTags     String[]
+  maxOpenLeads      Int?
+  unavailableUntil  DateTime?
   unavailableReason String?
-  backupAgentId    String?
+  backupAgentId     String?
   leadWeightPercent Int?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  branch           Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  leads            Lead[]
-  followUps        FollowUp[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  branch            Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  leads             Lead[]
+  followUps         FollowUp[]
 
   @@unique([tenantId, email])
   @@index([branchId, role])
@@ -928,53 +931,53 @@ model Stage {
 }
 
 model Lead {
-  id               String    @id
-  tenantId         String
-  branchId         String
-  pipelineId       String?
-  stageId          String
-  assigneeId       String?
-  patientId        String?
-  fullName         String
-  phone            String
-  alternatePhone   String?
-  email            String?
-  age              Int?
-  gender           String?
-  city             String?
-  district         String?
-  state            String?
-  country          String?
-  doctorName       String?
-  appointmentDate  DateTime?
-  source           String
-  sourceDetail     String?
-  integrationId    String?
-  specialty        String?
-  valueEstimate    Decimal?
-  priority         String?
-  tags             String[]
-  notes            String?
-  convertedVisitId String?
-  uhid             String?
-  lostReason       String?
-  leadStatus       String    @default("fresh")
-  callOutcome      String?
-  formData         Json?
-  appointmentTime  String?
+  id                String                 @id
+  tenantId          String
+  branchId          String
+  pipelineId        String?
+  stageId           String
+  assigneeId        String?
+  patientId         String?
+  fullName          String
+  phone             String
+  alternatePhone    String?
+  email             String?
+  age               Int?
+  gender            String?
+  city              String?
+  district          String?
+  state             String?
+  country           String?
+  doctorName        String?
+  appointmentDate   DateTime?
+  source            String
+  sourceDetail      String?
+  integrationId     String?
+  specialty         String?
+  valueEstimate     Decimal?
+  priority          String?
+  tags              String[]
+  notes             String?
+  convertedVisitId  String?
+  uhid              String?
+  lostReason        String?
+  leadStatus        String                 @default("fresh")
+  callOutcome       String?
+  formData          Json?
+  appointmentTime   String?
   appointmentCentre String?
-  createdAt        DateTime
-  updatedAt        DateTime
-  lastContactAt    DateTime?
-  nextFollowUpAt   DateTime?
-  branch           Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  stage            Stage     @relation(fields: [stageId], references: [id], onDelete: Restrict)
-  assignee         Agent?    @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
-  patient          Patient?  @relation(fields: [patientId], references: [id], onDelete: SetNull)
-  pipeline         Pipeline? @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
-  followUps        FollowUp[]
-  activities       Activity[]
-  commissions      CounsellorCommission[]
+  createdAt         DateTime
+  updatedAt         DateTime
+  lastContactAt     DateTime?
+  nextFollowUpAt    DateTime?
+  branch            Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  stage             Stage                  @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  assignee          Agent?                 @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  patient           Patient?               @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  pipeline          Pipeline?              @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
+  followUps         FollowUp[]
+  activities        Activity[]
+  commissions       CounsellorCommission[]
 
   @@index([branchId, stageId])
   @@index([branchId, assigneeId])
@@ -983,36 +986,36 @@ model Lead {
 }
 
 model Activity {
-  id         String   @id
-  tenantId   String
-  branchId   String
-  leadId     String
-  actor      String
-  type       String
-  summary    String
-  at         DateTime
-  payload    Json?
-  createdAt  DateTime @default(now())
-  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id        String   @id
+  tenantId  String
+  branchId  String
+  leadId    String
+  actor     String
+  type      String
+  summary   String
+  at        DateTime
+  payload   Json?
+  createdAt DateTime @default(now())
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([branchId, at])
 }
 
 model Rule {
-  id             String   @id
-  tenantId       String
-  branchId       String
-  label          String
-  active         Boolean  @default(true)
-  strategy       String
-  source         String?
-  specialty      String?
+  id               String   @id
+  tenantId         String
+  branchId         String
+  label            String
+  active           Boolean  @default(true)
+  strategy         String
+  source           String?
+  specialty        String?
   assignToAgentIds String[]
-  agentWeights   Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  agentWeights     Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  branch           Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId, active, strategy])
 }
@@ -1038,27 +1041,27 @@ model FollowUp {
 }
 
 model Integration {
-  id           String   @id
-  tenantId     String
-  branchId     String
-  kind         String
-  label        String
-  description  String?
-  icon         String?
-  connected    Boolean  @default(false)
-  webhookUrl   String?
-  lastEventAt  DateTime?
-  leadsToday   Int      @default(0)
-  config       Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  branch       Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id          String    @id
+  tenantId    String
+  branchId    String
+  kind        String
+  label       String
+  description String?
+  icon        String?
+  connected   Boolean   @default(false)
+  webhookUrl  String?
+  lastEventAt DateTime?
+  leadsToday  Int       @default(0)
+  config      Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId, connected])
 }
 
 model Employee {
-  id             String      @id
+  id             String         @id
   tenantId       String
   branchId       String
   departmentId   String
@@ -1070,14 +1073,14 @@ model Employee {
   managerId      String?
   joinDate       DateTime
   employmentType String
-  active         Boolean     @default(true)
+  active         Boolean        @default(true)
   role           String
   crmAgentId     String?
   salaryMonthly  Decimal?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  branch         Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  department     Department  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  branch         Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  department     Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   shifts         Shift[]
   leaveRequests  LeaveRequest[]
   attendance     Attendance[]
@@ -1088,21 +1091,21 @@ model Employee {
 }
 
 model Department {
-  id              String            @id
-  tenantId        String
-  branchId        String
-  label           String
-  headEmployeeId  String?
-  doctorIds       String[]
+  id                String     @id
+  tenantId          String
+  branchId          String
+  label             String
+  headEmployeeId    String?
+  doctorIds         String[]
   defaultPackageIds String[]
-  revenuePolicyId String?
-  bays            String[]
-  active          Boolean           @default(true)
-  config          Json?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  branch          Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  employees       Employee[]
+  revenuePolicyId   String?
+  bays              String[]
+  active            Boolean    @default(true)
+  config            Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  branch            Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  employees         Employee[]
 
   @@index([tenantId, branchId, active])
 }
@@ -1126,23 +1129,23 @@ model Shift {
 }
 
 model LeaveRequest {
-  id            String   @id
-  tenantId      String
-  branchId      String
-  employeeId    String
-  type          String
-  fromDate      DateTime
-  toDate        DateTime
-  reason        String?
-  status        String
-  requestedAt   DateTime
-  resolvedAt    DateTime?
-  approverId    String?
-  syncCrmAbsence Boolean @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id             String    @id
+  tenantId       String
+  branchId       String
+  employeeId     String
+  type           String
+  fromDate       DateTime
+  toDate         DateTime
+  reason         String?
+  status         String
+  requestedAt    DateTime
+  resolvedAt     DateTime?
+  approverId     String?
+  syncCrmAbsence Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  branch         Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([branchId, status, fromDate])
 }
@@ -1166,89 +1169,89 @@ model Attendance {
 }
 
 model PayrollLine {
-  id          String   @id
-  tenantId    String
-  branchId    String
-  employeeId  String
-  period      String
-  basic       Decimal
-  allowances  Decimal
-  deductions  Decimal
-  net         Decimal
-  status      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id         String   @id
+  tenantId   String
+  branchId   String
+  employeeId String
+  period     String
+  basic      Decimal
+  allowances Decimal
+  deductions Decimal
+  net        Decimal
+  status     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([branchId, period, status])
 }
 
 model Invoice {
-  id              String        @id
-  tenantId        String
-  branchId        String
-  patientId       String?
-  visitId         String?
-  invoiceNumber   String
-  status          String
-  subtotal        Decimal       @default(0)
-  discount        Decimal       @default(0)
-  taxAmount       Decimal       @default(0)
-  totalAmount     Decimal       @default(0)
-  amountPaid      Decimal       @default(0)
-  balanceAmount   Decimal       @default(0)
-  refundAmount    Decimal       @default(0)
-  paymentScope    String?
-  dueDate         DateTime?
-  notes           String?
-  payload         Json?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  patient         Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
-  visit           Visit?        @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  lines           InvoiceLine[]
-  payments        Payment[]
-  refundVouchers  IpdRefundVoucher[]
+  id             String             @id
+  tenantId       String
+  branchId       String
+  patientId      String?
+  visitId        String?
+  invoiceNumber  String
+  status         String
+  subtotal       Decimal            @default(0)
+  discount       Decimal            @default(0)
+  taxAmount      Decimal            @default(0)
+  totalAmount    Decimal            @default(0)
+  amountPaid     Decimal            @default(0)
+  balanceAmount  Decimal            @default(0)
+  refundAmount   Decimal            @default(0)
+  paymentScope   String?
+  dueDate        DateTime?
+  notes          String?
+  payload        Json?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  branch         Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  patient        Patient?           @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  visit          Visit?             @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  lines          InvoiceLine[]
+  payments       Payment[]
+  refundVouchers IpdRefundVoucher[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([branchId, status])
 }
 
 model InvoiceLine {
-  id          String   @id
-  invoiceId   String
-  label       String
-  category    String?
-  quantity    Int      @default(1)
-  unitPrice   Decimal
-  discount    Decimal  @default(0)
-  taxPercent  Decimal  @default(0)
-  lineTotal   Decimal
-  payload     Json?
-  createdAt   DateTime @default(now())
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  id         String   @id
+  invoiceId  String
+  label      String
+  category   String?
+  quantity   Int      @default(1)
+  unitPrice  Decimal
+  discount   Decimal  @default(0)
+  taxPercent Decimal  @default(0)
+  lineTotal  Decimal
+  payload    Json?
+  createdAt  DateTime @default(now())
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
 }
 
 model Payment {
-  id            String    @id
-  tenantId      String
-  branchId      String
-  invoiceId      String
-  amount        Decimal
-  mode          String
-  status        String
-  referenceNo   String?
-  paidAt        DateTime
-  collectedBy   String?
-  notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  branch        Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  invoice       Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  id          String   @id
+  tenantId    String
+  branchId    String
+  invoiceId   String
+  amount      Decimal
+  mode        String
+  status      String
+  referenceNo String?
+  paidAt      DateTime
+  collectedBy String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([branchId, paidAt])
 }
@@ -1275,17 +1278,17 @@ model AuditLog {
 }
 
 model FormSchema {
-  id          String   @id
-  tenantId    String
-  branchId    String?
-  module      String
-  title       String
-  schema      Json
-  active      Boolean  @default(true)
-  version     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  id        String   @id
+  tenantId  String
+  branchId  String?
+  module    String
+  title     String
+  schema    Json
+  active    Boolean  @default(true)
+  version   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, module, active])
 }
@@ -1308,39 +1311,39 @@ model StaffAccess {
 }
 
 model GeoPin {
-  id            String   @id
-  tenantId      String
-  branchId      String?
-  pincode       String
-  city          String
-  lat           Decimal
-  lng           Decimal
-  patientCount  Int      @default(0)
-  opdCount      Int      @default(0)
-  ipdCount      Int      @default(0)
-  revenue       Decimal  @default(0)
-  topDiagnosis  String?
-  severity      String?
-  payload       Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  branch        Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  id           String   @id
+  tenantId     String
+  branchId     String?
+  pincode      String
+  city         String
+  lat          Decimal
+  lng          Decimal
+  patientCount Int      @default(0)
+  opdCount     Int      @default(0)
+  ipdCount     Int      @default(0)
+  revenue      Decimal  @default(0)
+  topDiagnosis String?
+  severity     String?
+  payload      Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  branch       Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, city])
 }
 
 model MisAggregate {
-  id          String   @id
-  tenantId    String
-  branchId    String?
-  metric      String
-  category    String
-  bucketDate  DateTime?
-  value       Decimal?
-  payload     Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  id         String    @id
+  tenantId   String
+  branchId   String?
+  metric     String
+  category   String
+  bucketDate DateTime?
+  value      Decimal?
+  payload    Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  branch     Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, category, metric])
 }
@@ -1409,72 +1412,72 @@ model DoctorTemplate {
 }
 
 model NursingHandoff {
-  id                 String   @id
-  visitId            String   @unique
-  patientId          String
-  patientName        String
-  uhid               String
-  doctorId           String
-  doctorName         String
-  treatmentPath      String
-  packageId          String
-  packageLabel       String
-  billingStatus      String
-  amountPaid         Float
-  balanceDue         Float?
-  netAmount          Float
-  commercialConsent  Boolean  @default(false)
-  billingHandoff     Json?
-  consultation       Json?
-  ipdWard            String?
-  ipdBed             String?
-  sentAt             String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-}
-
-model NursingEpisode {
-  id            String   @id
-  visitId       String   @unique
-  patientId     String
-  nurseId       String
-  nurseName     String
-  branchId      String
-  treatmentPath String
-  packageLabel  String
-  packageId     String
-  doctorName    String
-  doctorId      String
-  billingStatus String
-  balanceDue    Float?
-  status        String
-  priority      String
-  queuedAt      String
-  vitals            Json?
-  consents          Json
-  sessions          Json
-  internalNotes     String
-  tasks             Json    @default("[]")
-  dischargeSummary  Json?
-  completedAt       String?
+  id                String   @id
+  visitId           String   @unique
+  patientId         String
+  patientName       String
+  uhid              String
+  doctorId          String
+  doctorName        String
+  treatmentPath     String
+  packageId         String
+  packageLabel      String
+  billingStatus     String
+  amountPaid        Float
+  balanceDue        Float?
+  netAmount         Float
+  commercialConsent Boolean  @default(false)
+  billingHandoff    Json?
+  consultation      Json?
+  ipdWard           String?
+  ipdBed            String?
+  sentAt            String
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
 
+model NursingEpisode {
+  id               String   @id
+  visitId          String   @unique
+  patientId        String
+  nurseId          String
+  nurseName        String
+  branchId         String
+  treatmentPath    String
+  packageLabel     String
+  packageId        String
+  doctorName       String
+  doctorId         String
+  billingStatus    String
+  balanceDue       Float?
+  status           String
+  priority         String
+  queuedAt         String
+  vitals           Json?
+  consents         Json
+  sessions         Json
+  internalNotes    String
+  tasks            Json     @default("[]")
+  dischargeSummary Json?
+  completedAt      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
 model CounsellorQueueItem {
-  id           String   @id
-  visitId      String   @unique
-  patientId    String
-  doctorId     String
-  doctorName   String
-  sentAt       String
+  id            String   @id
+  visitId       String   @unique
+  patientId     String
+  doctorId      String
+  doctorName    String
+  sentAt        String
   treatmentMode String
-  packageId    String?
-  packageLabel String?
-  priority     String
-  payload      Json
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  packageId     String?
+  packageLabel  String?
+  priority      String
+  payload       Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model PharmacyWorkspaceState {
@@ -1511,19 +1514,19 @@ model PharmacyOperatorCredential {
 }
 
 model CrmOperatorCredential {
-  id            String   @id
-  name          String
-  email         String   @unique
-  role          String
-  active        Boolean  @default(true)
-  specialtyTags Json
-  maxOpenLeads  Int      @default(20)
-  backupAgentId String?
-  leadWeightPct Int      @default(0)
-  defaultCommissionPercent Decimal @default(5)
-  passwordHash  String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                       String   @id
+  name                     String
+  email                    String   @unique
+  role                     String
+  active                   Boolean  @default(true)
+  specialtyTags            Json
+  maxOpenLeads             Int      @default(20)
+  backupAgentId            String?
+  leadWeightPct            Int      @default(0)
+  defaultCommissionPercent Decimal  @default(5)
+  passwordHash             String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }
 
 model CounsellorOperatorCredential {
@@ -1632,19 +1635,19 @@ model HrPayrollLine {
 }
 
 model HrCredential {
-  employeeId String @id
+  employeeId String   @id
   password   String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
 model HrSetting {
-  id                   String   @id
-  autoCrmSync          Boolean  @default(true)
-  leaveApprovalNotify  Boolean  @default(true)
-  attendanceReminder   Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id
+  autoCrmSync         Boolean  @default(true)
+  leaveApprovalNotify Boolean  @default(true)
+  attendanceReminder  Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 model CrmAgent {
@@ -1843,16 +1846,16 @@ model AdminMisReport {
 }
 
 model AdminSetting {
-  id                 String   @id
-  kAnonymityMin      Int
-  geoAggregateOnly   Boolean
+  id                  String   @id
+  kAnonymityMin       Int
+  geoAggregateOnly    Boolean
   auditRetentionYears Int
-  outbreakAlerts     Boolean
-  autoMisDaily       Boolean
+  outbreakAlerts      Boolean
+  autoMisDaily        Boolean
   whatsappConsentFlag Boolean
-  resolvedLeakageIds Json
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  resolvedLeakageIds  Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 model FormSchemaOverride {
@@ -1884,99 +1887,99 @@ model AdminAuditLog {
 }
 
 model CounsellorCommission {
-  id              String   @id @default(cuid())
-  tenantId        String
-  branchId        String
-  leadId          String?
-  counsellorId    String
-  counsellorName  String
-  patientId       String?
-  patientName     String?
-  visitId         String?
-  billAmount      Decimal  @default(0)
-  commissionPercent Decimal @default(0)
-  commissionAmount Decimal @default(0)
-  status          String   @default("pending")
-  paidAt          DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  branch          Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  lead            Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  id                String    @id @default(cuid())
+  tenantId          String
+  branchId          String
+  leadId            String?
+  counsellorId      String
+  counsellorName    String
+  patientId         String?
+  patientName       String?
+  visitId           String?
+  billAmount        Decimal   @default(0)
+  commissionPercent Decimal   @default(0)
+  commissionAmount  Decimal   @default(0)
+  status            String    @default("pending")
+  paidAt            DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  branch            Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  lead              Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([branchId, counsellorId, status])
   @@index([branchId, patientId])
 }
 
 model ReferralDoctor {
-  id              String   @id @default(cuid())
-  tenantId        String
-  branchId        String?
-  name            String
-  phone           String?
-  email           String?
-  clinicName      String?
-  address         String?
-  specialization  String?
-  commissionPercent Decimal @default(0)
-  active          Boolean  @default(true)
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  branch          Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  tenantId          String
+  branchId          String?
+  name              String
+  phone             String?
+  email             String?
+  clinicName        String?
+  address           String?
+  specialization    String?
+  commissionPercent Decimal  @default(0)
+  active            Boolean  @default(true)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  branch            Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId, active])
 }
 
 model Slot {
-  id              String   @id @default(cuid())
-  tenantId        String
-  branchId        String?
-  doctorId        String?
-  doctorName      String?
-  departmentId    String?
-  date            String
-  startTime       String
-  endTime         String
-  capacity        Int      @default(1)
-  booked          Int      @default(0)
-  status          String   @default("available")
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  branch          Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  tenantId     String
+  branchId     String?
+  doctorId     String?
+  doctorName   String?
+  departmentId String?
+  date         String
+  startTime    String
+  endTime      String
+  capacity     Int      @default(1)
+  booked       Int      @default(0)
+  status       String   @default("available")
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  branch       Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId, date, status])
   @@index([branchId, doctorId, date])
 }
 
 model WhatsAppTemplate {
-  id         String   @id @default(cuid())
-  tenantId   String?
-  branchId   String?
-  trigger    String
-  label      String
-  body       String
-  enabled    Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  branch     Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  tenantId  String?
+  branchId  String?
+  trigger   String
+  label     String
+  body      String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@unique([branchId, trigger])
   @@index([branchId, trigger, enabled])
 }
 
 model IpdWard {
-  id          String         @id
-  tenantId    String
-  branchId    String
-  label       String
-  category    String
-  active      Boolean        @default(true)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  branch      Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  beds        IpdBed[]
-  admissions  IpdAdmission[]
+  id         String         @id
+  tenantId   String
+  branchId   String
+  label      String
+  category   String
+  active     Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  branch     Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  beds       IpdBed[]
+  admissions IpdAdmission[]
 
   @@index([tenantId, branchId, active])
 }
@@ -1994,16 +1997,16 @@ model IpdBed {
   ward       IpdWard        @relation(fields: [wardId], references: [id], onDelete: Cascade)
   admissions IpdAdmission[]
 
-  @@index([tenantId, branchId, wardId, active])
   @@unique([wardId, label])
+  @@index([tenantId, branchId, wardId, active])
 }
 
 model IpdAdmission {
-  id                 String   @id
+  id                 String              @id
   tenantId           String
   branchId           String
   patientId          String
-  visitId            String?  @unique
+  visitId            String?             @unique
   wardId             String
   bedId              String
   attendingDoctorId  String
@@ -2011,8 +2014,8 @@ model IpdAdmission {
   diagnosis          String
   patientType        String
   billingMode        String
-  status             String   @default("admitted")
-  admittedAt         DateTime @default(now())
+  status             String              @default("admitted")
+  admittedAt         DateTime            @default(now())
   expectedDischarge  DateTime?
   lastRoundAt        DateTime?
   lastRoundNote      String?
@@ -2025,12 +2028,12 @@ model IpdAdmission {
   deathDeclaredAt    DateTime?
   deathDeclaredBy    String?
   cart               Json?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  branch             Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  patient            Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  ward               IpdWard  @relation(fields: [wardId], references: [id], onDelete: Cascade)
-  bed                IpdBed   @relation(fields: [bedId], references: [id], onDelete: Cascade)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  branch             Branch              @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  patient            Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  ward               IpdWard             @relation(fields: [wardId], references: [id], onDelete: Cascade)
+  bed                IpdBed              @relation(fields: [bedId], references: [id], onDelete: Cascade)
   labOrders          LabOrder[]
   advances           IpdAdvancePayment[]
   refundVouchers     IpdRefundVoucher[]
@@ -2050,8 +2053,8 @@ model IpdAdvancePayment {
   amount         Decimal
   receivedAmount Decimal      @default(0)
   pendingAmount  Decimal      @default(0)
-  mode           String       // "cash", "card", "upi", "split", "due", "pending"
-  splits         Json?        // [{ mode: string, amount: number }]
+  mode           String // "cash", "card", "upi", "split", "due", "pending"
+  splits         Json? // [{ mode: string, amount: number }]
   status         String       @default("received") // received, pending, cancelled, refunded
   referenceNo    String?
   notes          String?
@@ -2068,25 +2071,25 @@ model IpdAdvancePayment {
 }
 
 model IpdRefundVoucher {
-  id            String       @id
-  tenantId      String
-  branchId      String
-  admissionId   String
-  patientId     String
-  invoiceId     String?
-  amount        Decimal
-  mode          String
-  status        String       @default("pending") // pending, approved, issued, cancelled
-  approvedBy    String?
-  requestedBy   String?
-  referenceNo   String?
-  notes         String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  admission     IpdAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
-  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  invoice       Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  branch        Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id          String       @id
+  tenantId    String
+  branchId    String
+  admissionId String
+  patientId   String
+  invoiceId   String?
+  amount      Decimal
+  mode        String
+  status      String       @default("pending") // pending, approved, issued, cancelled
+  approvedBy  String?
+  requestedBy String?
+  referenceNo String?
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  admission   IpdAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  invoice     Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, branchId, admissionId])
   @@index([patientId])
@@ -2130,23 +2133,23 @@ model IpdRoundLog {
 }
 
 model PatientDocument {
-  id          String   @id
-  tenantId    String?
-  branchId    String?
-  patientId   String
-  visitId     String?
-  category    String
-  label       String?
-  fileUrl     String
-  fileName    String
-  mimeType    String?
-  size        Int?
-  uploadedBy  String?
-  uploadedAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  visit       Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  id         String   @id
+  tenantId   String?
+  branchId   String?
+  patientId  String
+  visitId    String?
+  category   String
+  label      String?
+  fileUrl    String
+  fileName   String
+  mimeType   String?
+  size       Int?
+  uploadedBy String?
+  uploadedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visit      Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
 
   @@index([patientId, category])
   @@index([branchId, category])
@@ -2178,112 +2181,173 @@ model EmergencyPatient {
 }
 
 model EmergencyReferral {
-  id                 String   @id
-  tenantId           String
-  branchId           String
-  patientId          String
-  visitId            String?
-  fromDoctorId       String?
-  fromDoctorName     String?
-  referredToType     String   // hospital | department | doctor | specialist
-  referredToId       String?
-  referredToName     String
-  referralReason     String
-  referralNotes      String?
-  status             String   @default("pending")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  patient            Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  branch             Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  visit              Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  id             String   @id
+  tenantId       String
+  branchId       String
+  patientId      String
+  visitId        String?
+  fromDoctorId   String?
+  fromDoctorName String?
+  referredToType String // hospital | department | doctor | specialist
+  referredToId   String?
+  referredToName String
+  referralReason String
+  referralNotes  String?
+  status         String   @default("pending")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  visit          Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, branchId, status])
   @@index([patientId, status])
 }
 
 model WhatsAppLog {
-  id         String   @id @default(cuid())
-  tenantId   String?
-  branchId   String?
-  trigger    String
-  recipient  String
-  body       String
-  messageId  String?
-  status     String   @default("queued")
-  error      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now()) @updatedAt
-  branch     Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id           String              @id @default(cuid())
+  tenantId     String?
+  branchId     String?
+  trigger      String
+  recipient    String
+  body         String
+  messageId    String?
+  status       String              @default("queued")
+  error        String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @default(now()) @updatedAt
+  branch       Branch?             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  connectionId String?
+  connection   WhatsappConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
 
   @@index([branchId, createdAt])
   @@index([branchId, trigger, status])
   @@index([messageId])
+  @@index([connectionId, createdAt])
+}
+
+model WhatsappConnection {
+  id                 String         @id @default(cuid())
+  tenantId           String
+  branchId           String
+  businessId         String?
+  wabaId             String
+  phoneNumberId      String
+  displayPhoneNumber String?
+  verifiedName       String?
+  accessToken        String
+  connectedAt        DateTime       @default(now())
+  active             Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  branch             Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  logs               WhatsAppLog[]
+  conversations      Conversation[]
+
+  @@unique([branchId, phoneNumberId])
+  @@index([tenantId, branchId, active])
+  @@index([wabaId])
+  @@index([phoneNumberId])
+}
+
+model Conversation {
+  id            String             @id @default(cuid())
+  tenantId      String
+  branchId      String
+  connectionId  String
+  patientId     String?
+  contactPhone  String
+  contactName   String?
+  lastMessageAt DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  branch        Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  connection    WhatsappConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  patient       Patient?           @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  messages      Message[]
+
+  @@unique([connectionId, contactPhone])
+  @@index([tenantId, branchId, lastMessageAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  direction      String
+  body           String
+  status         String       @default("sent")
+  messageId      String?      @unique
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([status, createdAt])
 }
 
 model LabFieldMaster {
-  id               String          @id @default(cuid())
-  tenantId         String
-  branchId         String
-  code             String
-  name             String
-  unit             String?
-  dataType         String          // numeric | text | select | boolean | note
-  sampleTypes      String[]        @default([])
-  options          Json?           // for select/multi data types
-  defaultNote      String?
-  active           Boolean         @default(true)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  ranges           LabFieldRange[]
-  reportFields     LabReportCatalogField[]
-  results          LabReportResult[]
-  branch           Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id           String                  @id @default(cuid())
+  tenantId     String
+  branchId     String
+  code         String
+  name         String
+  unit         String?
+  dataType     String // numeric | text | select | boolean | note
+  sampleTypes  String[]                @default([])
+  options      Json? // for select/multi data types
+  defaultNote  String?
+  active       Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  ranges       LabFieldRange[]
+  reportFields LabReportCatalogField[]
+  results      LabReportResult[]
+  branch       Branch                  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, branchId, code])
   @@index([tenantId, branchId, active])
 }
 
 model LabFieldRange {
-  id              String       @id @default(cuid())
-  fieldMasterId   String
-  gender          String?      // M | F | O | all
-  ageMin          Int?
-  ageMax          Int?
-  ageUnit         String       @default("years") // years | months | days
-  sampleType      String?
-  pregnancy       Boolean?     // true = pregnant only, false = non-pregnant only, null = any
-  condition       String?      // free-text qualifier (e.g., "fasting")
-  low             Float?
-  high            Float?
-  criticalLow     Float?
-  criticalHigh    Float?
-  displayLabel    String?      // e.g. "Adult Male (Fasting)"
-  isDefault       Boolean      @default(false)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  fieldMaster     LabFieldMaster @relation(fields: [fieldMasterId], references: [id], onDelete: Cascade)
+  id            String         @id @default(cuid())
+  fieldMasterId String
+  gender        String? // M | F | O | all
+  ageMin        Int?
+  ageMax        Int?
+  ageUnit       String         @default("years") // years | months | days
+  sampleType    String?
+  pregnancy     Boolean? // true = pregnant only, false = non-pregnant only, null = any
+  condition     String? // free-text qualifier (e.g., "fasting")
+  low           Float?
+  high          Float?
+  criticalLow   Float?
+  criticalHigh  Float?
+  displayLabel  String? // e.g. "Adult Male (Fasting)"
+  isDefault     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  fieldMaster   LabFieldMaster @relation(fields: [fieldMasterId], references: [id], onDelete: Cascade)
 
   @@index([fieldMasterId, isDefault])
 }
 
 model LabReportCatalog {
-  id           String                  @id @default(cuid())
-  tenantId     String
-  branchId     String
-  code         String
-  name         String
-  description  String?
-  sampleType   String?
-  headerNote   String?
-  footerNote   String?
-  serviceId    String?
-  active       Boolean                 @default(true)
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
-  fields       LabReportCatalogField[]
-  orderItems   LabOrderItem[]
-  branch       Branch                  @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  service      ServiceCharge?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  id          String                  @id @default(cuid())
+  tenantId    String
+  branchId    String
+  code        String
+  name        String
+  description String?
+  sampleType  String?
+  headerNote  String?
+  footerNote  String?
+  serviceId   String?
+  active      Boolean                 @default(true)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  fields      LabReportCatalogField[]
+  orderItems  LabOrderItem[]
+  branch      Branch                  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  service     ServiceCharge?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, branchId, code])
   @@index([tenantId, branchId, active])
@@ -2294,7 +2358,7 @@ model LabReportCatalogField {
   id              String           @id @default(cuid())
   reportCatalogId String
   fieldMasterId   String
-  section         String?          // sub-header / panel name
+  section         String? // sub-header / panel name
   sortOrder       Int              @default(0)
   isVisible       Boolean          @default(true)
   createdAt       DateTime         @default(now())
@@ -2307,29 +2371,29 @@ model LabReportCatalogField {
 }
 
 model LabOrder {
-  id                String        @id @default(cuid())
+  id                String         @id @default(cuid())
   tenantId          String
   branchId          String
   patientId         String
   visitId           String?
   admissionId       String?
-  orderedBy         String        // userId
+  orderedBy         String // userId
   orderedByName     String?
-  source            String        // opd | ipd | emergency | direct
-  status            String        // pending_billing | ordered | sample_collected | in_progress | completed | cancelled
-  pregnancy         Boolean       @default(false) // female pregnancy status for range matching
-  orderedAt         DateTime      @default(now())
+  source            String // opd | ipd | emergency | direct
+  status            String // pending_billing | ordered | sample_collected | in_progress | completed | cancelled
+  pregnancy         Boolean        @default(false) // female pregnancy status for range matching
+  orderedAt         DateTime       @default(now())
   sampleCollectedAt DateTime?
   completedAt       DateTime?
   cancelledAt       DateTime?
   cancelReason      String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
   items             LabOrderItem[]
-  branch            Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  patient           Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  visit             Visit?        @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  admission         IpdAdmission? @relation(fields: [admissionId], references: [id], onDelete: SetNull)
+  branch            Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  patient           Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visit             Visit?         @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  admission         IpdAdmission?  @relation(fields: [admissionId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, branchId, status])
   @@index([patientId, status])
@@ -2338,22 +2402,22 @@ model LabOrder {
 }
 
 model LabOrderItem {
-  id                String           @id @default(cuid())
+  id                String            @id @default(cuid())
   labOrderId        String
   reportCatalogId   String
-  serviceId         String?          // optional link to ServiceCharge
+  serviceId         String? // optional link to ServiceCharge
   label             String
   sampleType        String?
   price             Decimal?
   gstPercent        Decimal?
-  status            String           // pending_billing | ordered | sample_collected | in_progress | completed
+  status            String // pending_billing | ordered | sample_collected | in_progress | completed
   sampleCollectedAt DateTime?
   completedAt       DateTime?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  labOrder          LabOrder         @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
-  reportCatalog     LabReportCatalog @relation(fields: [reportCatalogId], references: [id], onDelete: Cascade)
-  service           ServiceCharge?   @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  labOrder          LabOrder          @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  reportCatalog     LabReportCatalog  @relation(fields: [reportCatalogId], references: [id], onDelete: Cascade)
+  service           ServiceCharge?    @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   results           LabReportResult[]
 
   @@index([labOrderId, status])
@@ -2362,42 +2426,42 @@ model LabOrderItem {
 }
 
 model LabReportResult {
-  id              String       @id @default(cuid())
-  labOrderItemId  String
-  labOrderId      String
-  fieldMasterId   String
-  value           String
-  numericValue    Float?
-  flag            String?      // normal | low | high | critical_low | critical_high
-  note            String?
-  recordedAt      DateTime     @default(now())
-  recordedBy      String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  labOrderItem    LabOrderItem @relation(fields: [labOrderItemId], references: [id], onDelete: Cascade)
-  fieldMaster     LabFieldMaster @relation(fields: [fieldMasterId], references: [id], onDelete: Cascade)
+  id             String         @id @default(cuid())
+  labOrderItemId String
+  labOrderId     String
+  fieldMasterId  String
+  value          String
+  numericValue   Float?
+  flag           String? // normal | low | high | critical_low | critical_high
+  note           String?
+  recordedAt     DateTime       @default(now())
+  recordedBy     String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  labOrderItem   LabOrderItem   @relation(fields: [labOrderItemId], references: [id], onDelete: Cascade)
+  fieldMaster    LabFieldMaster @relation(fields: [fieldMasterId], references: [id], onDelete: Cascade)
 
   @@index([labOrderItemId, fieldMasterId])
   @@index([labOrderId, fieldMasterId])
 }
 
 model LabReportTemplate {
-  id             String   @id @default(cuid())
-  tenantId       String
-  branchId       String
-  name           String
-  fileData       String   // base64 data URL of the uploaded PDF
-  mimeType       String   // application/pdf | application/msword etc
-  marginTop      Float    @default(50)
-  marginBottom   Float    @default(50)
-  marginLeft     Float    @default(50)
-  marginRight    Float    @default(50)
-  overlayFields  Json?    @default("[]") // positioned header fields for visual template editor
-  isDefault      Boolean  @default(false)
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  tenantId      String
+  branchId      String
+  name          String
+  fileData      String // base64 data URL of the uploaded PDF
+  mimeType      String // application/pdf | application/msword etc
+  marginTop     Float    @default(50)
+  marginBottom  Float    @default(50)
+  marginLeft    Float    @default(50)
+  marginRight   Float    @default(50)
+  overlayFields Json?    @default("[]") // positioned header fields for visual template editor
+  isDefault     Boolean  @default(false)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, branchId, name])
   @@index([tenantId, branchId, active])

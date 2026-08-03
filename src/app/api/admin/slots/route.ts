@@ -32,13 +32,44 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await requireAuth();
     const body = await req.json();
+    const scope = branchScope(ctx);
+
+    // Bulk create: body contains { slots: [...] }
+    if (Array.isArray(body.slots)) {
+      const slotsToCreate = body.slots.filter(
+        (s: any) => s.date && s.startTime && s.endTime,
+      );
+
+      if (slotsToCreate.length === 0) {
+        return NextResponse.json({ ok: false, error: "No valid slots to create" }, { status: 400 });
+      }
+
+      const data = slotsToCreate.map((s: any) => ({
+        tenantId: ctx.tenantId,
+        branchId: ctx.branchId,
+        doctorId: s.doctorId || null,
+        doctorName: s.doctorName || null,
+        departmentId: s.departmentId || null,
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        capacity: s.capacity || 1,
+        booked: 0,
+        status: s.status || "available",
+        notes: s.notes || null,
+      }));
+
+      const result = await prisma.slot.createMany({ data, skipDuplicates: true });
+
+      return NextResponse.json({ ok: true, created: result.count, total: slotsToCreate.length });
+    }
+
+    // Single slot create
     const { doctorId, doctorName, departmentId, date, startTime, endTime, capacity, status, notes } = body;
 
     if (!date || !startTime || !endTime) {
       return NextResponse.json({ ok: false, error: "Missing required fields" }, { status: 400 });
     }
-
-    const scope = branchScope(ctx);
 
     const slot = await prisma.slot.create({
       data: {

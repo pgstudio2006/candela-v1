@@ -44,6 +44,7 @@ export default function SlotManagementPage() {
   const [showBulkForm, setShowBulkForm] = useState(false);
   const [editing, setEditing] = useState<Slot | null>(null);
   const [bulkCreating, setBulkCreating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [formData, setFormData] = useState({
     doctorId: "",
     doctorName: "",
@@ -89,8 +90,6 @@ export default function SlotManagementPage() {
   const previewSlotCount = (() => {
     if (!bulkConfig.startDate || !bulkConfig.endDate || !bulkConfig.startTime || !bulkConfig.endTime) return 0;
     const weekdayMap: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 0 };
-    const start = new Date(bulkConfig.startDate);
-    const end = new Date(bulkConfig.endDate);
     const [sh, sm] = bulkConfig.startTime.split(":").map(Number);
     const [eh, em] = bulkConfig.endTime.split(":").map(Number);
     const dayStart = sh * 60 + sm;
@@ -112,8 +111,11 @@ export default function SlotManagementPage() {
     }
 
     let days = 0;
-    const current = new Date(start);
-    while (current <= end) {
+    const startParts = bulkConfig.startDate.split("-").map(Number);
+    const endParts = bulkConfig.endDate.split("-").map(Number);
+    const current = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+    const endDate = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+    while (current <= endDate) {
       const dayKey = Object.keys(weekdayMap).find((k) => weekdayMap[k] === current.getDay());
       if (dayKey && bulkConfig.weekdays.includes(dayKey)) days++;
       current.setDate(current.getDate() + 1);
@@ -347,9 +349,7 @@ export default function SlotManagementPage() {
 
   const handleBulkCreate = async () => {
     const { doctorId, startDate, endDate, startTime, endTime, intervalMinutes, capacity, weekdays, breakStartTime, breakEndTime } = bulkConfig;
-    
-    console.log("Bulk create config:", bulkConfig);
-    
+
     if (!doctorId) {
       alert("Please select a doctor");
       return;
@@ -364,25 +364,28 @@ export default function SlotManagementPage() {
     }
 
     setBulkCreating(true);
+    setBulkProgress({ done: 0, total: 0 });
 
     const doctor = staff.find((s) => s.id === doctorId);
     const doctorName = doctor?.name || "";
     const normalizedDoctorId = doctorId ? doctorIdFromStaffId(doctorId) : doctorId;
+    const departmentId = doctor?.departmentIds?.[0] || undefined;
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
     const weekdayMap: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 0 };
 
     const breakStartMin = breakStartTime ? breakStartTime.split(":").map(Number).reduce((h: number, m: number) => h * 60 + m, 0) : -1;
     const breakEndMin = breakEndTime ? breakEndTime.split(":").map(Number).reduce((h: number, m: number) => h * 60 + m, 0) : -1;
 
     const slotsToCreate: any[] = [];
-    let current = new Date(start);
+    const startParts = startDate.split("-").map(Number);
+    const endParts = endDate.split("-").map(Number);
+    const current = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+    const endDateObj = new Date(endParts[0], endParts[1] - 1, endParts[2]);
 
-    while (current <= end) {
+    while (current <= endDateObj) {
       const dayOfWeek = current.getDay();
       const dayKey = Object.keys(weekdayMap).find((k) => weekdayMap[k] === dayOfWeek);
-      
+
       if (dayKey && weekdays.includes(dayKey)) {
         const [startHour, startMin] = startTime.split(":").map(Number);
         const [endHour, endMin] = endTime.split(":").map(Number);
@@ -404,10 +407,13 @@ export default function SlotManagementPage() {
           const slotStart = `${String(Math.floor(slotTime / 60)).padStart(2, "0")}:${String(slotTime % 60).padStart(2, "0")}`;
           const slotEndStr = `${String(Math.floor(slotEnd / 60)).padStart(2, "0")}:${String(slotEnd % 60).padStart(2, "0")}`;
 
+          const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+
           slotsToCreate.push({
             doctorId: normalizedDoctorId,
             doctorName,
-            date: current.toISOString().slice(0, 10),
+            departmentId,
+            date: dateStr,
             startTime: slotStart,
             endTime: slotEndStr,
             capacity,
@@ -421,51 +427,40 @@ export default function SlotManagementPage() {
       current.setDate(current.getDate() + 1);
     }
 
-    console.log(`Creating ${slotsToCreate.length} slots...`);
-
     if (slotsToCreate.length === 0) {
       setBulkCreating(false);
+      setBulkProgress(null);
       alert("No slots to create based on the configuration");
       return;
     }
 
+    setBulkProgress({ done: 0, total: slotsToCreate.length });
+
     try {
-      let successCount = 0;
-      let failCount = 0;
-      
-      for (const slot of slotsToCreate) {
-        try {
-          const res = await fetch("/api/admin/slots", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(slot),
-          });
-          const json = await res.json();
-          if (json.ok) {
-            successCount++;
-          } else {
-            console.error("Failed to create slot:", json.error);
-            failCount++;
-          }
-        } catch (error) {
-          console.error("Error creating slot:", error);
-          failCount++;
-        }
-      }
-      
+      const res = await fetch("/api/admin/slots", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slots: slotsToCreate }),
+      });
+      const json = await res.json();
+
+      setBulkProgress({ done: json.created ?? slotsToCreate.length, total: slotsToCreate.length });
+
       await loadSlots();
       setShowBulkForm(false);
       setBulkCreating(false);
-      
-      if (failCount > 0) {
-        alert(`Created ${successCount} slots, ${failCount} failed`);
+      setBulkProgress(null);
+
+      if (json.ok) {
+        alert(`Successfully created ${json.created} of ${slotsToCreate.length} slots`);
       } else {
-        alert(`Successfully created ${successCount} slots`);
+        alert(`Bulk create issue: ${json.error || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Failed to create bulk slots:", error);
       setBulkCreating(false);
+      setBulkProgress(null);
       alert("Failed to create slots");
     }
   };
@@ -541,9 +536,23 @@ export default function SlotManagementPage() {
       {showBulkForm && (
         <Panel title="Doctor availability schedule">
           <div className="space-y-4">
-            {bulkCreating && (
+            {bulkCreating && bulkProgress && (
               <div className="rounded-md bg-blue-50 p-3 text-center text-[13px] text-blue-900">
-                Creating slots... Please wait.
+                <div>Creating {bulkProgress.total} slots... Please wait.</div>
+                <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-blue-100">
+                  <div
+                    className="h-full bg-blue-600 transition-all duration-300"
+                    style={{ width: `${bulkProgress.total > 0 ? (bulkProgress.done / bulkProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-[11px] text-blue-700">
+                  {bulkProgress.done} / {bulkProgress.total} created
+                </div>
+              </div>
+            )}
+            {bulkCreating && !bulkProgress && (
+              <div className="rounded-md bg-blue-50 p-3 text-center text-[13px] text-blue-900">
+                Preparing slots... Please wait.
               </div>
             )}
             <p className="text-[12px] text-neutral-500">
@@ -572,10 +581,10 @@ export default function SlotManagementPage() {
                     type="button"
                     onClick={() => {
                       const today = new Date();
-                      const start = today.toISOString().slice(0, 10);
-                      const end = new Date(today);
-                      end.setMonth(end.getMonth() + 1);
-                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: end.toISOString().slice(0, 10) });
+                      const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                      const end = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate());
+                      const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: endStr });
                     }}
                     className="h-8 rounded border px-3 text-[12px] hover:bg-neutral-50"
                     disabled={bulkCreating}
@@ -586,10 +595,10 @@ export default function SlotManagementPage() {
                     type="button"
                     onClick={() => {
                       const today = new Date();
-                      const start = today.toISOString().slice(0, 10);
-                      const end = new Date(today);
-                      end.setMonth(end.getMonth() + 3);
-                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: end.toISOString().slice(0, 10) });
+                      const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                      const end = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
+                      const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: endStr });
                     }}
                     className="h-8 rounded border px-3 text-[12px] hover:bg-neutral-50"
                     disabled={bulkCreating}
@@ -600,10 +609,10 @@ export default function SlotManagementPage() {
                     type="button"
                     onClick={() => {
                       const today = new Date();
-                      const start = today.toISOString().slice(0, 10);
-                      const end = new Date(today);
-                      end.setMonth(end.getMonth() + 6);
-                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: end.toISOString().slice(0, 10) });
+                      const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                      const end = new Date(today.getFullYear(), today.getMonth() + 6, today.getDate());
+                      const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: endStr });
                     }}
                     className="h-8 rounded border px-3 text-[12px] hover:bg-neutral-50"
                     disabled={bulkCreating}
@@ -614,10 +623,10 @@ export default function SlotManagementPage() {
                     type="button"
                     onClick={() => {
                       const today = new Date();
-                      const start = today.toISOString().slice(0, 10);
-                      const end = new Date(today);
-                      end.setFullYear(end.getFullYear() + 1);
-                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: end.toISOString().slice(0, 10) });
+                      const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                      const end = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
+                      const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: endStr });
                     }}
                     className="h-8 rounded border px-3 text-[12px] hover:bg-neutral-50"
                     disabled={bulkCreating}
@@ -628,9 +637,10 @@ export default function SlotManagementPage() {
                     type="button"
                     onClick={() => {
                       const today = new Date();
-                      const start = today.toISOString().slice(0, 10);
+                      const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
                       const end = new Date(today.getFullYear(), 11, 31);
-                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: end.toISOString().slice(0, 10) });
+                      const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+                      setBulkConfig({ ...bulkConfig, startDate: start, endDate: endStr });
                     }}
                     className="h-8 rounded border px-3 text-[12px] hover:bg-neutral-50"
                     disabled={bulkCreating}
@@ -767,7 +777,9 @@ export default function SlotManagementPage() {
             )}
             <div className="flex gap-2">
               <AttioButton variant="primary" onClick={handleBulkCreate} disabled={bulkCreating || previewSlotCount === 0}>
-                {bulkCreating ? "Creating slots..." : `Create ${previewSlotCount > 0 ? previewSlotCount : ""} slots`}
+                {bulkCreating
+                  ? `Creating ${bulkProgress?.done ?? 0}/${bulkProgress?.total ?? previewSlotCount}...`
+                  : `Create ${previewSlotCount > 0 ? previewSlotCount : ""} slots`}
               </AttioButton>
               <AttioButton variant="secondary" onClick={() => setShowBulkForm(false)} disabled={bulkCreating}>
                 Cancel

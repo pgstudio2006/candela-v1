@@ -114,10 +114,11 @@ async function fetchWabaPhoneNumbers(
 export async function deliverWhatsApp(
   recipient: string,
   body: string,
+  connection?: { accessToken: string; phoneNumberId: string },
 ): Promise<DeliveryResult> {
-  const token = process.env.WHATSAPP_API_TOKEN;
+  const token = connection?.accessToken ?? process.env.WHATSAPP_API_TOKEN;
   let baseUrl = process.env.WHATSAPP_API_BASE_URL ?? "https://graph.facebook.com/v21.0";
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const phoneNumberId = connection?.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   // TeleCRM provides a webhook URL (e.g. https://next-api.telecrm.in/waca) for
   // *receiving* messages/events. The access token they provide is a Meta token,
