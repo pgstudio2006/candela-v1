@@ -11,7 +11,6 @@ import { CLINIC_BRAND } from "@/design-system/document-templates";
 import {
   resolveAge,
   getApplicableRange,
-  formatReferenceRange,
   parseNumber,
 } from "@/lib/lab-ranges";
 
@@ -162,6 +161,14 @@ function flagPrefix(flag?: LabResultFlag): string {
   if (flag === "low") return "L ";
   if (flag === "high") return "H ";
   return "";
+}
+
+function reportReferenceRange(range: ReturnType<typeof getApplicableRange>): string {
+  if (!range) return "—";
+  if (range.low != null && range.high != null) return `${range.low} – ${range.high}`;
+  if (range.low != null) return `≥ ${range.low}`;
+  if (range.high != null) return `≤ ${range.high}`;
+  return range.displayLabel?.trim() || "—";
 }
 
 // ---------------------------------------------------------------------------
@@ -565,8 +572,8 @@ export async function buildLabReportPdfBytes(
 
         const isAbnormal = Boolean(flag && flag !== "normal");
         const resultText = `${flagPrefix(flag)}${value || "\u2014"}`;
-        // Use simple range only (no qualifiers) for the table cell
-        const refText = formatReferenceRange(range, field.fieldMaster.unit, false);
+        // Keep the normal-value column limited to the ordinary reference range.
+        const refText = reportReferenceRange(range);
 
         const rowCells = [field.fieldMaster.name, resultText, field.fieldMaster.unit || "\u2014", refText];
 
