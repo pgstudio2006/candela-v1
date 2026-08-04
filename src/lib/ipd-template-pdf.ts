@@ -201,6 +201,17 @@ export async function generateIpdFileStickerPdf(admission: IpdAdmissionDetail, t
   return pdf.save();
 }
 
+const ROOM_PLATE_FIELD_LAYOUT: Record<string, Partial<DocumentTemplateOverlayField>> = {
+  ward: { x: 10, y: 62, width: 80, height: 6, fontSize: 15 },
+  bed: { x: 10, y: 71, width: 80, height: 8, fontSize: 22 },
+  patientName: { x: 10, y: 82, width: 80, height: 6, fontSize: 13 },
+  uhid: { x: 10, y: 91, width: 80, height: 4, fontSize: 9 },
+};
+
+function normalizeRoomPlateFields(fields: DocumentTemplateOverlayField[]): DocumentTemplateOverlayField[] {
+  return fields.map((field) => ({ ...field, ...(ROOM_PLATE_FIELD_LAYOUT[field.key] ?? {}) }));
+}
+
 export async function generateIpdRoomPlatePdf(admission: IpdAdmissionDetail, template?: DocumentTemplate): Promise<Uint8Array> {
   const source = await loadSource(template, DEFAULT_TEMPLATES.roomPlate);
   const pdf = await PDFDocument.create();
@@ -209,14 +220,14 @@ export async function generateIpdRoomPlatePdf(admission: IpdAdmissionDetail, tem
   const { normal, bold } = await fonts(pdf);
   const target = pdf.getPages()[0];
   if (template?.overlayFields?.length) {
-    renderOverlayFields(target, template.overlayFields, admission, undefined, normal, bold);
+    renderOverlayFields(target, normalizeRoomPlateFields(template.overlayFields), admission, undefined, normal, bold);
   } else {
     const center = target.getWidth() / 2;
     const centerText = (text: string, y: number, size: number, font: PDFFont) => draw(target, text, center - font.widthOfTextAtSize(text, size) / 2, y, font, size);
-    centerText(safe(admission.ward), target.getHeight() * 0.76, 24, bold);
-    centerText(`BED ${safe(admission.bed)}`, target.getHeight() * 0.60, 42, bold);
-    centerText(safe(admission.patientName), target.getHeight() * 0.43, 20, bold);
-    centerText(`UHID: ${safe(admission.uhid)}`, target.getHeight() * 0.35, 11, normal);
+    centerText(safe(admission.ward), target.getHeight() * 0.34, 15, bold);
+    centerText(`BED ${safe(admission.bed)}`, target.getHeight() * 0.25, 22, bold);
+    centerText(safe(admission.patientName), target.getHeight() * 0.15, 13, bold);
+    centerText(`UHID: ${safe(admission.uhid)}`, target.getHeight() * 0.08, 9, normal);
   }
   return pdf.save();
 }

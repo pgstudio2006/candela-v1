@@ -1,4 +1,5 @@
-import { PDFDocument, PDFPage, StandardFonts, rgb, type Color } from "pdf-lib";
+import { PDFDocument, PDFPage, StandardFonts, rgb, type Color, type PDFEmbeddedPage } from "pdf-lib";
+import { loadTemplateFile } from "@/lib/pdf-template-loader";
 import {
   type LabDataType,
   type LabFieldMaster,
@@ -247,6 +248,15 @@ export async function buildLabReportPdfBytes(
   _template?: LabReportTemplateSpec,
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
+  let embeddedTemplate: PDFEmbeddedPage | undefined;
+  if (_template?.mimeType === "application/pdf" && _template.fileData) {
+    const templateBytes = await loadTemplateFile(_template.fileData);
+    if (templateBytes) {
+      const templateDoc = await PDFDocument.load(templateBytes);
+      [embeddedTemplate] = await pdfDoc.embedPdf(templateDoc, [0]);
+    }
+  }
+
   const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -277,10 +287,21 @@ export async function buildLabReportPdfBytes(
 
   let pageIndex = 0;
 
+  const templateTopMargin = Math.min(180, Math.max(90, _template?.marginTop ?? 120));
+
   function newPage(): PDFPage {
     const p = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    if (embeddedTemplate) {
+      p.drawPage(embeddedTemplate, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
+    }
     pageIndex++;
     return p;
+  }
+
+  function startPage(p: PDFPage): number {
+    return embeddedTemplate
+      ? PAGE_HEIGHT - templateTopMargin
+      : drawHeader(p, { normal: normalFont, bold: boldFont });
   }
 
   function drawHRule(p: PDFPage, y: number, thick: number = 0.5, color: Color = ruleColor) {
@@ -446,7 +467,7 @@ export async function buildLabReportPdfBytes(
   // ------------------------------------------------------------------
   if (orders.length === 0) {
     const p = newPage();
-    const y = drawHeader(p, { normal: normalFont, bold: boldFont });
+    const y = startPage(p);
     p.drawText("No laboratory orders to display.", {
       x: MARGIN_LEFT, y, size: 11, font: normalFont, color: textSecondary,
     });
@@ -455,7 +476,7 @@ export async function buildLabReportPdfBytes(
   }
 
   let page = newPage();
-  let y = drawHeader(page, { normal: normalFont, bold: boldFont });
+  let y = startPage(page);
 
   for (let ordIdx = 0; ordIdx < orders.length; ordIdx++) {
     const ord = orders[ordIdx];
@@ -481,7 +502,7 @@ export async function buildLabReportPdfBytes(
         if (y - 28 < MARGIN_BOTTOM + 40) {
           drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
           page = newPage();
-          y = drawHeader(page, { normal: normalFont, bold: boldFont });
+          y = startPage(page);
           y = drawTableHeader(page, y);
         }
         y = drawCategoryHeader(page, y, section);
@@ -493,7 +514,7 @@ export async function buildLabReportPdfBytes(
         if (y - 24 < MARGIN_BOTTOM + 40) {
           drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
           page = newPage();
-          y = drawHeader(page, { normal: normalFont, bold: boldFont });
+          y = startPage(page);
           y = drawTableHeader(page, y);
         }
         y = drawPanelHeader(page, y, item.label + (item.sampleType ? ` \u00b7 ${item.sampleType}` : ""));
@@ -551,7 +572,7 @@ export async function buildLabReportPdfBytes(
           }
           drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
           page = newPage();
-          y = drawHeader(page, { normal: normalFont, bold: boldFont });
+          y = startPage(page);
           y = drawTableHeader(page, y);
         }
 
@@ -568,7 +589,7 @@ export async function buildLabReportPdfBytes(
         if (y - panelNotes.length * 12 - 8 < MARGIN_BOTTOM + 40) {
           drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
           page = newPage();
-          y = drawHeader(page, { normal: normalFont, bold: boldFont });
+          y = startPage(page);
         }
         y = drawNotes(page, y, panelNotes);
       }
@@ -588,7 +609,7 @@ export async function buildLabReportPdfBytes(
     if (y < MARGIN_BOTTOM + 60) {
       drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
       page = newPage();
-      y = drawHeader(page, { normal: normalFont, bold: boldFont });
+      y = startPage(page);
     }
 
     y -= 12;
@@ -600,7 +621,7 @@ export async function buildLabReportPdfBytes(
     // Start next order on a new page
     if (!isLastOrder) {
       page = newPage();
-      y = drawHeader(page, { normal: normalFont, bold: boldFont });
+      y = startPage(page);
     }
   }
 

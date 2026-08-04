@@ -24,7 +24,7 @@ import type {
   LabReportTemplate,
   LabTemplateOverlayField,
 } from "@/design-system/lab-data";
-import type { DocumentTemplate } from "@/design-system/document-templates";
+import { DEFAULT_DOCUMENT_TEMPLATES, type DocumentTemplate } from "@/design-system/document-templates";
 
 export type LabSnapshot = {
   fieldMasters: LabFieldMaster[];
@@ -903,7 +903,14 @@ function labTemplateSpecFromDocumentTemplate(template: DocumentTemplate | null):
   };
 }
 
+const PATAUDI_BRANCH_ID = "branch_pataudi";
+
 async function getDefaultLabReportTemplateForPdf(ctx: ServerContext): Promise<LabReportTemplateSpec | undefined> {
+  if (ctx.branchId === PATAUDI_BRANCH_ID) {
+    const template = DEFAULT_DOCUMENT_TEMPLATES.find((item) => item.kind === "lab_report");
+    return labTemplateSpecFromDocumentTemplate(template ?? null);
+  }
+
   const template = await getDefaultDocumentTemplate(ctx, "lab_report");
   return labTemplateSpecFromDocumentTemplate(template);
 }
