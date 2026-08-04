@@ -12,7 +12,6 @@ import {
   resolveAge,
   getApplicableRange,
   formatReferenceRange,
-  formatAge,
   parseNumber,
 } from "@/lib/lab-ranges";
 
@@ -135,7 +134,18 @@ function measureHeight(text: string, font: any, size: number, maxWidth: number, 
 function dateLabel(dateStr?: string | Date | null): string {
   if (!dateStr) return "—";
   const d = new Date(String(dateStr));
-  return isNaN(d.getTime()) ? String(dateStr) : d.toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Kolkata" });
+  if (isNaN(d.getTime())) return String(dateStr);
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  }).formatToParts(d);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("day")}-${value("month")}-${value("year")} ${value("hour")}:${value("minute")} ${value("dayPeriod").toUpperCase()}`;
 }
 
 function ageGenderText(patient: LabReportPdfPatient): string {
@@ -143,7 +153,7 @@ function ageGenderText(patient: LabReportPdfPatient): string {
   const gender = patient.gender
     ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1).toLowerCase()
     : "—";
-  return `${formatAge(age)} / ${gender}`;
+  return `${age?.years && age.years > 0 ? `${age.years}Yrs.-` : "—"} / ${gender}`;
 }
 
 function flagPrefix(flag?: LabResultFlag): string {
@@ -259,6 +269,7 @@ export async function buildLabReportPdfBytes(
 
   const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const categoryFont = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
 
   const textPrimary = rgb(0.05, 0.05, 0.05);
   const textSecondary = rgb(0.38, 0.38, 0.38);
@@ -271,7 +282,7 @@ export async function buildLabReportPdfBytes(
   const usableWidth = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 
   // Results table column widths: Test Name | Result | Unit | Normal Value
-  const colWidths = [usableWidth * 0.46, usableWidth * 0.16, usableWidth * 0.14, usableWidth * 0.24];
+  const colWidths = [usableWidth * 0.50, usableWidth * 0.16, usableWidth * 0.16, usableWidth * 0.18];
   const colX = [
     MARGIN_LEFT,
     MARGIN_LEFT + colWidths[0],
@@ -279,9 +290,9 @@ export async function buildLabReportPdfBytes(
     MARGIN_LEFT + colWidths[0] + colWidths[1] + colWidths[2],
   ];
 
-  const ROW_HEIGHT = 22;       // fixed height per test row
-  const ROW_FONT_SIZE = 9;
-  const PATIENT_ROW_GAP = 14;
+  const ROW_HEIGHT = 15.5;     // compact LIS-style row height
+  const ROW_FONT_SIZE = 8;
+  const PATIENT_ROW_GAP = 13;
   const LABEL_WIDTH = 90;
   const HALF_W = usableWidth / 2;
 
@@ -356,11 +367,11 @@ export async function buildLabReportPdfBytes(
     const headerLabels = ["Test Name", "Result", "Unit", "Normal Value"];
     for (let i = 0; i < headerLabels.length; i++) {
       const align = i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left";
-      const textW = boldFont.widthOfTextAtSize(headerLabels[i], 9.5);
+      const textW = boldFont.widthOfTextAtSize(headerLabels[i], 8.5);
       let drawX = colX[i] + 2;
       if (align === "right") drawX = colX[i] + colWidths[i] - textW - 4;
       else if (align === "center") drawX = colX[i] + (colWidths[i] - textW) / 2;
-      p.drawText(headerLabels[i], { x: drawX, y: y - 10, size: 9.5, font: boldFont, color: textPrimary });
+      p.drawText(headerLabels[i], { x: drawX, y: y - 10, size: 8.5, font: boldFont, color: textPrimary });
     }
     const afterY = y - 14;
     drawHRule(p, afterY, 0.75, ruleColor);
@@ -378,15 +389,15 @@ export async function buildLabReportPdfBytes(
   }
 
   function drawCategoryHeader(p: PDFPage, y: number, label: string): number {
-    const sW = boldFont.widthOfTextAtSize(label, 11);
+    const sW = categoryFont.widthOfTextAtSize(label, 10);
     p.drawText(label, {
       x: MARGIN_LEFT + usableWidth / 2 - sW / 2,
-      y: y - 12,
-      size: 11,
-      font: boldFont,
+      y: y - 11,
+      size: 10,
+      font: categoryFont,
       color: textPrimary,
     });
-    return y - 22;
+    return y - 18;
   }
 
   function drawTestRow(p: PDFPage, y: number, cells: string[], isAbnormal: boolean): number {
@@ -517,7 +528,7 @@ export async function buildLabReportPdfBytes(
           y = startPage(page);
           y = drawTableHeader(page, y);
         }
-        y = drawPanelHeader(page, y, item.label + (item.sampleType ? ` \u00b7 ${item.sampleType}` : ""));
+        y = drawPanelHeader(page, y, item.label);
       }
 
       if (fields.length === 0) {
