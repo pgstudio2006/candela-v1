@@ -55,6 +55,8 @@ export default function WhatsAppTemplatesPage() {
   const [tab, setTab] = useState<"connection" | "templates" | "logs" | "test">("connection");
   const [fbLoaded, setFbLoaded] = useState(false);
   const [fbConnecting, setFbConnecting] = useState(false);
+  const [wabaId, setWabaId] = useState("");
+  const [phoneNumberId, setPhoneNumberId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,7 +159,11 @@ export default function WhatsAppTemplatesPage() {
           fetch("/api/admin/whatsapp/connect", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ accessToken }),
+            body: JSON.stringify({ 
+              accessToken,
+              wabaId: wabaId.trim() || undefined,
+              phoneNumberId: phoneNumberId.trim() || undefined,
+            }),
           })
             .then((res) => res.json())
             .then((data) => {
@@ -236,12 +242,38 @@ export default function WhatsAppTemplatesPage() {
         <Panel title="Connect WhatsApp">
           <div className="space-y-4">
             <p className="text-[13px] text-neutral-600">
-              Connect your Meta WhatsApp Business account via Embedded Signup. This will allow the system to send automated messages directly using your Meta API limits.
+              Connect your Meta WhatsApp Business account via Embedded Signup. To ensure a stable connection, please provide your exact Business Account ID and Phone Number ID from the Meta Developer Dashboard before connecting.
             </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-neutral-700">
+                  WhatsApp Business Account ID (WABA ID)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 10483920..."
+                  value={wabaId}
+                  onChange={(e) => setWabaId(e.target.value)}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-[13px]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-neutral-700">
+                  Phone Number ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 10293847..."
+                  value={phoneNumberId}
+                  onChange={(e) => setPhoneNumberId(e.target.value)}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-[13px]"
+                />
+              </div>
+            </div>
             <AttioButton
               variant="primary"
               onClick={launchWhatsAppSignup}
-              disabled={!fbLoaded || fbConnecting}
+              disabled={!fbLoaded || fbConnecting || !wabaId.trim() || !phoneNumberId.trim()}
             >
               {fbConnecting ? "Connecting..." : "Connect via Meta"}
             </AttioButton>
