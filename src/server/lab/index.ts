@@ -505,6 +505,11 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
   });
   const catalogMap = new Map(catalogs.map((c) => [c.id, c]));
 
+  const orderingUser = await prisma.user.findFirst({
+    where: { id: ctx.userId },
+    select: { name: true },
+  });
+
   const order = await prisma.labOrder.create({
     data: {
       ...scope,
@@ -512,7 +517,7 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
       visitId: input.visitId ?? null,
       admissionId: input.admissionId ?? null,
       orderedBy: ctx.userId,
-      orderedByName: ctx.userId,
+      orderedByName: orderingUser?.name ?? ctx.userId,
       source: input.source ?? "direct",
       status: "pending_billing",
       items: {
