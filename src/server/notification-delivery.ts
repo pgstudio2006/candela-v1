@@ -259,6 +259,7 @@ export async function deliverWhatsAppDocument(
   documentUrl: string,
   filename: string,
   caption: string,
+  connection?: { accessToken: string; phoneNumberId: string }
 ): Promise<DeliveryResult> {
   const provider = process.env.WHATSAPP_PROVIDER || (process.env.TWILIO_WHATSAPP_FROM ? "twilio" : "meta");
 
@@ -295,9 +296,9 @@ export async function deliverWhatsAppDocument(
     return { ok: true, provider: "twilio", detail: `Message SID: ${data.sid ?? "unknown"}` };
   }
 
-  const token = process.env.WHATSAPP_API_TOKEN;
+  const token = connection?.accessToken ?? process.env.WHATSAPP_API_TOKEN;
   let baseUrl = process.env.WHATSAPP_API_BASE_URL ?? "https://graph.facebook.com/v21.0";
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const phoneNumberId = connection?.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (baseUrl.includes("telecrm.in") || baseUrl.includes("/waca")) {
     baseUrl = "https://graph.facebook.com/v21.0";
