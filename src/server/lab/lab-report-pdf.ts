@@ -400,7 +400,7 @@ export async function buildLabReportPdfBytes(
       ["UHID No. :", patient.uhid || "\u2014"],
       ["Patient Name :", patient.name || "\u2014"],
       ["Age/Gender :", ageGenderText(patient)],
-      ["Mobile No. :", patient.phone || "\u2014"],
+      [isPataudi ? "Mobile No :" : "Mobile No. :", patient.phone || "\u2014"],
     ];
     const rightRows: [string, string][] = [
       ["Collection Time :", order.sampleCollectedAt ? dateLabel(order.sampleCollectedAt) : "\u2014"],
@@ -415,12 +415,12 @@ export async function buildLabReportPdfBytes(
       if (leftRows[i]) {
         const [lLabel, lValue] = leftRows[i];
         p.drawText(lLabel, { x: MARGIN_LEFT, y: rowY, size: 9, font: boldFont, color: textPrimary });
-        p.drawText(lValue, { x: MARGIN_LEFT + LABEL_WIDTH, y: rowY, size: 9, font: normalFont, color: textPrimary });
+        p.drawText(lValue, { x: MARGIN_LEFT + LABEL_WIDTH, y: rowY, size: 9, font: isPataudi ? boldFont : normalFont, color: textPrimary });
       }
       if (rightRows[i]) {
         const [rLabel, rValue] = rightRows[i];
         p.drawText(rLabel, { x: MARGIN_LEFT + HALF_W, y: rowY, size: 9, font: boldFont, color: textPrimary });
-        p.drawText(rValue, { x: MARGIN_LEFT + HALF_W + LABEL_WIDTH, y: rowY, size: 9, font: normalFont, color: textPrimary });
+        p.drawText(rValue, { x: MARGIN_LEFT + HALF_W + LABEL_WIDTH, y: rowY, size: 9, font: isPataudi ? boldFont : normalFont, color: textPrimary });
       }
       rowY -= PATIENT_ROW_GAP;
     }
@@ -431,18 +431,20 @@ export async function buildLabReportPdfBytes(
   }
 
   function drawTableHeader(p: PDFPage, y: number): number {
-    // Light grey background bar
-    p.drawRectangle({
-      x: MARGIN_LEFT,
-      y: y - 13,
-      width: usableWidth,
-      height: 15,
-      color: headerBg,
-    });
+    if (!isPataudi) {
+      // Light grey background bar
+      p.drawRectangle({
+        x: MARGIN_LEFT,
+        y: y - 13,
+        width: usableWidth,
+        height: 15,
+        color: headerBg,
+      });
+    }
     drawHRule(p, y + 2, 0.75, ruleColor);
     const headerLabels = ["Test Name", "Result", "Unit", "Normal Value"];
     for (let i = 0; i < headerLabels.length; i++) {
-      const align = i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left";
+      const align = isPataudi ? "left" : (i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left");
       const textW = boldFont.widthOfTextAtSize(headerLabels[i], 8.5);
       let drawX = colX[i] + 2;
       if (align === "right") drawX = colX[i] + colWidths[i] - textW - 4;
@@ -465,15 +467,16 @@ export async function buildLabReportPdfBytes(
   }
 
   function drawCategoryHeader(p: PDFPage, y: number, label: string): number {
-    const sW = categoryFont.widthOfTextAtSize(label, 10);
+    const fontSize = isPataudi ? 14 : 10;
+    const sW = categoryFont.widthOfTextAtSize(label, fontSize);
     p.drawText(label, {
       x: MARGIN_LEFT + usableWidth / 2 - sW / 2,
-      y: y - 11,
-      size: 10,
+      y: y - fontSize - 1,
+      size: fontSize,
       font: categoryFont,
       color: textPrimary,
     });
-    return y - 18;
+    return y - fontSize - 8;
   }
 
   function drawTestRow(p: PDFPage, y: number, cells: string[], isAbnormal: boolean): number {
@@ -481,9 +484,10 @@ export async function buildLabReportPdfBytes(
     for (let i = 0; i < cells.length; i++) {
       const color = i === 1 && isAbnormal ? flagRed : textPrimary;
       const font = i === 1 && isAbnormal ? boldFont : normalFont;
-      const align = i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left";
+      const align = isPataudi ? "left" : (i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left");
       // Truncate text to fit column width
       let text = cells[i];
+      if (isPataudi && i === 0) text = text.toUpperCase();
       const maxW = colWidths[i] - 8;
       let textW = font.widthOfTextAtSize(text, ROW_FONT_SIZE);
       if (textW > maxW) {
