@@ -179,28 +179,30 @@ function drawHeader(
   p: PDFPage,
   fonts: { normal: any; bold: any },
   branchName?: string,
+  isPataudi: boolean = false,
 ): number {
   const rightX = PAGE_WIDTH - MARGIN_RIGHT;
   const usableWidth = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
   let y = PAGE_HEIGHT - MARGIN_TOP;
 
-  // Hospital name — centered, bold, 16px
-  const hospitalName = (branchName ?? CLINIC_BRAND.name).toUpperCase();
-  const nameSize = 16;
-  const nameW = fonts.bold.widthOfTextAtSize(hospitalName, nameSize);
-  p.drawText(hospitalName, {
-    x: MARGIN_LEFT + usableWidth / 2 - nameW / 2,
-    y: y - nameSize,
-    size: nameSize,
-    font: fonts.bold,
-    color: rgb(0.05, 0.05, 0.05),
-  });
-  y -= nameSize + 4;
+  if (isPataudi) {
+    // Hospital name — centered, bold, 16px
+    const hospitalName = "GLOBAL HOSPITAL & TRAUMA CENTRE";
+    const nameSize = 16;
+    const nameW = fonts.bold.widthOfTextAtSize(hospitalName, nameSize);
+    p.drawText(hospitalName, {
+      x: MARGIN_LEFT + usableWidth / 2 - nameW / 2,
+      y: y - nameSize,
+      size: nameSize,
+      font: fonts.bold,
+      color: rgb(0.05, 0.05, 0.05),
+    });
+    y -= nameSize + 4;
 
-  // Tagline / legal entity — centered, 9px
-  if (CLINIC_BRAND.legalEntity) {
-    const tagW = fonts.normal.widthOfTextAtSize(CLINIC_BRAND.legalEntity, 8.5);
-    p.drawText(CLINIC_BRAND.legalEntity, {
+    // Tagline / legal entity — centered, 8.5px
+    const legalEntity = "A Unit of ASP Global Health & Educare Pvt. Ltd.";
+    const tagW = fonts.normal.widthOfTextAtSize(legalEntity, 8.5);
+    p.drawText(legalEntity, {
       x: MARGIN_LEFT + usableWidth / 2 - tagW / 2,
       y,
       size: 8.5,
@@ -208,15 +210,21 @@ function drawHeader(
       color: rgb(0.38, 0.38, 0.38),
     });
     y -= 11;
-  }
 
-  // GST + Phone line — centered, 8px
-  const contactParts: string[] = [];
-  if (CLINIC_BRAND.gstNumber) contactParts.push(`GST: ${CLINIC_BRAND.gstNumber}`);
-  if (CLINIC_BRAND.phone) contactParts.push(`Ph: ${CLINIC_BRAND.phone}`);
-  if (CLINIC_BRAND.email) contactParts.push(CLINIC_BRAND.email);
-  if (contactParts.length) {
-    const contactLine = contactParts.join("  |  ");
+    // GST — centered, 8px
+    const gstLine = "GST NO. : 06AAZCA2057M1Z3";
+    const gstW = fonts.normal.widthOfTextAtSize(gstLine, 8);
+    p.drawText(gstLine, {
+      x: MARGIN_LEFT + usableWidth / 2 - gstW / 2,
+      y,
+      size: 8,
+      font: fonts.normal,
+      color: rgb(0.38, 0.38, 0.38),
+    });
+    y -= 10;
+
+    // Phone & Email — centered, 8px
+    const contactLine = "Mobile No. : 0124-2672124, 9996888124 , Email-ID : globalhospitalpataudi@gmail.com";
     const cW = fonts.normal.widthOfTextAtSize(contactLine, 8);
     p.drawText(contactLine, {
       x: MARGIN_LEFT + usableWidth / 2 - cW / 2,
@@ -226,11 +234,10 @@ function drawHeader(
       color: rgb(0.38, 0.38, 0.38),
     });
     y -= 10;
-  }
 
-  // Address — centered, 8px
-  if (CLINIC_BRAND.address) {
-    const addrLines = wrapText(CLINIC_BRAND.address, fonts.normal, 7.5, usableWidth);
+    // Address — centered, 7.5px
+    const address = "Opp. New Bus Stand, Near Civil Hospital Pataudi, Gurugram (Hr.)";
+    const addrLines = wrapText(address, fonts.normal, 7.5, usableWidth);
     for (const line of addrLines) {
       const aW = fonts.normal.widthOfTextAtSize(line, 7.5);
       p.drawText(line, {
@@ -241,6 +248,66 @@ function drawHeader(
         color: rgb(0.38, 0.38, 0.38),
       });
       y -= 9;
+    }
+  } else {
+    // Hospital name — centered, bold, 16px
+    const hospitalName = (branchName ?? CLINIC_BRAND.name).toUpperCase();
+    const nameSize = 16;
+    const nameW = fonts.bold.widthOfTextAtSize(hospitalName, nameSize);
+    p.drawText(hospitalName, {
+      x: MARGIN_LEFT + usableWidth / 2 - nameW / 2,
+      y: y - nameSize,
+      size: nameSize,
+      font: fonts.bold,
+      color: rgb(0.05, 0.05, 0.05),
+    });
+    y -= nameSize + 4;
+
+    // Tagline / legal entity — centered, 9px
+    if (CLINIC_BRAND.legalEntity) {
+      const tagW = fonts.normal.widthOfTextAtSize(CLINIC_BRAND.legalEntity, 8.5);
+      p.drawText(CLINIC_BRAND.legalEntity, {
+        x: MARGIN_LEFT + usableWidth / 2 - tagW / 2,
+        y,
+        size: 8.5,
+        font: fonts.normal,
+        color: rgb(0.38, 0.38, 0.38),
+      });
+      y -= 11;
+    }
+
+    // GST + Phone line — centered, 8px
+    const contactParts: string[] = [];
+    if (CLINIC_BRAND.gstNumber) contactParts.push(`GST: ${CLINIC_BRAND.gstNumber}`);
+    if (CLINIC_BRAND.phone) contactParts.push(`Ph: ${CLINIC_BRAND.phone}`);
+    if (CLINIC_BRAND.email) contactParts.push(CLINIC_BRAND.email);
+    if (contactParts.length) {
+      const contactLine = contactParts.join("  |  ");
+      const cW = fonts.normal.widthOfTextAtSize(contactLine, 8);
+      p.drawText(contactLine, {
+        x: MARGIN_LEFT + usableWidth / 2 - cW / 2,
+        y,
+        size: 8,
+        font: fonts.normal,
+        color: rgb(0.38, 0.38, 0.38),
+      });
+      y -= 10;
+    }
+
+    // Address — centered, 8px
+    if (CLINIC_BRAND.address) {
+      const addrLines = wrapText(CLINIC_BRAND.address, fonts.normal, 7.5, usableWidth);
+      for (const line of addrLines) {
+        const aW = fonts.normal.widthOfTextAtSize(line, 7.5);
+        p.drawText(line, {
+          x: MARGIN_LEFT + usableWidth / 2 - aW / 2,
+          y,
+          size: 7.5,
+          font: fonts.normal,
+          color: rgb(0.38, 0.38, 0.38),
+        });
+        y -= 9;
+      }
     }
   }
 
@@ -273,6 +340,8 @@ export async function buildLabReportPdfBytes(
       [embeddedTemplate] = await pdfDoc.embedPdf(templateDoc, [0]);
     }
   }
+
+  const isPataudi = orders.some((o) => o.branchId === "branch_pataudi");
 
   const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -319,7 +388,7 @@ export async function buildLabReportPdfBytes(
   function startPage(p: PDFPage): number {
     return embeddedTemplate
       ? PAGE_HEIGHT - templateTopMargin
-      : drawHeader(p, { normal: normalFont, bold: boldFont });
+      : drawHeader(p, { normal: normalFont, bold: boldFont }, undefined, isPataudi);
   }
 
   function drawHRule(p: PDFPage, y: number, thick: number = 0.5, color: Color = ruleColor) {
