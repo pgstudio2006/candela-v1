@@ -44,6 +44,23 @@ export async function POST(request: NextRequest) {
     const changes = entry?.changes?.[0];
     const value = changes?.value;
 
+    const phoneNumberId = value?.metadata?.phone_number_id;
+    let connectionId: string | undefined;
+    let tenantId: string | undefined;
+    let branchId: string | undefined;
+
+    if (phoneNumberId) {
+      const conn = await prisma.whatsappConnection.findFirst({
+        where: { phoneNumberId: String(phoneNumberId), active: true },
+        select: { id: true, tenantId: true, branchId: true },
+      });
+      if (conn) {
+        connectionId = conn.id;
+        tenantId = conn.tenantId;
+        branchId = conn.branchId;
+      }
+    }
+
     if (value?.messages?.[0]) {
       const message = value.messages[0];
       const from = message.from;
@@ -52,7 +69,42 @@ export async function POST(request: NextRequest) {
 
       console.info(`[whatsapp:webhook] Incoming message from ${from}: ${text.slice(0, 100)}`);
 
-      // TODO: Handle incoming messages (auto-reply, lead creation, etc.)
+      if (connectionId && tenantId && branchId) {
+        let conversation = await prisma.conversation.findFirst({
+          where: { connectionId, contactPhone: from },
+        });
+
+        if (!conversation) {
+          const patient = await prisma.patient.findFirst({
+            where: { tenantId, phone: from },
+          });
+          conversation = await prisma.conversation.create({
+            data: {
+              tenantId,
+              branchId,
+              connectionId,
+              contactPhone: from,
+              patientId: patient?.id,
+              contactName: message.profile?.name,
+            },
+          });
+        } else {
+          await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: { lastMessageAt: new Date() },
+          });
+        }
+
+        await prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            direction: "inbound",
+            body: text,
+            messageId,
+            status: "delivered",
+          },
+        });
+      }
     }
 
     if (value?.statuses?.[0]) {

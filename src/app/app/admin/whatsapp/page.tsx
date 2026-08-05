@@ -3,6 +3,13 @@
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel } from "@/components/frontdesk/ui";
 import { useEffect, useState, useCallback } from "react";
+import Script from "next/script";
+
+declare global {
+  interface Window {
+    FB: any;
+  }
+}
 
 type Template = {
   id: string | null;
@@ -45,7 +52,9 @@ export default function WhatsAppTemplatesPage() {
   const [logs, setLogs] = useState<WhatsAppLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [tab, setTab] = useState<"templates" | "logs" | "test">("templates");
+  const [tab, setTab] = useState<"connection" | "templates" | "logs" | "test">("connection");
+  const [fbLoaded, setFbLoaded] = useState(false);
+  const [fbConnecting, setFbConnecting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,6 +147,36 @@ export default function WhatsAppTemplatesPage() {
     }
   };
 
+  const launchWhatsAppSignup = () => {
+    if (!window.FB) return alert("Facebook SDK not loaded yet.");
+    setFbConnecting(true);
+    window.FB.login(
+      (response: any) => {
+        if (response.authResponse) {
+          const accessToken = response.authResponse.accessToken;
+          fetch("/api/admin/whatsapp/connect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken }),
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.ok) alert("WhatsApp connected successfully!");
+              else alert(data.error || "Failed to connect WhatsApp");
+            })
+            .catch(() => alert("Network error"))
+            .finally(() => setFbConnecting(false));
+        } else {
+          setFbConnecting(false);
+        }
+      },
+      {
+        scope: "whatsapp_business_management,whatsapp_business_messaging",
+        return_scopes: true,
+      }
+    );
+  };
+
   return (
     <PageChrome
       breadcrumbs={[
@@ -147,7 +186,28 @@ export default function WhatsAppTemplatesPage() {
       title="WhatsApp Templates"
       meta="Gurgaon branch · Editable message templates"
     >
+      <Script
+        src="https://connect.facebook.net/en_US/sdk.js"
+        strategy="lazyOnload"
+        onLoad={() => {
+          if (window.FB) {
+            window.FB.init({
+              appId: "2599951033795789",
+              cookie: true,
+              xfbml: true,
+              version: "v20.0",
+            });
+            setFbLoaded(true);
+          }
+        }}
+      />
       <div className="mb-4 flex gap-2">
+        <AttioButton
+          variant={tab === "connection" ? "primary" : "secondary"}
+          onClick={() => setTab("connection")}
+        >
+          Connection
+        </AttioButton>
         <AttioButton
           variant={tab === "templates" ? "primary" : "secondary"}
           onClick={() => setTab("templates")}
@@ -171,6 +231,21 @@ export default function WhatsAppTemplatesPage() {
       {loading ? (
         <Panel title="Loading...">
           <p className="text-[13px] text-neutral-500">Loading WhatsApp configuration...</p>
+        </Panel>
+      ) : tab === "connection" ? (
+        <Panel title="Connect WhatsApp">
+          <div className="space-y-4">
+            <p className="text-[13px] text-neutral-600">
+              Connect your Meta WhatsApp Business account via Embedded Signup. This will allow the system to send automated messages directly using your Meta API limits.
+            </p>
+            <AttioButton
+              variant="primary"
+              onClick={launchWhatsAppSignup}
+              disabled={!fbLoaded || fbConnecting}
+            >
+              {fbConnecting ? "Connecting..." : "Connect via Meta"}
+            </AttioButton>
+          </div>
         </Panel>
       ) : tab === "templates" ? (
         <div className="space-y-4">

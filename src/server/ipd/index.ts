@@ -30,6 +30,7 @@ import { hasPermission } from "@/server/permissions";
 import { createVisitInvoice, getVisitReceipt } from "@/server/invoicing";
 import { generateInvoicePdf } from "@/lib/invoice-pdf";
 import { deliverWhatsAppDocument } from "@/server/notification-delivery";
+import { getActiveConnection, decryptWhatsAppToken } from "@/server/whatsapp/connection";
 import { computeGstInvoice, parseBranchGstSettings } from "@/lib/gst-invoicing";
 import { readPharmacyWorkspace } from "@/server/workspace-state";
 import { defaultPharmacyState } from "@/server/revenue/state-seeds";
@@ -795,7 +796,13 @@ export async function sendIpdFinalBillOnWhatsApp(
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const documentUrl = `${baseUrl}/api/public/ipd-final-bill/${docId}`;
   const caption = `Your IPD final bill ${invoiceNumber} is ready. Please find the attached PDF. Thank you for choosing Candela.`;
-  const result = await deliverWhatsAppDocument(phone, documentUrl, `ipd-final-bill-${invoiceNumber}.pdf`, caption);
+  const connection = await getActiveConnection(ctx);
+  const connDetails = connection ? {
+    accessToken: decryptWhatsAppToken(connection.accessToken),
+    phoneNumberId: connection.phoneNumberId,
+  } : undefined;
+
+  const result = await deliverWhatsAppDocument(phone, documentUrl, `ipd-final-bill-${invoiceNumber}.pdf`, caption, connDetails);
 
   return { ok: result.ok, docId, detail: result.detail };
 }

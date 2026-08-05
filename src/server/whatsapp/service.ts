@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { ServerContext } from "@/server/context";
 import { deliverWhatsApp } from "@/server/notification-delivery";
+import { getActiveConnection, decryptWhatsAppToken } from "@/server/whatsapp/connection";
 
 export type WhatsAppTrigger =
   | "checkin_doctor_schedule"
@@ -202,7 +203,13 @@ export async function sendWhatsApp(
   }
 
   try {
-    const result = await deliverWhatsApp(recipient, body);
+    const connection = await getActiveConnection(ctx);
+    const connDetails = connection ? {
+      accessToken: decryptWhatsAppToken(connection.accessToken),
+      phoneNumberId: connection.phoneNumberId,
+    } : undefined;
+
+    const result = await deliverWhatsApp(recipient, body, connDetails);
 
     const messageId = result.detail?.match(/wamid\S+/)?.[0] ?? null;
 

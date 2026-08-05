@@ -10,6 +10,7 @@ import { serializeForClient } from "@/server/serialize";
 import { getApplicableRange, parseNumber } from "@/lib/lab-ranges";
 import { buildLabReportPdfBytes, bytesToDataUrl, type LabReportTemplateSpec } from "./lab-report-pdf";
 import { deliverWhatsAppDocument } from "@/server/notification-delivery";
+import { getActiveConnection, decryptWhatsAppToken } from "@/server/whatsapp/connection";
 import { getDefaultDocumentTemplate } from "@/server/doctor";
 import type {
   LabDataType,
@@ -856,7 +857,13 @@ export async function sendLabReportOnWhatsApp(
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const documentUrl = `${baseUrl}/api/patient-documents/${docId}`;
   const caption = `Your lab report for ${patient.name ?? patient.fullName ?? "Patient"} is ready. Open the attached PDF to view results.`;
-  const result = await deliverWhatsAppDocument(phone, documentUrl, `lab-report-${order.id}.pdf`, caption);
+  const connection = await getActiveConnection(ctx);
+  const connDetails = connection ? {
+    accessToken: decryptWhatsAppToken(connection.accessToken),
+    phoneNumberId: connection.phoneNumberId,
+  } : undefined;
+
+  const result = await deliverWhatsAppDocument(phone, documentUrl, `lab-report-${order.id}.pdf`, caption, connDetails);
   return { ok: result.ok, docId, detail: result.detail };
 }
 
