@@ -733,6 +733,7 @@ export async function generateIpdFinalBillPdf(
   invoiceId: string,
 ): Promise<{ docId: string; dataUrl: string; invoiceNumber: string }> {
   const receipt = await getVisitReceipt(ctx, "", invoiceId);
+  receipt.isIpd = true;
   const pdfBytes = await generateInvoicePdf(receipt);
   const dataUrl = bytesToDataUrl(pdfBytes, `ipd-final-bill-${receipt.invoiceNumber}.pdf`);
   const docId = createId("ipdfbill");

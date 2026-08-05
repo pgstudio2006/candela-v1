@@ -82,6 +82,7 @@ export type OpdReceiptPayload = {
   taxTotal: number;
   placeOfSupply: string;
   isTaxInvoice: boolean;
+  isIpd?: boolean;
 };
 
 export function formatReceiptDate(iso: string): string {

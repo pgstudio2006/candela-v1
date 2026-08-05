@@ -140,7 +140,7 @@ function drawAdvancePayments(page: PDFPage, receipt: OpdReceiptPayload, font: PD
   drawText(page, "Advance & Paid Receipt", left, y, bold, FONT.header);
   y -= 13;
   const headers = ["Sr No.", "Receipt No.", "Name", "Qty", "Amount", "Net Amount"];
-  const columns = [left, 55, 145, 252, 285, 350];
+  const columns = [left, 55, 145, 235, 295, 350];
   headers.forEach((header, index) => {
     if (index >= 4) drawRight(page, header, columns[index], y, bold, FONT.header);
     else drawText(page, header, columns[index], y, bold, FONT.header);
@@ -155,7 +155,7 @@ function drawAdvancePayments(page: PDFPage, receipt: OpdReceiptPayload, font: PD
     drawText(page, safe(payment.receiptNo), columns[1], y, font, FONT.body);
     drawText(page, "IPD ADVANCE", columns[2], y, font, FONT.body);
     drawText(page, "1", columns[3], y, font, FONT.body);
-    drawRight(page, money(amount), columns[4] + 28, y, font, FONT.body);
+    drawRight(page, money(amount), columns[4], y, font, FONT.body);
     drawRight(page, money(amount), columns[5], y, font, FONT.body);
     y -= 13;
   });
@@ -300,7 +300,9 @@ export async function generateRoshniInvoicePdf(receipt: OpdReceiptPayload): Prom
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   page.drawRectangle({ x: 10, y: 380, width: PAGE.width - 10, height: 375, color: WHITE });
-  drawText(page, "OPD RECEIPT", 267, 746, bold, FONT.title);
+  const title = receipt.isIpd ? "IPD FINAL BILL" : "OPD RECEIPT";
+  const titleX = receipt.isIpd ? 255 : 267;
+  drawText(page, title, titleX, 746, bold, FONT.title);
   line(page, 15, 575, 735, 0.8);
   drawInfo(page, receipt, font, bold);
   const tableBottom = drawTable(page, receipt, font, bold);
