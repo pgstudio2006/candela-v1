@@ -357,13 +357,14 @@ export async function buildLabReportPdfBytes(
   const rightX = PAGE_WIDTH - MARGIN_RIGHT;
   const usableWidth = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 
-  // Results table column widths: Test Name | Result | Unit | Normal Value
-  const colWidths = [usableWidth * 0.50, usableWidth * 0.16, usableWidth * 0.16, usableWidth * 0.18];
+  // Results table column widths: Test Name | Result | Unit | Normal Value | Notes
+  const colWidths = [usableWidth * 0.40, usableWidth * 0.12, usableWidth * 0.12, usableWidth * 0.18, usableWidth * 0.18];
   const colX = [
     MARGIN_LEFT,
     MARGIN_LEFT + colWidths[0],
     MARGIN_LEFT + colWidths[0] + colWidths[1],
     MARGIN_LEFT + colWidths[0] + colWidths[1] + colWidths[2],
+    MARGIN_LEFT + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3],
   ];
 
   const ROW_HEIGHT = 15.5;     // compact LIS-style row height
@@ -405,7 +406,7 @@ export async function buildLabReportPdfBytes(
     const rightRows: [string, string][] = [
       ["Collection Time :", order.sampleCollectedAt ? dateLabel(order.sampleCollectedAt) : "\u2014"],
       ["Receiving Time :", order.sampleCollectedAt ? dateLabel(order.sampleCollectedAt) : "\u2014"],
-      ["Reporting Time :", order.completedAt ? dateLabel(order.completedAt) : dateLabel(new Date().toISOString())],
+      ["Reporting Time :", order.completedAt ? dateLabel(order.completedAt) : "\u2014"],
       ["Sample ID :", order.id.slice(-8).toUpperCase()],
     ];
 
@@ -442,7 +443,7 @@ export async function buildLabReportPdfBytes(
       });
     }
     drawHRule(p, y + 2, 0.75, ruleColor);
-    const headerLabels = ["Test Name", "Result", "Unit", "Normal Value"];
+    const headerLabels = ["Test Name", "Result", "Unit", "Normal Value", "Notes"];
     for (let i = 0; i < headerLabels.length; i++) {
       const align = isPataudi ? "left" : (i === 1 || i === 3 ? "right" : i === 2 ? "center" : "left");
       const textW = boldFont.widthOfTextAtSize(headerLabels[i], 8.5);
@@ -648,11 +649,7 @@ export async function buildLabReportPdfBytes(
         // Keep the normal-value column limited to the ordinary reference range.
         const refText = reportReferenceRange(range);
 
-        const rowCells = [field.fieldMaster.name, resultText, field.fieldMaster.unit || "\u2014", refText];
-
-        // Collect critical values as notes
-        if (range?.criticalLow != null) panelNotes.push(`${field.fieldMaster.name}: critical < ${range.criticalLow}`);
-        if (range?.criticalHigh != null) panelNotes.push(`${field.fieldMaster.name}: critical > ${range.criticalHigh}`);
+        const rowCells = [field.fieldMaster.name, resultText, field.fieldMaster.unit || "\u2014", refText, result?.note ?? ""];
 
         // Check page break before each row
         if (y - ROW_HEIGHT < MARGIN_BOTTOM + 40) {
