@@ -14,7 +14,7 @@ import { useSession } from "@/components/candela/session-provider";
 import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { getNurseOptionsAction, saveIpdTaskAction, updateIpdTaskStatusAction } from "@/app/actions/ipd-actions";
 import { listPatientDocumentsAction, type PatientDocumentListItem } from "@/app/actions/patient-document-actions";
-import { listActiveLabCatalogsAction, listLabOrdersAction } from "@/app/actions/lab-actions";
+import { listActiveLabCatalogsAction, listPatientLabOrdersAction, generateLabReportPdfAction } from "@/app/actions/lab-actions";
 import type { IpdPatient } from "@/design-system/doctor-data";
 import type { LabReportCatalog } from "@/design-system/lab-data";
 import type { Patient } from "@/design-system/frontdesk-data";
@@ -317,6 +317,7 @@ export function IpdRoundWorkspace({
   const [reportsLoading, setReportsLoading] = useState(false);
   const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
   const [labOrdersLoading, setLabOrdersLoading] = useState(false);
+  const [openingOrderId, setOpeningOrderId] = useState<string | null>(null);
 
   const vitals = useMemo(() => latestVitals(roundHistory), [roundHistory]);
   const doctorRounds = useMemo(
@@ -384,11 +385,36 @@ export function IpdRoundWorkspace({
   const loadLabOrders = async () => {
     if (!patientId) return;
     setLabOrdersLoading(true);
-    const res = await listLabOrdersAction(patientId);
+    const res = await listPatientLabOrdersAction(patientId);
     if (res.ok) {
       setLabOrders(res.data.filter((o) => !admission.id || o.admissionId === admission.id));
+    } else {
+      toast(res.error ?? "Failed to load lab orders", "error");
     }
     setLabOrdersLoading(false);
+  };
+
+  const handleViewLabReport = async (order: LabOrder) => {
+    if (order.status !== "completed") {
+      toast(`Report not available — order is ${order.status.replace("_", " ")}`, "default");
+      return;
+    }
+    setOpeningOrderId(order.id);
+    try {
+      const res = await generateLabReportPdfAction(order.id, null);
+      if (res.ok && res.data?.dataUrl) {
+        const win = window.open(res.data.dataUrl, "_blank", "noopener,noreferrer");
+        if (!win) toast("Could not open report. Please allow pop-ups.", "error");
+      } else if (!res.ok) {
+        toast(res.error ?? "Failed to generate report", "error");
+      } else {
+        toast("Report not available", "error");
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to open report", "error");
+    } finally {
+      setOpeningOrderId(null);
+    }
   };
 
   useEffect(() => {
@@ -952,7 +978,22 @@ export function IpdRoundWorkspace({
                       <p className="text-[13px] font-medium text-[var(--attio-text)]">
                         {new Date(order.orderedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                       </p>
-                      <StatusBadge label={order.status} variant={order.status === "completed" ? "success" : "neutral"} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge label={order.status} variant={order.status === "completed" ? "success" : "neutral"} />
+                        {order.status === "completed" ? (
+                          <AttioButton
+                            variant="secondary"
+                            className="h-7 gap-1.5 text-[11px]"
+                            onClick={() => void handleViewLabReport(order)}
+                            disabled={openingOrderId === order.id}
+                          >
+                            <Eye className="size-3.5" />
+                            {openingOrderId === order.id ? "Opening…" : "View report"}
+                          </AttioButton>
+                        ) : (
+                          <span className="text-[11px] text-[var(--attio-text-tertiary)]">Report not available</span>
+                        )}
+                      </div>
                     </div>
                     <p className="text-[11px] text-[var(--attio-text-tertiary)]">
                       {order.items.map((i) => i.label).join(" · ")}
@@ -1004,15 +1045,19 @@ export function IpdRoundWorkspace({
                         {doc.uploadedBy ? ` · by ${doc.uploadedBy}` : ""}
                       </p>
                     </div>
-                    <a
-                      href={doc.fileUrl ?? "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-[var(--attio-border)] bg-white px-2 text-[12px] font-medium hover:bg-[var(--attio-surface)] disabled:opacity-50"
-                    >
-                      <Eye className="size-3.5" />
-                      View
-                    </a>
+                    {doc.fileUrl ? (
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-[var(--attio-border)] bg-white px-2 text-[12px] font-medium hover:bg-[var(--attio-surface)]"
+                      >
+                        <Eye className="size-3.5" />
+                        View
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-[var(--attio-text-tertiary)]">File unavailable</span>
+                    )}
                   </li>
                 ))}
               </ul>
