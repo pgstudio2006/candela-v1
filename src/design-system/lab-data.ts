@@ -180,6 +180,8 @@ export type LabOrder = {
   admissionId?: string;
   orderedBy: string;
   orderedByName?: string;
+  reportedByStaffId?: string | null;
+  reportedByName?: string | null;
   source: "opd" | "ipd" | "emergency" | "direct";
   pregnancy: boolean;
   status: LabOrderStatus;

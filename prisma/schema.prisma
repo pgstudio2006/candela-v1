@@ -1694,6 +1694,9 @@ model AdminStaff {
   departmentIds Json
   branchId      String
   licenseNo     String?
+  degree        String?
+  designation   String?
+  signature     String?
   onDuty        Boolean  @default(false)
   joinedAt      String
   ward          String?
@@ -2379,6 +2382,8 @@ model LabOrder {
   admissionId       String?
   orderedBy         String // userId
   orderedByName     String?
+  reportedByStaffId String?
+  reportedByName    String?
   source            String // opd | ipd | emergency | direct
   status            String // pending_billing | ordered | sample_collected | in_progress | completed | cancelled
   pregnancy         Boolean        @default(false) // female pregnancy status for range matching

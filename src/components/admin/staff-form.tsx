@@ -41,6 +41,10 @@ export function StaffFormModal({ open, onClose, departments, branchId, initial, 
   const [role, setRole] = useState<AdminRole>("frontdesk");
   const [departmentIds, setDepartmentIds] = useState<string[]>([]);
   const [licenseNo, setLicenseNo] = useState("");
+  const [degree, setDegree] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [signature, setSignature] = useState<string | undefined>(undefined);
+  const [signatureLoading, setSignatureLoading] = useState(false);
   const [onDuty, setOnDuty] = useState(true);
   const [ward, setWard] = useState("");
   const [createLogin, setCreateLogin] = useState(true);
@@ -61,6 +65,10 @@ export function StaffFormModal({ open, onClose, departments, branchId, initial, 
     setRole(initial?.role ?? "frontdesk");
     setDepartmentIds(initial?.departmentIds ?? []);
     setLicenseNo(initial?.licenseNo ?? "");
+    setDegree(initial?.degree ?? "");
+    setDesignation(initial?.designation ?? "");
+    setSignature(initial?.signature);
+    setSignatureLoading(false);
     setOnDuty(initial?.onDuty ?? true);
     setWard((initial as any)?.ward ?? "");
     setCreateLogin(!initial);
@@ -83,6 +91,22 @@ export function StaffFormModal({ open, onClose, departments, branchId, initial, 
 
   const needsDepartment = role === "doctor" || role === "nurse";
   const doctorWorkspaceId = initial && role === "doctor" ? doctorIdFromStaffId(initial.id) : null;
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSignatureLoading(true);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string | undefined;
+      if (result) setSignature(result);
+      setSignatureLoading(false);
+    };
+    reader.onerror = () => setSignatureLoading(false);
+    reader.readAsDataURL(file);
+  };
+
+  const clearSignature = () => setSignature(undefined);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +132,9 @@ export function StaffFormModal({ open, onClose, departments, branchId, initial, 
           departmentIds,
           branchId: initial?.branchId ?? branchId,
           licenseNo: licenseNo.trim() || undefined,
+          degree: degree.trim() || undefined,
+          designation: designation.trim() || undefined,
+          signature: signature?.trim() || undefined,
           onDuty,
           ward: role === "nurse" ? ward.trim() || undefined : undefined,
           joinedAt: initial?.joinedAt ?? new Date().toISOString().slice(0, 10),
@@ -180,6 +207,37 @@ export function StaffFormModal({ open, onClose, departments, branchId, initial, 
             <div className="space-y-1.5">
               <Label className="text-[12px]">License / ID</Label>
               <Input value={licenseNo} onChange={(e) => setLicenseNo(e.target.value)} className="h-9 text-[13px]" placeholder="Optional" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Degree / Qualification</Label>
+              <Input value={degree} onChange={(e) => setDegree(e.target.value)} className="h-9 text-[13px]" placeholder="e.g. MBBS MD (Pathology)" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Designation</Label>
+              <Input value={designation} onChange={(e) => setDesignation(e.target.value)} className="h-9 text-[13px]" placeholder="e.g. Consultant Pathologist" />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label className="text-[12px]">Signature image</Label>
+              <div className="flex items-center gap-3">
+                <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] px-3 text-[13px] text-[var(--attio-text-primary)] hover:bg-[var(--attio-hover)]">
+                  <span>{signatureLoading ? "Loading…" : "Choose file"}</span>
+                  <input type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={onFileChange} disabled={signatureLoading} />
+                </label>
+                {signature && (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={signature} alt="Signature preview" className="h-12 w-auto rounded border border-[var(--attio-border-subtle)] bg-white object-contain" />
+                    <button
+                      type="button"
+                      onClick={clearSignature}
+                      className="text-[12px] text-red-600 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-[var(--attio-text-tertiary)]">PNG/JPEG up to ~100 KB. This signature appears on lab report printouts.</p>
             </div>
             {role === "nurse" && (
               <div className="space-y-1.5">

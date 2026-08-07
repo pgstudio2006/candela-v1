@@ -3,14 +3,15 @@
 import {
   generateLabReportPdfAction,
   generatePatientLabReportPdfAction,
+  listLabReportingDoctorsAction,
   markLabOrderCompleteAction,
   sendLabReportOnWhatsAppAction,
 } from "@/app/actions/lab-actions";
 import { AttioButton } from "@/components/frontdesk/ui";
 import type { LabOrderStatus } from "@/design-system/lab-data";
 import { cn } from "@/lib/utils";
-import { Check, FileText, MessageCircle, Printer } from "lucide-react";
-import { useState } from "react";
+import { Check, FileText, MessageCircle, Printer, User } from "lucide-react";
+import { useEffect, useState } from "react";
 
 type LabReportActionsProps = {
   orderId: string;
@@ -34,6 +35,20 @@ export function LabReportActions({
   const [allLoading, setAllLoading] = useState(false);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
   const [completeLoading, setCompleteLoading] = useState(false);
+  const [doctors, setDoctors] = useState<{ id: string; name: string; degree?: string | null; designation?: string | null }[]>([]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
+
+  useEffect(() => {
+    let cancelled = false;
+    listLabReportingDoctorsAction().then((res) => {
+      if (!cancelled && res.ok && res.data) {
+        setDoctors(res.data);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const openPdf = (dataUrl: string, title = "Lab report") => {
     const win = window.open("", "_blank");
@@ -52,7 +67,7 @@ export function LabReportActions({
   const handlePreview = async () => {
     setPdfLoading(true);
     try {
-      const res = await generateLabReportPdfAction(orderId);
+      const res = await generateLabReportPdfAction(orderId, selectedDoctorId || null);
       if (!res.ok) throw new Error(res.error);
       if (!res.data) throw new Error("Failed to generate report");
       openPdf(res.data.dataUrl, "Lab report preview");
@@ -66,7 +81,7 @@ export function LabReportActions({
   const handlePrintAll = async () => {
     setAllLoading(true);
     try {
-      const res = await generatePatientLabReportPdfAction(patientId);
+      const res = await generatePatientLabReportPdfAction(patientId, selectedDoctorId || null);
       if (!res.ok) throw new Error(res.error);
       if (!res.data) throw new Error("Failed to generate combined report");
       openPdf(res.data.dataUrl, "Combined lab reports");
@@ -109,6 +124,25 @@ export function LabReportActions({
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", variant === "compact" && "justify-end")}>
+      {doctors.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <User className="size-3.5 text-[var(--attio-text-tertiary)]" />
+          <select
+            value={selectedDoctorId}
+            onChange={(e) => setSelectedDoctorId(e.target.value)}
+            className="h-7 rounded-md border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] px-2 text-[12px] text-[var(--attio-text-primary)] outline-none focus:border-[var(--attio-accent)]"
+          >
+            <option value="">Auto doctor</option>
+            {doctors.map((doc) => (
+              <option key={doc.id} value={doc.id}>
+                {doc.name}
+                {doc.degree ? ` · ${doc.degree}` : ""}
+                {doc.designation ? ` (${doc.designation})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <AttioButton variant="secondary" className={baseClass} onClick={() => void handlePreview()} disabled={pdfLoading}>
         <FileText className="size-3.5" />
         {pdfLoading ? "Generating..." : "Preview report"}
