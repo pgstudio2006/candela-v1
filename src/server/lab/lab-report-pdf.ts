@@ -1,4 +1,4 @@
-import { PDFDocument, PDFPage, StandardFonts, rgb, type Color, type PDFEmbeddedPage } from "pdf-lib";
+import { PDFDocument, PDFPage, StandardFonts, rgb, type Color, type PDFEmbeddedPage, type PDFImage } from "pdf-lib";
 import { loadTemplateFile } from "@/lib/pdf-template-loader";
 import {
   type LabDataType,
@@ -10,6 +10,7 @@ import {
 import { CLINIC_BRAND } from "@/design-system/document-templates";
 import {
   resolveAge,
+  formatAge,
   getApplicableRange,
   parseNumber,
 } from "@/lib/lab-ranges";
@@ -29,6 +30,14 @@ export type LabReportPdfPatient = {
   dateOfBirth?: Date | string | null;
   age?: number | null;
   bloodGroup?: string | null;
+};
+
+export type LabReportDoctor = {
+  name: string;
+  degree?: string | null;
+  designation?: string | null;
+  licenseNo?: string | null;
+  signature?: string | null; // data URL or file URL
 };
 
 export type LabReportTemplateSpec = {
@@ -149,10 +158,11 @@ function dateLabel(dateStr?: string | Date | null): string {
 
 function ageGenderText(patient: LabReportPdfPatient): string {
   const age = resolveAge(patient, new Date());
+  const ageText = formatAge(age);
   const gender = patient.gender
     ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1).toLowerCase()
     : "—";
-  return `${age?.years && age.years > 0 ? `${age.years}Yrs.-` : "—"} / ${gender}`;
+  return `${ageText} / ${gender}`;
 }
 
 function flagPrefix(flag?: LabResultFlag): string {
@@ -330,6 +340,7 @@ export async function buildLabReportPdfBytes(
   patient: LabReportPdfPatient,
   orders: LabOrder[],
   _template?: LabReportTemplateSpec,
+  reportingDoctor?: LabReportDoctor,
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
   let embeddedTemplate: PDFEmbeddedPage | undefined;
@@ -346,6 +357,20 @@ export async function buildLabReportPdfBytes(
   const normalFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const categoryFont = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+
+  // Pre-embed the reporting doctor's signature image if available
+  let signatureImage: PDFImage | undefined;
+  if (reportingDoctor?.signature?.trim() && reportingDoctor.signature.trim().startsWith("data:image")) {
+    try {
+      const base64 = reportingDoctor.signature.trim().split(",")[1];
+      if (base64) {
+        const imageBytes = Buffer.from(base64, "base64");
+        signatureImage = await pdfDoc.embedPng(imageBytes).catch(() => pdfDoc.embedJpg(imageBytes));
+      }
+    } catch {
+      // ignore failed signature images
+    }
+  }
 
   const textPrimary = rgb(0.05, 0.05, 0.05);
   const textSecondary = rgb(0.38, 0.38, 0.38);
@@ -507,12 +532,28 @@ export async function buildLabReportPdfBytes(
     return y - ROW_HEIGHT;
   }
 
-  function drawNotes(p: PDFPage, y: number, notes: string[]): number {
+  function measureNotesHeight(notes: string[], maxWidth: number, lineHeight: number): number {
+    let lines = 0;
+    for (const note of notes) {
+      lines += wrapText("• " + note, normalFont, 8, maxWidth).length;
+    }
+    // top padding + wrapped lines + bottom padding
+    return notes.length > 0 ? 4 + lines * lineHeight + 4 : 0;
+  }
+
+  function drawNotes(p: PDFPage, y: number, notes: string[], reportDoctor: LabReportDoctor | undefined): number {
     if (notes.length === 0) return y;
     y -= 4;
     for (const note of notes) {
       const lines = wrapText("• " + note, normalFont, 8, usableWidth - 8);
       for (const line of lines) {
+        if (y - 11 < MARGIN_BOTTOM + 10) {
+          drawFooter(p, MARGIN_BOTTOM + 20, reportDoctor, false);
+          p = newPage();
+          y = startPage(p);
+          y = drawTableHeader(p, y);
+          y -= 10;
+        }
         p.drawText(line, { x: MARGIN_LEFT + 4, y, size: 8, font: normalFont, color: textSecondary });
         y -= 11;
       }
@@ -520,15 +561,34 @@ export async function buildLabReportPdfBytes(
     return y - 4;
   }
 
-  function drawFooter(p: PDFPage, y: number, doctorName: string | undefined, isLastPage: boolean) {
+  function drawFooter(p: PDFPage, y: number, reportDoctor: LabReportDoctor | undefined, isLastPage: boolean) {
     // Doctor signature — bottom right
-    if (doctorName) {
-      const sigLine1 = `Dr. ${doctorName}`;
-      const sigLine2 = "MBBS MD (PATHOLOGY)";
-      const w1 = boldFont.widthOfTextAtSize(sigLine1, 9);
-      const w2 = normalFont.widthOfTextAtSize(sigLine2, 8.5);
-      p.drawText(sigLine1, { x: rightX - w1, y, size: 9, font: boldFont, color: textPrimary });
-      p.drawText(sigLine2, { x: rightX - w2, y: y - 12, size: 8.5, font: normalFont, color: textSecondary });
+    if (reportDoctor?.name) {
+      const sigLines: string[] = [];
+      sigLines.push(`Dr. ${reportDoctor.name}`);
+      if (reportDoctor.degree?.trim()) sigLines.push(reportDoctor.degree.trim());
+      if (reportDoctor.designation?.trim()) sigLines.push(reportDoctor.designation.trim());
+      if (reportDoctor.licenseNo?.trim()) sigLines.push(`Reg. No: ${reportDoctor.licenseNo.trim()}`);
+
+      let sigY = y;
+      for (let i = 0; i < sigLines.length; i++) {
+        const isFirst = i === 0;
+        const line = sigLines[i];
+        const w = isFirst ? boldFont.widthOfTextAtSize(line, 9) : normalFont.widthOfTextAtSize(line, 8.5);
+        const font = isFirst ? boldFont : normalFont;
+        p.drawText(line, { x: rightX - w, y: sigY, size: isFirst ? 9 : 8.5, font, color: isFirst ? textPrimary : textSecondary });
+        sigY -= 12;
+      }
+
+      // Draw signature image if provided (right-aligned, above the name)
+      if (signatureImage) {
+        const maxW = 80;
+        const maxH = 30;
+        const ratio = Math.min(maxW / signatureImage.width, maxH / signatureImage.height, 1);
+        const w = signatureImage.width * ratio;
+        const h = signatureImage.height * ratio;
+        p.drawImage(signatureImage, { x: rightX - w, y: sigY + 6, width: w, height: h });
+      }
     }
 
     // Page number — bottom left
@@ -574,6 +634,10 @@ export async function buildLabReportPdfBytes(
     const ord = orders[ordIdx];
     const isLastOrder = ordIdx === orders.length - 1;
 
+    // Reporting doctor for this print: explicit selection takes priority, then ordered-by name as fallback
+    const reportDoctor: LabReportDoctor | undefined =
+      reportingDoctor ?? (ord.orderedByName ? { name: ord.orderedByName } : undefined);
+
     // Patient info block
     y = drawPatientInfoBlock(page, y, ord);
 
@@ -592,7 +656,7 @@ export async function buildLabReportPdfBytes(
       const section = fields.find((f) => f.section?.trim())?.section?.trim() ?? "";
       if (section && section !== lastSection) {
         if (y - 28 < MARGIN_BOTTOM + 40) {
-          drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
+          drawFooter(page, MARGIN_BOTTOM + 20, reportDoctor, false);
           page = newPage();
           y = startPage(page);
           y = drawTableHeader(page, y);
@@ -604,7 +668,7 @@ export async function buildLabReportPdfBytes(
       // Panel header with full-width borders (e.g. "LFT - Liver Function Test")
       if (item.label) {
         if (y - 24 < MARGIN_BOTTOM + 40) {
-          drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
+          drawFooter(page, MARGIN_BOTTOM + 20, reportDoctor, false);
           page = newPage();
           y = startPage(page);
           y = drawTableHeader(page, y);
@@ -651,14 +715,18 @@ export async function buildLabReportPdfBytes(
 
         const rowCells = [field.fieldMaster.name, resultText, field.fieldMaster.unit || "\u2014", refText, result?.note ?? ""];
 
+        // Collect result notes and field master default notes
+        if (result?.note?.trim()) panelNotes.push(`${field.fieldMaster.name}: ${result.note.trim()}`);
+        if (field.fieldMaster.defaultNote?.trim()) panelNotes.push(`${field.fieldMaster.name}: ${field.fieldMaster.defaultNote.trim()}`);
+
         // Check page break before each row
         if (y - ROW_HEIGHT < MARGIN_BOTTOM + 40) {
           // Draw notes before page break
           if (panelNotes.length > 0) {
-            y = drawNotes(page, y, panelNotes);
+            y = drawNotes(page, y, panelNotes, reportDoctor);
             panelNotes.length = 0;
           }
-          drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
+          drawFooter(page, MARGIN_BOTTOM + 20, reportDoctor, false);
           page = newPage();
           y = startPage(page);
           y = drawTableHeader(page, y);
@@ -674,12 +742,13 @@ export async function buildLabReportPdfBytes(
 
       // Render notes below the panel table
       if (panelNotes.length > 0) {
-        if (y - panelNotes.length * 12 - 8 < MARGIN_BOTTOM + 40) {
-          drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
+        const notesHeight = measureNotesHeight(panelNotes, usableWidth - 8, 11);
+        if (y - notesHeight < MARGIN_BOTTOM + 40) {
+          drawFooter(page, MARGIN_BOTTOM + 20, reportDoctor, false);
           page = newPage();
           y = startPage(page);
         }
-        y = drawNotes(page, y, panelNotes);
+        y = drawNotes(page, y, panelNotes, reportDoctor);
       }
 
       y -= 8;
@@ -695,7 +764,7 @@ export async function buildLabReportPdfBytes(
 
     // Ensure space for footer
     if (y < MARGIN_BOTTOM + 60) {
-      drawFooter(page, MARGIN_BOTTOM + 20, ord.orderedByName, false);
+      drawFooter(page, MARGIN_BOTTOM + 20, reportDoctor, false);
       page = newPage();
       y = startPage(page);
     }
@@ -703,7 +772,7 @@ export async function buildLabReportPdfBytes(
     y -= 12;
 
     // Doctor signature + END OF REPORT on last page of last order
-    drawFooter(page, y, ord.orderedByName, isLastOrder);
+    drawFooter(page, y, reportDoctor, isLastOrder);
     y -= 30;
 
     // Start next order on a new page
@@ -720,9 +789,10 @@ export async function buildCombinedLabReportPdfBytes(
   patient: LabReportPdfPatient,
   orders: LabOrder[],
   template?: LabReportTemplateSpec,
+  reportingDoctor?: LabReportDoctor,
 ): Promise<Uint8Array> {
   const reportOrders = orders.filter((o) => o.status !== "cancelled");
-  return buildLabReportPdfBytes(patient, reportOrders, template);
+  return buildLabReportPdfBytes(patient, reportOrders, template, reportingDoctor);
 }
 
 export function bytesToDataUrl(bytes: Uint8Array, filename = "lab-report.pdf"): string {

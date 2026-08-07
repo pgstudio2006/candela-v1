@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { listPatientLabOrdersAction, generateLabReportPdfAction } from "@/app/actions/lab-actions";
+import { listPatientLabOrdersAction, generateLabReportPdfAction, listLabReportingDoctorsAction } from "@/app/actions/lab-actions";
 import { useToast } from "@/components/ui/toast-provider";
 import { Panel, StatusBadge, AttioButton } from "@/components/frontdesk/ui";
-import { FileText, Download, Printer, FlaskConical } from "lucide-react";
+import { FileText, Download, Printer, FlaskConical, User } from "lucide-react";
 import type { LabOrder, LabOrderStatus } from "@/design-system/lab-data";
 import { LAB_ORDER_STATUS_LABELS } from "@/design-system/lab-data";
 
@@ -38,6 +38,8 @@ export function PatientLabReportsPanel({ patientId }: { patientId: string }) {
   const [orders, setOrders] = useState<LabOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [doctors, setDoctors] = useState<{ id: string; name: string; degree?: string | null; designation?: string | null }[]>([]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -52,12 +54,15 @@ export function PatientLabReportsPanel({ patientId }: { patientId: string }) {
 
   useEffect(() => {
     void loadOrders();
+    listLabReportingDoctorsAction().then((res) => {
+      if (res.ok && res.data) setDoctors(res.data);
+    });
   }, [loadOrders]);
 
   const handleDownload = async (orderId: string) => {
     setGeneratingId(orderId);
     try {
-      const res = await generateLabReportPdfAction(orderId);
+      const res = await generateLabReportPdfAction(orderId, selectedDoctorId || null);
       if (res.ok && res.data?.dataUrl) {
         const link = document.createElement("a");
         link.href = res.data.dataUrl;
@@ -77,7 +82,7 @@ export function PatientLabReportsPanel({ patientId }: { patientId: string }) {
   const handlePrint = async (orderId: string) => {
     setGeneratingId(orderId);
     try {
-      const res = await generateLabReportPdfAction(orderId);
+      const res = await generateLabReportPdfAction(orderId, selectedDoctorId || null);
       if (res.ok && res.data?.dataUrl) {
         const win = window.open(res.data.dataUrl, "_blank");
         if (win) {
@@ -107,6 +112,25 @@ export function PatientLabReportsPanel({ patientId }: { patientId: string }) {
         </div>
       ) : (
         <div className="space-y-4">
+          {doctors.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <User className="size-3.5 text-[var(--attio-text-tertiary)]" />
+              <select
+                value={selectedDoctorId}
+                onChange={(e) => setSelectedDoctorId(e.target.value)}
+                className="h-7 rounded-md border border-[var(--attio-border-subtle)] bg-[var(--attio-surface)] px-2 text-[12px] text-[var(--attio-text-primary)] outline-none focus:border-[var(--attio-accent)]"
+              >
+                <option value="">Auto doctor</option>
+                {doctors.map((doc) => (
+                  <option key={doc.id} value={doc.id}>
+                    {doc.name}
+                    {doc.degree ? ` · ${doc.degree}` : ""}
+                    {doc.designation ? ` (${doc.designation})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {completedOrders.length > 0 && (
             <div>
               <p className="mb-2 text-[12px] font-medium text-[var(--attio-text-secondary)]">Completed reports</p>

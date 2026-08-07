@@ -8,7 +8,7 @@ import type { ServerContext } from "@/server/context";
 import { ServerActionError } from "@/server/errors";
 import { serializeForClient } from "@/server/serialize";
 import { getApplicableRange, parseNumber } from "@/lib/lab-ranges";
-import { buildLabReportPdfBytes, bytesToDataUrl, type LabReportTemplateSpec } from "./lab-report-pdf";
+import { buildLabReportPdfBytes, bytesToDataUrl, type LabReportTemplateSpec, type LabReportDoctor } from "./lab-report-pdf";
 import { deliverWhatsAppDocument } from "@/server/notification-delivery";
 import { getActiveConnection, decryptWhatsAppToken } from "@/server/whatsapp/connection";
 import { getDefaultDocumentTemplate } from "@/server/doctor";
@@ -36,6 +36,29 @@ export type LabSnapshot = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+async function resolveReportingDoctor(
+  ctx: ServerContext,
+  reportedByStaffId?: string | null,
+  orderedByName?: string | null,
+): Promise<LabReportDoctor | undefined> {
+  if (reportedByStaffId) {
+    const staff = await prisma.adminStaff.findFirst({
+      where: { id: reportedByStaffId, branchId: ctx.branchId },
+    });
+    if (staff) {
+      return {
+        name: staff.name,
+        degree: staff.degree,
+        designation: staff.designation,
+        licenseNo: staff.licenseNo,
+        signature: staff.signature,
+      };
+    }
+  }
+  if (orderedByName) return { name: orderedByName };
+  return undefined;
+}
 
 function evaluateLabResult(
   fieldMaster: LabFieldMaster,
@@ -233,6 +256,8 @@ function serializeOrder(row: Record<string, unknown> & { patient?: Record<string
     admissionId: row.admissionId ? String(row.admissionId) : undefined,
     orderedBy: String(row.orderedBy),
     orderedByName: row.orderedByName ? String(row.orderedByName) : undefined,
+    reportedByStaffId: row.reportedByStaffId ? String(row.reportedByStaffId) : null,
+    reportedByName: row.reportedByName ? String(row.reportedByName) : null,
     source: String(row.source) as LabOrder["source"],
     pregnancy: row.pregnancy != null ? Boolean(row.pregnancy) : false,
     status: String(row.status) as LabOrder["status"],
@@ -720,6 +745,7 @@ async function attachLabReportToPatientProfile(ctx: ServerContext, order: LabOrd
   if (!patient) return;
 
   const template = await getDefaultLabReportTemplateForPdf(ctx);
+  const reportDoctor = await resolveReportingDoctor(ctx, order.reportedByStaffId, order.orderedByName);
   const pdfBytes = await buildLabReportPdfBytes(
     {
       name: patient.name ?? patient.fullName ?? "Patient",
@@ -732,6 +758,7 @@ async function attachLabReportToPatientProfile(ctx: ServerContext, order: LabOrd
     },
     [order],
     template,
+    reportDoctor,
   );
   const dataUrl = bytesToDataUrl(pdfBytes, `lab-report-${order.id}.pdf`);
 
@@ -770,7 +797,11 @@ export async function markLabOrderComplete(ctx: ServerContext, orderId: string):
   return updated;
 }
 
-export async function generateLabOrderReportPdf(ctx: ServerContext, orderId: string): Promise<Uint8Array> {
+export async function generateLabOrderReportPdf(
+  ctx: ServerContext,
+  orderId: string,
+  reportedByStaffId?: string | null,
+): Promise<Uint8Array> {
   const order = await getLabOrder(ctx, orderId);
   if (!order) throw new ServerActionError("NOT_FOUND", "Order not found.");
   const patient = await prisma.patient.findFirst({
@@ -778,15 +809,37 @@ export async function generateLabOrderReportPdf(ctx: ServerContext, orderId: str
     select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true },
   });
   if (!patient) throw new ServerActionError("NOT_FOUND", "Patient not found.");
+
+  // Persist reporting doctor selection on the order when provided
+  if (reportedByStaffId) {
+    const staff = await prisma.adminStaff.findFirst({
+      where: { id: reportedByStaffId, branchId: ctx.branchId },
+    });
+    if (staff) {
+      await prisma.labOrder.update({
+        where: { id: orderId },
+        data: { reportedByStaffId, reportedByName: staff.name },
+      });
+      order.reportedByStaffId = reportedByStaffId;
+      order.reportedByName = staff.name;
+    }
+  }
+
   const template = await getDefaultLabReportTemplateForPdf(ctx);
+  const reportDoctor = await resolveReportingDoctor(ctx, order.reportedByStaffId, order.orderedByName);
   return buildLabReportPdfBytes(
     { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth, bloodGroup: patient.bloodGroup },
     [order],
     template,
+    reportDoctor,
   );
 }
 
-export async function generatePatientLabReportPdf(ctx: ServerContext, patientId: string): Promise<Uint8Array> {
+export async function generatePatientLabReportPdf(
+  ctx: ServerContext,
+  patientId: string,
+  reportedByStaffId?: string | null,
+): Promise<Uint8Array> {
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, ...branchScope(ctx) },
     select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true },
@@ -808,10 +861,12 @@ export async function generatePatientLabReportPdf(ctx: ServerContext, patientId:
   });
   const orders = serializeForClient(rows.map((r) => serializeOrder(r as unknown as Record<string, unknown> & { patient?: Record<string, unknown>; items?: unknown[] }))) as LabOrder[];
   const template = await getDefaultLabReportTemplateForPdf(ctx);
+  const reportDoctor = reportedByStaffId ? await resolveReportingDoctor(ctx, reportedByStaffId, undefined) : undefined;
   return buildLabReportPdfBytes(
     { name: patient.name ?? patient.fullName ?? "Patient", uhid: patient.uhid, phone: patient.phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth, bloodGroup: patient.bloodGroup },
     orders,
     template,
+    reportDoctor,
   );
 }
 
@@ -831,10 +886,12 @@ export async function sendLabReportOnWhatsApp(
   if (!phone) throw new ServerActionError("VALIDATION", "Patient phone number is missing.");
 
   const template = await getDefaultLabReportTemplateForPdf(ctx);
+  const reportDoctor = await resolveReportingDoctor(ctx, order.reportedByStaffId, order.orderedByName);
   const pdfBytes = await buildLabReportPdfBytes(
     { name: patient.name ?? patient.fullName ?? "Patient", uhid: "", phone, gender: patient.gender, age: patient.age, dateOfBirth: patient.dateOfBirth, bloodGroup: patient.bloodGroup },
     [order],
     template,
+    reportDoctor,
   );
   const dataUrl = bytesToDataUrl(pdfBytes, `lab-report-${order.id}.pdf`);
   const docId = createId("doc");

@@ -10,6 +10,9 @@ export const staffInputSchema = z
     departmentIds: z.array(z.string()).default([]),
     branchId: z.string().min(1),
     licenseNo: z.string().max(40).optional(),
+    degree: z.string().max(120).optional(),
+    designation: z.string().max(120).optional(),
+    signature: z.string().max(500_000).optional(),
     onDuty: z.boolean(),
     joinedAt: z.string().min(1),
   })

@@ -232,21 +232,41 @@ export async function createLabOrderFromModuleAction(
   });
 }
 
-export async function generateLabReportPdfAction(orderId: string): Promise<ActionResult<{ dataUrl: string }>> {
+export async function generateLabReportPdfAction(
+  orderId: string,
+  reportedByStaffId?: string | null,
+): Promise<ActionResult<{ dataUrl: string }>> {
   return runAction(async () => {
     const ctx = await requireAnyModule("laboratory", "doctor", "frontdesk", "admin");
-    const bytes = await generateLabOrderReportPdf(ctx, orderId);
+    const bytes = await generateLabOrderReportPdf(ctx, orderId, reportedByStaffId);
     const dataUrl = `data:application/pdf;base64,${Buffer.from(bytes).toString("base64")}`;
     return { dataUrl };
   });
 }
 
-export async function generatePatientLabReportPdfAction(patientId: string): Promise<ActionResult<{ dataUrl: string }>> {
+export async function generatePatientLabReportPdfAction(
+  patientId: string,
+  reportedByStaffId?: string | null,
+): Promise<ActionResult<{ dataUrl: string }>> {
   return runAction(async () => {
     const ctx = await requireAnyModule("laboratory", "doctor", "frontdesk", "admin");
-    const bytes = await generatePatientLabReportPdf(ctx, patientId);
+    const bytes = await generatePatientLabReportPdf(ctx, patientId, reportedByStaffId);
     const dataUrl = `data:application/pdf;base64,${Buffer.from(bytes).toString("base64")}`;
     return { dataUrl };
+  });
+}
+
+export async function listLabReportingDoctorsAction(): Promise<
+  ActionResult<{ id: string; name: string; degree?: string | null; designation?: string | null }[]>
+> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("laboratory", "doctor", "frontdesk", "admin");
+    const rows = await prisma.adminStaff.findMany({
+      where: { branchId: ctx.branchId },
+      select: { id: true, name: true, degree: true, designation: true },
+      orderBy: { name: "asc" },
+    });
+    return rows;
   });
 }
 

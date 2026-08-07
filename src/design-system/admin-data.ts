@@ -31,6 +31,9 @@ export type StaffMember = {
   departmentIds: string[];
   branchId: string;
   licenseNo?: string;
+  degree?: string;
+  designation?: string;
+  signature?: string;
   onDuty: boolean;
   joinedAt: string;
   ward?: string;
