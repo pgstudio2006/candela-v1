@@ -118,9 +118,12 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     () => documentTemplates.filter((t: DocumentTemplate) => t.kind === "prescription" && t.enabled),
     [documentTemplates],
   );
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(() =>
-    prescriptionTemplates.find((t) => t.id === "doc_rx_saini")?.id ?? prescriptionTemplates[0]?.id,
-  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(() => {
+    if (isPataudi) {
+      return prescriptionTemplates.find((t) => t.id === "doc_rx_pataudi_60984")?.id ?? prescriptionTemplates[0]?.id;
+    }
+    return prescriptionTemplates.find((t) => t.id === "doc_rx_saini")?.id ?? prescriptionTemplates[0]?.id;
+  });
   const [savingExam, setSavingExam] = useState(false);
   const [examSaved, setExamSaved] = useState(false);
   const [savingDx, setSavingDx] = useState(false);

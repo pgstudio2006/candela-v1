@@ -80,6 +80,7 @@ export type Visit = {
   id: string;
   patientId: string;
   token?: number;
+  patientType?: string;
   stage: VisitStage;
   departmentId: string;
   doctorId: string;

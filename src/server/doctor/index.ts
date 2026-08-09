@@ -9,7 +9,7 @@ import type {
 } from "@/design-system/doctor-data";
 import { DEMO_DOCTOR_ID } from "@/design-system/doctor-data";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
-import { DEFAULT_DOCUMENT_TEMPLATES, type DocumentTemplate } from "@/design-system/document-templates";
+import { PATAUDI_PRESCRIPTION_TEMPLATE, type DocumentTemplate } from "@/design-system/document-templates";
 import { validateCompleteConsultation } from "@/lib/doctor-validation";
 import { visitVisibleInDoctorWorkspace } from "@/lib/doctor-queue";
 import { isInReceptionQueue, isRedFlagVisit, patientDisplayName } from "@/lib/frontdesk-workflow";
@@ -1187,7 +1187,7 @@ export async function getDefaultDocumentTemplate(
   // Only use 60984.pdf-based default templates for Pataudi branch.
   // Other branches (e.g. Gurgaon) should use navayu-invoice-template.pdf fallbacks.
   if (ctx.branchId === PATAUDI_BRANCH_ID) {
-    return DEFAULT_DOCUMENT_TEMPLATES.find((t) => t.kind === kind && t.enabled) ?? null;
+    return PATAUDI_PRESCRIPTION_TEMPLATE;
   }
   return null;
 }

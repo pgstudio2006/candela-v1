@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_DOCUMENT_TEMPLATES } from "@/design-system/document-templates";
+import { DEFAULT_DOCUMENT_TEMPLATES, PATAUDI_PRESCRIPTION_TEMPLATE, type DocumentTemplate } from "@/design-system/document-templates";
 import { DOCTOR_TEMPLATES } from "@/design-system/doctor-data";
 import { SEED_ADMIN_SETTINGS } from "@/design-system/admin-data";
 import { isDemoSeedEnabled } from "@/lib/demo-seed";
@@ -56,6 +56,32 @@ export async function ensureHospitalBootstrap() {
       where: { id: template.id },
       update: {},
       create: template,
+    }).catch(() => undefined);
+  }
+
+  // Pataudi-only prescription template on the 60984 letterhead.
+  const pataudiBranch = await prisma.branch.findUnique({
+    where: { id: "branch_pataudi" },
+  });
+  if (pataudiBranch) {
+    const pataudiPrescription: DocumentTemplate = PATAUDI_PRESCRIPTION_TEMPLATE;
+    await prisma.documentTemplate.upsert({
+      where: { id: pataudiPrescription.id },
+      update: {
+        fileData: pataudiPrescription.fileData,
+        mimeType: pataudiPrescription.mimeType,
+        marginTop: pataudiPrescription.marginTop,
+        marginBottom: pataudiPrescription.marginBottom,
+        marginLeft: pataudiPrescription.marginLeft,
+        marginRight: pataudiPrescription.marginRight,
+        isDefault: pataudiPrescription.isDefault,
+        enabled: pataudiPrescription.enabled,
+      },
+      create: {
+        ...pataudiPrescription,
+        tenantId: pataudiBranch.tenantId,
+        branchId: pataudiBranch.id,
+      },
     }).catch(() => undefined);
   }
 

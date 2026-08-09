@@ -5,7 +5,6 @@ import { generateSainiPrescriptionPdf } from "@/lib/prescription-pdf-saini";
 import type { DocumentLayoutId, DocumentTemplate, DocumentTemplateOverlayField } from "@/design-system/document-templates";
 import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import {
-  COLORS,
   FONT,
   drawText,
   drawRightText,
@@ -69,16 +68,34 @@ export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Prom
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+  const pageHeight = page.getHeight();
   const date = formatConsultDate(consult.completedAt ?? consult.startedAt ?? new Date().toISOString());
 
-  let currentY: number = LAYOUT.contentTop;
+  // For Pataudi, leave room for the patient header; otherwise use template marginTop or default.
+  const pataudiContentTop = pageHeight - 360;
+  const contentTop =
+    template?.marginTop != null
+      ? pageHeight - template.marginTop
+      : effectiveBranchId === "branch_pataudi"
+        ? pataudiContentTop
+        : LAYOUT.contentTop;
+
+  let currentY: number = contentTop;
   const infoWidth = LAYOUT.marginRight - LAYOUT.marginLeft;
   const midX = LAYOUT.marginLeft + infoWidth / 2;
 
   const overlayFields = template?.overlayFields;
-  if (overlayFields?.length) {
+  if (effectiveBranchId === "branch_pataudi") {
+    currentY = drawPataudiPrescriptionHeader(
+      page,
+      { patient, visit, consult, doctorName, token: visit.token },
+      { normal: font, bold },
+      pageHeight - 150,
+      contentTop,
+    );
+  } else if (overlayFields?.length) {
     renderOverlayFields(page, overlayFields, { patient, visit, doctorName, date, token: visit.token }, { normal: font, bold });
-    currentY = LAYOUT.contentTop - 12;
+    currentY = contentTop - 12;
   } else {
     // Header
     drawText(page, "PRESCRIPTION", LAYOUT.marginLeft, currentY, bold, FONT.title);
@@ -206,10 +223,150 @@ export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Prom
   return pdfDoc.save();
 }
 
-function formatPrescriptionDate(value: string | Date | undefined): string {
+function formatPataudiDateTime(value: string | Date | undefined): string {
   if (!value) return "";
   const d = typeof value === "string" ? new Date(value) : value;
-  return d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-IN") : String(value);
+  if (!d || isNaN(d.getTime())) return String(value);
+  return d
+    .toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    })
+    .replace(", ", "/");
+}
+
+function pataudiPatientAddress(patient: Patient): string {
+  if (patient.address) return patient.address;
+  const parts = [
+    patient.houseNumber,
+    patient.street,
+    patient.locality,
+    patient.landmark,
+    patient.city,
+    patient.district,
+    patient.state,
+    patient.pincode,
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
+function pataudiPatientType(visit: Visit, patient: Patient): string {
+  return visit.patientType ?? (patient.lastVisit ? "OLD PATIENT" : "NEW PATIENT");
+}
+
+function pataudiExamValue(consult: ConsultationRecord, keys: string[]): string {
+  for (const key of keys) {
+    const value = consult.examination[key];
+    if (value !== undefined && value !== null && value !== "") return String(value);
+  }
+  return "";
+}
+
+function pataudiYesNo(value: unknown): string {
+  if (value === true || value === "yes" || value === "Yes" || value === "YES") return "Yes";
+  if (value === false || value === "no" || value === "No" || value === "NO") return "No";
+  return value === undefined || value === null || value === "" ? "No" : String(value);
+}
+
+function drawPataudiPrescriptionHeader(
+  page: PDFPage,
+  data: {
+    patient: Patient;
+    visit: Visit;
+    consult: ConsultationRecord;
+    doctorName: string;
+    token?: number | string | null;
+  },
+  fonts: { normal: PDFFont; bold: PDFFont },
+  startY: number,
+  endY: number,
+): number {
+  const left = 42;
+  const right = page.getWidth() - 42;
+  const mid = left + (right - left) / 2;
+  const labelWidth = 82;
+  const rowHeight = 18;
+  let y = startY;
+
+  const dt = formatPataudiDateTime(data.consult.completedAt ?? data.consult.startedAt ?? new Date().toISOString());
+  const age = resolvePatientAge(data.patient.age, data.patient.dateOfBirth);
+  const ageGender = `${age ? `${age}Yrs.` : "—"} / ${data.patient.gender || "—"}`;
+  const address = pataudiPatientAddress(data.patient);
+  const patientType = pataudiPatientType(data.visit, data.patient);
+  const mobile = data.patient.phone || "";
+  const alternate = data.patient.alternatePhone || "";
+  const email = data.patient.email || "";
+  const opdTiming = "Mon.,Wed.,Fri. 10:00AM-01:00PM";
+
+  const weight = pataudiExamValue(data.consult, ["weight", "wt"]);
+  const dm = pataudiYesNo(pataudiExamValue(data.consult, ["dm", "diabetes"]) || false);
+  const height = pataudiExamValue(data.consult, ["height", "ht"]);
+  const bp = pataudiExamValue(data.consult, ["bp", "bloodPressure"]);
+  const cadHtn = pataudiYesNo(
+    pataudiExamValue(data.consult, ["cadHtn"]) ||
+      pataudiExamValue(data.consult, ["cad"]) ||
+      pataudiExamValue(data.consult, ["htn"]) ||
+      false,
+  );
+  const drugAllergy = pataudiYesNo(pataudiExamValue(data.consult, ["drugAllergy", "allergy"]) || false);
+  const drugAllergyDetail = pataudiExamValue(data.consult, ["drugAllergyDetail", "allergyDetail"]);
+
+  const row = (label: string, value: string, label2?: string, value2?: string) => {
+    if (y < endY) return;
+    drawText(page, label, left, y, fonts.bold, 9);
+    drawText(page, value, left + labelWidth, y, fonts.normal, 9);
+    if (label2) {
+      drawText(page, label2, mid, y, fonts.bold, 9);
+      drawText(page, value2 ?? "", mid + labelWidth, y, fonts.normal, 9);
+    }
+    y -= rowHeight;
+  };
+
+  row("UHID No. :", data.patient.uhid || "—", "Date :", dt);
+  row("Name :", data.patient.name, "Token No. :", data.token ? `#${data.token}` : "—");
+  row("Address :", address || "—", "Age/Sex :", ageGender);
+  row("Patient Type :", patientType, "Mobile :", mobile || "—");
+  row("Doctor :", data.doctorName, "Alternate No. :", alternate || "—");
+  row("OPD Timing :", opdTiming, "Email Id. :", email || "—");
+
+  if (y >= endY) {
+    const vitals: [string, string][] = [
+      ["Wt. :", weight],
+      ["DM :", dm],
+      ["Ht. :", height],
+      ["CAD/HTN :", cadHtn],
+      ["BP :", bp],
+    ];
+    const startXs = [left, left + 100, left + 185, left + 270, left + 370];
+    for (let i = 0; i < vitals.length; i++) {
+      const [label, value] = vitals[i];
+      drawText(page, label, startXs[i], y, fonts.bold, 9);
+      drawText(page, value || "_____", startXs[i] + 28, y, fonts.normal, 9);
+    }
+    y -= rowHeight;
+  }
+
+  if (y >= endY) {
+    const allergyLine = `Any Known Drug Allergy/Drug Reaction : ${drugAllergy}`;
+    drawText(page, allergyLine, left, y, fonts.bold, 9);
+    const detailText = drugAllergyDetail ? `If Yes : ${drugAllergyDetail}` : "If Yes : ___________";
+    drawText(page, detailText, left + 250, y, fonts.normal, 9);
+    y -= rowHeight;
+  }
+
+  if (y >= endY + 40) {
+    y -= 8;
+    drawRightText(page, data.doctorName, right, y, fonts.bold, 9);
+    y -= 12;
+    drawRightText(page, "Consultant", right, y, fonts.normal, 9);
+  }
+
+  return Math.max(y, endY);
 }
 
 function prescriptionOverlayValue(

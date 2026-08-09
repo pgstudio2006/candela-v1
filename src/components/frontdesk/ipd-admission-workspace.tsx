@@ -8,6 +8,7 @@ import { IpdWalletPanel } from "@/components/frontdesk/ipd-wallet-panel";
 import { IpdRefundPanel } from "@/components/frontdesk/ipd-refund-panel";
 import { IpdFinalBillModal } from "@/components/frontdesk/ipd-final-bill-modal";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { LabOrderButton } from "@/components/lab/lab-order-modal";
 import type { IpdAdmissionDetail } from "@/design-system/ipd-data";
 import { ArrowLeft, BedDouble, Calendar, User } from "lucide-react";
 
@@ -85,6 +86,22 @@ export function IpdAdmissionWorkspace({ admission, onBack }: IpdAdmissionWorkspa
           </div>
         </div>
       </div>
+
+      <Panel title="Laboratory">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[13px] text-[var(--attio-text-secondary)]">
+            Order lab tests for this admission. Tests are added to the IPD service cart and become available to the laboratory.
+          </p>
+          <LabOrderButton
+            patientId={admissionState.patientId}
+            patientName={admissionState.patientName}
+            visitId={admissionState.visitId}
+            admissionId={admissionState.id}
+            source="ipd"
+            onCreated={() => refresh()}
+          />
+        </div>
+      </Panel>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <IpdServiceCartPanel

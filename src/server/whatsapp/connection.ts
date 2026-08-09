@@ -27,6 +27,30 @@ export function decryptWhatsAppToken(value: string) {
   return Buffer.concat([decipher.update(Buffer.from(payload, "base64url")), decipher.final()]).toString("utf8");
 }
 
+export async function exchangeCodeForToken(
+  code: string,
+  appId: string,
+  appSecret: string,
+): Promise<string> {
+  const url = new URL(`${GRAPH_URL}/oauth/access_token`);
+  url.searchParams.set("client_id", appId);
+  url.searchParams.set("client_secret", appSecret);
+  url.searchParams.set("code", code);
+  // Note: For the FB.login config_id popup flow, do not set redirect_uri.
+  // Meta does not record a redirect_uri for this code, and sending one causes
+  // a "redirect_uri mismatch" error during exchange.
+
+  const response = await fetch(url.toString());
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error?.message ?? `Token exchange failed (${response.status})`);
+  }
+  if (!data.access_token) {
+    throw new Error("No access_token returned from Meta");
+  }
+  return data.access_token as string;
+}
+
 export async function getActiveConnection(ctx: Pick<ServerContext, "tenantId" | "branchId">) {
   return prisma.whatsappConnection.findFirst({
     where: { tenantId: ctx.tenantId, branchId: ctx.branchId, active: true },

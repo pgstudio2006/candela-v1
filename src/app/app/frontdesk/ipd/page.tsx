@@ -21,6 +21,7 @@ import { IpdServiceCartPanel } from "@/components/frontdesk/ipd-service-cart-pan
 import { IpdWalletPanel } from "@/components/frontdesk/ipd-wallet-panel";
 import { IpdRefundPanel } from "@/components/frontdesk/ipd-refund-panel";
 import { IpdFinalBillModal } from "@/components/frontdesk/ipd-final-bill-modal";
+import { LabOrderButton } from "@/components/lab/lab-order-modal";
 import { useToast } from "@/components/ui/toast-provider";
 import type { IpdAdmissionDetail, IpdAdmissionStatus, IpdBillingMode, IpdSnapshot } from "@/design-system/ipd-data";
 import type { DocumentTemplate } from "@/design-system/document-templates";
@@ -598,7 +599,7 @@ export default function FrontdeskIpdPage() {
                             Expected discharge: {selectedAdmission.expectedDischarge}
                           </div>
                         )}
-                        <div className="flex gap-2 pt-1">
+                        <div className="flex flex-wrap gap-2 pt-1">
                           <AttioButton variant="secondary" className="gap-1.5" onClick={() => setDialog("edit")}>
                             <Pencil className="size-3.5" />
                             Edit
@@ -615,6 +616,17 @@ export default function FrontdeskIpdPage() {
                             <Stethoscope className="size-3.5" />
                             Profile
                           </AttioButton>
+                          <LabOrderButton
+                            patientId={selectedAdmission.patientId}
+                            patientName={selectedAdmission.patientName}
+                            visitId={selectedAdmission.visitId}
+                            admissionId={selectedAdmission.id}
+                            source="ipd"
+                            onCreated={() => {
+                              toast("Lab order created", "success");
+                              refreshAdmission();
+                            }}
+                          />
                         </div>
 
                         {isPataudi && (

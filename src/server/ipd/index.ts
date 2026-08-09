@@ -1066,7 +1066,7 @@ async function assertIpdDischargeAllowed(
   }
 }
 
-function parseCart(raw: unknown): IpdCartItem[] {
+export function parseCart(raw: unknown): IpdCartItem[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter(
     (item): item is IpdCartItem =>

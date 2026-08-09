@@ -25,7 +25,9 @@ import type {
   LabReportTemplate,
   LabTemplateOverlayField,
 } from "@/design-system/lab-data";
+import type { IpdCartItem } from "@/design-system/ipd-data";
 import { DEFAULT_DOCUMENT_TEMPLATES, type DocumentTemplate } from "@/design-system/document-templates";
+import { parseCart } from "@/server/ipd";
 
 export type LabSnapshot = {
   fieldMasters: LabFieldMaster[];
@@ -536,41 +538,94 @@ export async function createLabOrder(ctx: ServerContext, input: LabOrderInput): 
     select: { name: true },
   });
 
-  const order = await prisma.labOrder.create({
-    data: {
-      ...scope,
-      patientId: input.patientId,
-      visitId: input.visitId ?? null,
-      admissionId: input.admissionId ?? null,
-      orderedBy: ctx.userId,
-      orderedByName: orderingUser?.name ?? ctx.userId,
-      source: input.source ?? "direct",
-      status: "pending_billing",
-      items: {
-        create: input.items.map((item) => {
-          const catalog = catalogMap.get(item.reportCatalogId);
-          const service = catalog?.service;
-          return {
-            reportCatalogId: item.reportCatalogId,
-            serviceId: item.serviceId ?? service?.id ?? null,
-            label: item.label ?? catalog?.name ?? "Lab test",
-            sampleType: item.sampleType ?? catalog?.sampleType ?? null,
-            price: service?.rate != null ? Number(service.rate) : 0,
-            gstPercent: service?.gstPercent != null ? Number(service.gstPercent) : 0,
-            status: "pending_billing",
-          };
-        }),
-      },
-    },
-    include: {
-      patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
-      items: {
-        include: {
-          service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
-          reportCatalog: { include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } } },
+  // For IPD admissions, the order is created as "ordered" and the matching
+  // service charges are appended to the admission cart so they flow through
+  // existing IPD billing. For OPD/direct orders the existing pending_billing
+  // flow is preserved.
+  const isIpdAdmission = Boolean(input.admissionId);
+  const orderStatus: LabOrder["status"] = isIpdAdmission ? "ordered" : "pending_billing";
+
+  const { order } = await prisma.$transaction(async (tx) => {
+    let visitId = input.visitId;
+    const cartItemsToAdd: IpdCartItem[] = [];
+
+    if (input.admissionId) {
+      const admission = await tx.ipdAdmission.findFirst({
+        where: { id: input.admissionId, tenantId: scope.tenantId, branchId: scope.branchId },
+        select: { patientId: true, visitId: true, cart: true },
+      });
+      if (!admission) throw new ServerActionError("NOT_FOUND", "IPD admission not found.");
+      if (admission.patientId !== input.patientId) {
+        throw new ServerActionError("VALIDATION", "Patient does not match the selected IPD admission.");
+      }
+      if (input.visitId && input.visitId !== admission.visitId) {
+        throw new ServerActionError("VALIDATION", "Visit does not match the selected IPD admission.");
+      }
+      visitId = input.visitId ?? admission.visitId ?? undefined;
+
+      for (const item of input.items) {
+        const catalog = catalogMap.get(item.reportCatalogId);
+        const service = catalog?.service;
+        if (!service) continue;
+        cartItemsToAdd.push({
+          id: createId("ipdcart"),
+          type: "service",
+          packageId: service.id,
+          label: `Lab: ${item.label ?? catalog?.name ?? "Lab test"}`,
+          amount: Number(service.rate),
+          quantity: 1,
+          addedAt: new Date().toISOString(),
+        });
+      }
+
+      if (cartItemsToAdd.length > 0) {
+        const existingCart = parseCart(admission.cart);
+        const newCart = [...existingCart, ...cartItemsToAdd];
+        await tx.ipdAdmission.update({
+          where: { id: input.admissionId },
+          data: { cart: newCart as unknown as object },
+        });
+      }
+    }
+
+    const created = await tx.labOrder.create({
+      data: {
+        ...scope,
+        patientId: input.patientId,
+        visitId: visitId ?? null,
+        admissionId: input.admissionId ?? null,
+        orderedBy: ctx.userId,
+        orderedByName: orderingUser?.name ?? ctx.userId,
+        source: input.source ?? "direct",
+        status: orderStatus,
+        items: {
+          create: input.items.map((item) => {
+            const catalog = catalogMap.get(item.reportCatalogId);
+            const service = catalog?.service;
+            return {
+              reportCatalogId: item.reportCatalogId,
+              serviceId: item.serviceId ?? service?.id ?? null,
+              label: item.label ?? catalog?.name ?? "Lab test",
+              sampleType: item.sampleType ?? catalog?.sampleType ?? null,
+              price: service?.rate != null ? Number(service.rate) : 0,
+              gstPercent: service?.gstPercent != null ? Number(service.gstPercent) : 0,
+              status: orderStatus,
+            };
+          }),
         },
       },
-    },
+      include: {
+        patient: { select: { name: true, fullName: true, uhid: true, phone: true, gender: true, age: true, dateOfBirth: true, bloodGroup: true } },
+        items: {
+          include: {
+            service: { select: { id: true, label: true, category: true, rate: true, gstPercent: true } },
+            reportCatalog: { include: { fields: { include: { fieldMaster: { include: { ranges: true } } }, orderBy: { sortOrder: "asc" } } } },
+          },
+        },
+      },
+    });
+
+    return { order: created };
   });
 
   return serializeForClient(serializeOrder(order as unknown as Record<string, unknown> & { patient?: Record<string, unknown>; items?: unknown[] })) as LabOrder;

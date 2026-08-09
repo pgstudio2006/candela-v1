@@ -54,6 +54,28 @@ export type DocumentTemplate = {
   isDefault?: boolean;
   enabled: boolean;
   isSystem: boolean;
+  // Branch/tenant scoping for seeded system templates
+  branchId?: string | null;
+  tenantId?: string | null;
+};
+
+/** Pataudi prescription template on the 60984 letterhead. Must be branch-scoped to Pataudi. */
+export const PATAUDI_PRESCRIPTION_TEMPLATE: DocumentTemplate = {
+  id: "doc_rx_pataudi_60984",
+  kind: "prescription",
+  label: "Pataudi Prescription (60984)",
+  layout: "uploaded-pdf",
+  description: "Pataudi prescription on the 60984 letterhead with patient info header",
+  fileData: "/templates/60984.pdf",
+  mimeType: "application/pdf",
+  marginTop: 360,
+  marginBottom: 60,
+  marginLeft: 42,
+  marginRight: 42,
+  overlayFields: [],
+  isDefault: true,
+  enabled: true,
+  isSystem: true,
 };
 
 export const CLINIC_BRAND = {

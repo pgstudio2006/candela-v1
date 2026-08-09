@@ -2,12 +2,25 @@
 
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel } from "@/components/frontdesk/ui";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Script from "next/script";
+
+type FbLoginResponse = {
+  authResponse?: { code?: string; accessToken?: string } | null;
+  status?: string;
+};
+
+type FbSdk = {
+  init: (config: Record<string, unknown>) => void;
+  login: (
+    callback: (response: FbLoginResponse) => void,
+    options: Record<string, unknown>,
+  ) => void;
+};
 
 declare global {
   interface Window {
-    FB: any;
+    FB: FbSdk;
   }
 }
 
@@ -47,6 +60,20 @@ const AVAILABLE_VARS: Record<string, string[]> = {
   prescription_sent: ["patientName", "itemCount", "doctorName"],
 };
 
+const WHATSAPP_APP_ID =
+  process.env.NEXT_PUBLIC_WHATSAPP_APP_ID ?? "2599951033795789";
+const WHATSAPP_FB_SDK_VERSION =
+  process.env.NEXT_PUBLIC_WHATSAPP_FB_SDK_VERSION ?? "v20.0";
+const WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID =
+  process.env.NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID;
+
+type WaEmbeddedSession = {
+  phone_number_id?: string;
+  waba_id?: string;
+  display_phone_number?: string;
+  waba_name?: string;
+};
+
 export default function WhatsAppTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [logs, setLogs] = useState<WhatsAppLog[]>([]);
@@ -55,20 +82,33 @@ export default function WhatsAppTemplatesPage() {
   const [tab, setTab] = useState<"connection" | "templates" | "logs" | "test">("connection");
   const [fbLoaded, setFbLoaded] = useState(false);
   const [fbConnecting, setFbConnecting] = useState(false);
-  const [wabaId, setWabaId] = useState("");
-  const [phoneNumberId, setPhoneNumberId] = useState("");
+  const [connectedAccount, setConnectedAccount] = useState<{
+    wabaId: string;
+    phoneNumberId: string;
+    displayPhoneNumber?: string | null;
+  } | null>(null);
+  const sessionInfoRef = useRef<WaEmbeddedSession | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [tplRes, logRes] = await Promise.all([
+      const [tplRes, logRes, connRes] = await Promise.all([
         fetch("/api/admin/whatsapp/templates", { credentials: "include" }),
         fetch("/api/admin/whatsapp/logs?limit=50", { credentials: "include" }),
+        fetch("/api/admin/whatsapp/connect", { credentials: "include" }),
       ]);
       const tplJson = await tplRes.json();
       const logJson = await logRes.json();
+      const connJson = await connRes.json();
       if (tplJson.ok) setTemplates(tplJson.data);
       if (logJson.ok) setLogs(logJson.data);
+      if (connJson.ok && connJson.data) {
+        setConnectedAccount({
+          wabaId: connJson.data.wabaId,
+          phoneNumberId: connJson.data.phoneNumberId,
+          displayPhoneNumber: connJson.data.displayPhoneNumber,
+        });
+      }
     } catch (e) {
       console.error("Failed to load WhatsApp data:", e);
     } finally {
@@ -76,9 +116,37 @@ export default function WhatsAppTemplatesPage() {
     }
   }, []);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
+  // Data fetch on mount; this is the standard pattern already used across this page.
   useEffect(() => {
     void load();
   }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.origin.endsWith("facebook.com")) return;
+      try {
+        const data =
+          typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        if (data?.type === "WA_EMBEDDED_SIGNUP") {
+          const info = data?.data ?? data;
+          console.log("[whatsapp:embedded-signup] session info:", info);
+          const next: WaEmbeddedSession = {
+            phone_number_id: info?.phone_number_id,
+            waba_id: info?.waba_id,
+            display_phone_number: info?.display_phone_number,
+            waba_name: info?.waba_name,
+          };
+          sessionInfoRef.current = next;
+        }
+      } catch {
+        // Non-JSON or unrelated message — ignore
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   const saveTemplate = async (trigger: string) => {
     const tpl = templates.find((t) => t.trigger === trigger);
@@ -142,7 +210,7 @@ export default function WhatsAppTemplatesPage() {
       } else {
         setTestResult({ ok: false, detail: json.error || json.data?.error || "Send failed" });
       }
-    } catch (e) {
+    } catch {
       setTestResult({ ok: false, detail: "Request failed" });
     } finally {
       setTesting(false);
@@ -151,24 +219,40 @@ export default function WhatsAppTemplatesPage() {
 
   const launchWhatsAppSignup = () => {
     if (!window.FB) return alert("Facebook SDK not loaded yet.");
+    if (!WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID) {
+      return alert("WhatsApp Embedded Signup Configuration ID is not configured.");
+    }
     setFbConnecting(true);
+    sessionInfoRef.current = null;
+
     window.FB.login(
-      (response: any) => {
-        if (response.authResponse) {
-          const accessToken = response.authResponse.accessToken;
+      (response: FbLoginResponse) => {
+        if (response?.authResponse?.code) {
+          const code = response.authResponse.code;
+          const info = sessionInfoRef.current;
           fetch("/api/admin/whatsapp/connect", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              accessToken,
-              wabaId: wabaId.trim() || undefined,
-              phoneNumberId: phoneNumberId.trim() || undefined,
+            body: JSON.stringify({
+              code,
+              wabaId: info?.waba_id,
+              phoneNumberId: info?.phone_number_id,
+              displayPhoneNumber: info?.display_phone_number,
             }),
           })
             .then((res) => res.json())
             .then((data) => {
-              if (data.ok) alert("WhatsApp connected successfully!");
-              else alert(data.error || "Failed to connect WhatsApp");
+              if (data.ok) {
+                setConnectedAccount({
+                  wabaId: info?.waba_id ?? "",
+                  phoneNumberId: info?.phone_number_id ?? "",
+                  displayPhoneNumber: info?.display_phone_number,
+                });
+                alert("WhatsApp connected successfully!");
+                void load();
+              } else {
+                alert(data.error || "Failed to connect WhatsApp");
+              }
             })
             .catch(() => alert("Network error"))
             .finally(() => setFbConnecting(false));
@@ -177,8 +261,12 @@ export default function WhatsAppTemplatesPage() {
         }
       },
       {
-        scope: "whatsapp_business_management,whatsapp_business_messaging",
-        return_scopes: true,
+        config_id: WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID,
+        response_type: "code",
+        override_default_response_type: true,
+        extras: {
+          setup: {},
+        },
       }
     );
   };
@@ -198,10 +286,10 @@ export default function WhatsAppTemplatesPage() {
         onLoad={() => {
           if (window.FB) {
             window.FB.init({
-              appId: "2599951033795789",
+              appId: WHATSAPP_APP_ID,
               cookie: true,
               xfbml: true,
-              version: "v20.0",
+              version: WHATSAPP_FB_SDK_VERSION,
             });
             setFbLoaded(true);
           }
@@ -242,40 +330,32 @@ export default function WhatsAppTemplatesPage() {
         <Panel title="Connect WhatsApp">
           <div className="space-y-4">
             <p className="text-[13px] text-neutral-600">
-              Connect your Meta WhatsApp Business account via Embedded Signup. To ensure a stable connection, please provide your exact Business Account ID and Phone Number ID from the Meta Developer Dashboard before connecting.
+              Connect your own WhatsApp Business account. Click below, sign in with Facebook, select your WhatsApp Business account and phone number. Once connected, all messages for this branch will be sent from that number.
             </p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-[12px] font-medium text-neutral-700">
-                  WhatsApp Business Account ID (WABA ID)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 10483920..."
-                  value={wabaId}
-                  onChange={(e) => setWabaId(e.target.value)}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-[13px]"
-                />
+            {!WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID && (
+              <div className="rounded-md bg-red-50 p-3 text-[13px] text-red-700">
+                <p className="font-medium">WhatsApp Embedded Signup is not configured.</p>
+                <p className="mt-1">
+                  Set <code>NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID</code> in your environment.
+                </p>
               </div>
-              <div>
-                <label className="mb-1 block text-[12px] font-medium text-neutral-700">
-                  Phone Number ID
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 10293847..."
-                  value={phoneNumberId}
-                  onChange={(e) => setPhoneNumberId(e.target.value)}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-[13px]"
-                />
+            )}
+            {connectedAccount && (
+              <div className="rounded-md bg-green-50 p-3 text-[13px] text-green-700">
+                <p className="font-medium">Connected WhatsApp account</p>
+                <p className="mt-1">WABA ID: {connectedAccount.wabaId}</p>
+                <p>Phone Number ID: {connectedAccount.phoneNumberId}</p>
+                {connectedAccount.displayPhoneNumber && (
+                  <p>Number: {connectedAccount.displayPhoneNumber}</p>
+                )}
               </div>
-            </div>
+            )}
             <AttioButton
               variant="primary"
               onClick={launchWhatsAppSignup}
-              disabled={!fbLoaded || fbConnecting || !wabaId.trim() || !phoneNumberId.trim()}
+              disabled={!fbLoaded || fbConnecting || !WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID}
             >
-              {fbConnecting ? "Connecting..." : "Connect via Meta"}
+              {fbConnecting ? "Connecting..." : "Connect WhatsApp Business"}
             </AttioButton>
           </div>
         </Panel>
@@ -396,10 +476,14 @@ export default function WhatsAppTemplatesPage() {
             <div className="rounded-md bg-neutral-50 p-3 text-[12px] text-neutral-500">
               <p className="font-medium text-neutral-700">Meta WhatsApp Cloud API — Environment Variables (set in Coolify):</p>
               <ul className="mt-2 space-y-1">
-                <li><code>WHATSAPP_API_TOKEN</code> — Your Meta access token (from Facebook Developer / Business Manager)</li>
-                <li><code>WHATSAPP_API_BASE_URL</code> — Meta Graph API base URL (default: https://graph.facebook.com/v20.0)</li>
-                <li><code>WHATSAPP_PHONE_NUMBER_ID</code> — WhatsApp Business Phone Number ID from Meta (required). Find it in your app’s API setup.</li>
-                <li><code>WHATSAPP_WEBHOOK_VERIFY_TOKEN</code> — Your webhook verify token configured in Meta</li>
+                <li><code>NEXT_PUBLIC_WHATSAPP_APP_ID</code> — Meta app ID (fallback: 2599951033795789)</li>
+                <li><code>NEXT_PUBLIC_WHATSAPP_FB_SDK_VERSION</code> — FB SDK version for Embedded Signup (default: v20.0)</li>
+                <li><code>NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID</code> — WhatsApp Embedded Signup configuration ID</li>
+                <li><code>WHATSAPP_APP_SECRET</code> — Meta app secret (server-side only)</li>
+                <li><code>WHATSAPP_API_TOKEN</code> — Fallback global Meta access token</li>
+                <li><code>WHATSAPP_API_BASE_URL</code> — Meta Graph API base URL (default: https://graph.facebook.com/v21.0)</li>
+                <li><code>WHATSAPP_PHONE_NUMBER_ID</code> — Fallback global phone number ID</li>
+                <li><code>WHATSAPP_WEBHOOK_VERIFY_TOKEN</code> — Webhook verify token</li>
               </ul>
               <p className="mt-2">Our webhook receiver: <code>/api/whatsapp/webhook</code></p>
               <p className="mt-1">Set this URL in Meta webhook config: <code>https://your-domain.com/api/whatsapp/webhook</code></p>
