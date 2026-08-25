@@ -1,6 +1,11 @@
 import locationsData from "@/data/india-locations.json";
+import countryNames from "@/data/countries.json";
 
 export const INDIA_COUNTRY = locationsData.country;
+
+export const COUNTRIES = (countryNames as string[])
+  .map((name) => ({ value: name, label: name }))
+  .sort((a, b) => a.label.localeCompare(b.label, "en"));
 
 export const INDIAN_STATES = locationsData.states.map((name) => ({
   value: name,
@@ -52,8 +57,13 @@ export function resolveIndiaLocationOptions(
   fieldId: string,
   values: Record<string, string | number | boolean>,
 ): { value: string; label: string }[] | null {
+  const isIndia = String(values.country ?? INDIA_COUNTRY) === INDIA_COUNTRY;
+
   if (fieldId === "country") {
-    return [{ value: INDIA_COUNTRY, label: INDIA_COUNTRY }];
+    return null; // use schema's country options
+  }
+  if (!isIndia) {
+    return null; // non-India uses free text for state/district/city
   }
   if (fieldId === "state") return INDIAN_STATES;
   if (fieldId === "district") {
@@ -73,6 +83,16 @@ export function cascadeIndiaLocationChange(
   fieldId: string,
   next: Record<string, string | number | boolean>,
 ): Record<string, string | number | boolean> {
+  const isIndia = String(next.country ?? INDIA_COUNTRY) === INDIA_COUNTRY;
+
+  if (fieldId === "country" && !isIndia) {
+    // When switching to a non-India country, reset India-specific fields.
+    return { ...next, state: "", district: "", city: "" };
+  }
+
+  // Only cascade state/district/city for India.
+  if (!isIndia) return next;
+
   if (fieldId === "state") {
     return { ...next, district: "", city: "" };
   }

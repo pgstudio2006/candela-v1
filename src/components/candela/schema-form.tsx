@@ -26,6 +26,7 @@ import {
 } from "@/lib/schema-field-utils";
 import {
   cascadeIndiaLocationChange,
+  INDIA_COUNTRY,
   resolveIndiaLocationOptions,
 } from "@/lib/india-locations";
 import { searchSocieties } from "@/lib/gurgaon-societies";
@@ -137,6 +138,21 @@ function SchemaFieldInput({
   );
 
   if (field.type === "section" || field.type === "divider" || field.type === "help") return null;
+
+  // For non-India countries, state and district become free-text fields so users
+  // can enter any province / county without needing a fixed list.
+  const isIndia = String(allValues?.country ?? INDIA_COUNTRY) === INDIA_COUNTRY;
+  if (!isIndia && (field.id === "state" || field.id === "district")) {
+    return (
+      <Input
+        type="text"
+        value={String(value ?? "")}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+        className={cn(base, "h-9")}
+      />
+    );
+  }
 
   if (field.type === "formula" || field.readOnly) {
     return (

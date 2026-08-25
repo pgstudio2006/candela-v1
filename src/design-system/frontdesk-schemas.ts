@@ -70,6 +70,7 @@ export type FormSchema = {
 
 import {
   APPOINTMENT_CENTRES,
+  COUNTRIES,
   HEAR_ABOUT_OPTIONS,
   INDIA_COUNTRY,
 } from "@/lib/india-locations";
@@ -131,7 +132,7 @@ export const REGISTRATION_SCHEMA: FormSchema = {
           type: "select",
           label: "Country",
           defaultValue: INDIA_COUNTRY,
-          options: [{ value: INDIA_COUNTRY, label: INDIA_COUNTRY }],
+          options: COUNTRIES,
         },
         {
           id: "state",
