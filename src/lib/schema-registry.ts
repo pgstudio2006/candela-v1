@@ -29,6 +29,7 @@ import {
   NURSE_VITALS_SCHEMA,
 } from "@/design-system/nurse-schemas";
 import { PHARMACY_DISPENSE_SCHEMA, PHARMACY_INTAKE_SCHEMA } from "@/design-system/pharmacy-schemas";
+import { COUNTRIES, INDIA_COUNTRY } from "@/lib/india-locations";
 import { otherDetailKey, parseMultiValue, selectionUsesOther } from "@/lib/schema-field-utils";
 
 export const DOCTOR_FORM_SCHEMA_IDS = [
@@ -325,6 +326,20 @@ function mergeRegistrationOverride(override: FormSchema, defaultSchema: FormSche
   return { ...override, sections: mergedSections };
 }
 
+function normalizeCountryField(schema: FormSchema): FormSchema {
+  return {
+    ...schema,
+    sections: schema.sections.map((section) => ({
+      ...section,
+      fields: section.fields.map((field) =>
+        field.id === "country" && field.type === "select"
+          ? { ...field, options: COUNTRIES, defaultValue: field.defaultValue ?? INDIA_COUNTRY }
+          : field,
+      ),
+    })),
+  };
+}
+
 export function getAnyFormSchema(id: string): FormSchema {
   const override = schemaOverrides[id];
   const fallback = ALL_DEFAULT_SCHEMAS[id];
@@ -334,7 +349,7 @@ export function getAnyFormSchema(id: string): FormSchema {
   if (override && isCorruptSchemaOverride(id, override)) {
     const schema = structuredClone(fallback!);
     schema.id = id;
-    return schema;
+    return normalizeCountryField(schema);
   }
   const base = structuredClone(fallback!);
   const overrideClone = override ? structuredClone(override) : null;
@@ -342,7 +357,7 @@ export function getAnyFormSchema(id: string): FormSchema {
     ? mergeRegistrationOverride(overrideClone, base)
     : overrideClone ?? base;
   schema.id = id;
-  return schema;
+  return normalizeCountryField(schema);
 }
 
 export function getDefaultDoctorSchema(id: DoctorFormSchemaId): FormSchema {
