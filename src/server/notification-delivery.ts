@@ -1,4 +1,5 @@
 import type { NotificationChannel, QueuedNotification } from "@/server/notifications";
+import { sendOpenwaTextMessage, sendOpenwaDocumentMessage, defaultOpenwaSessionId } from "@/server/whatsapp/openwa";
 
 export type DeliveryResult = {
   ok: boolean;
@@ -110,12 +111,35 @@ async function fetchWabaPhoneNumbers(
   }
 }
 
+/** WhatsApp via OpenWA gateway (self-hosted, session based). */
+async function deliverWhatsAppOpenwa(
+  recipient: string,
+  body: string,
+): Promise<DeliveryResult> {
+  const sessionId = defaultOpenwaSessionId();
+  const result = await sendOpenwaTextMessage(sessionId, recipient, body);
+  if (!result.ok) {
+    console.error("[whatsapp:openwa] Send failed:", result.detail);
+  }
+  return { ok: result.ok, provider: "openwa", detail: result.detail ?? `session: ${sessionId}` };
+}
+
 /** WhatsApp via Meta Cloud API (WACA) */
 export async function deliverWhatsApp(
   recipient: string,
   body: string,
   connection?: { accessToken: string; phoneNumberId: string },
 ): Promise<DeliveryResult> {
+  // Provider routing: "openwa" (self-hosted gateway) or "meta" (Cloud API).
+  // Defaults to openwa when OPENWA_BASE_URL is set, else meta.
+  const provider =
+    process.env.WHATSAPP_PROVIDER ??
+    (process.env.OPENWA_BASE_URL ? "openwa" : "meta");
+
+  if (provider === "openwa") {
+    return deliverWhatsAppOpenwa(recipient, body);
+  }
+
   const token = connection?.accessToken ?? process.env.WHATSAPP_API_TOKEN;
   let baseUrl = process.env.WHATSAPP_API_BASE_URL ?? "https://graph.facebook.com/v21.0";
   const phoneNumberId = connection?.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -261,7 +285,13 @@ export async function deliverWhatsAppDocument(
   caption: string,
   connection?: { accessToken: string; phoneNumberId: string }
 ): Promise<DeliveryResult> {
-  const provider = process.env.WHATSAPP_PROVIDER || (process.env.TWILIO_WHATSAPP_FROM ? "twilio" : "meta");
+  const provider = process.env.WHATSAPP_PROVIDER || (process.env.OPENWA_BASE_URL ? "openwa" : process.env.TWILIO_WHATSAPP_FROM ? "twilio" : "meta");
+
+  if (provider === "openwa") {
+    const sessionId = defaultOpenwaSessionId();
+    const result = await sendOpenwaDocumentMessage(sessionId, recipient, documentUrl, filename, caption);
+    return { ok: result.ok, provider: "openwa", detail: result.detail };
+  }
 
   if (provider === "twilio") {
     const sid = process.env.TWILIO_ACCOUNT_SID;

@@ -186,6 +186,69 @@ export default function WhatsAppTemplatesPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; detail?: string } | null>(null);
 
+  /* ---------------- OpenWA gateway session state ---------------- */
+  const [openwa, setOpenwa] = useState<{
+    gatewayOnline: boolean;
+    sessionId: string;
+    status?: string;
+    phone?: string | null;
+    detail?: string;
+  } | null>(null);
+  const [openwaQr, setOpenwaQr] = useState<string | null>(null);
+  const [openwaBusy, setOpenwaBusy] = useState(false);
+  const [openwaError, setOpenwaError] = useState<string | null>(null);
+
+  const loadOpenwa = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/whatsapp/openwa/session", { credentials: "include" });
+      const json = await res.json();
+      if (json.ok) setOpenwa(json.data);
+    } catch (e) {
+      console.error("[whatsapp:openwa] status load failed:", e);
+    }
+  }, []);
+
+  const openwaAction = useCallback(async (action: "start" | "qr" | "stop") => {
+    setOpenwaBusy(true);
+    setOpenwaError(null);
+    try {
+      const res = await fetch("/api/admin/whatsapp/openwa/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action }),
+      });
+      const json = await res.json();
+      if (json.ok && action === "qr") {
+        setOpenwaQr(json.data?.qr ?? null);
+      } else if (!json.ok) {
+        setOpenwaError(json.error || "OpenWA action failed");
+      }
+    } catch (e) {
+      setOpenwaError(e instanceof Error ? e.message : "OpenWA request failed");
+    } finally {
+      setOpenwaBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadOpenwa();
+  }, [loadOpenwa]);
+
+  // Poll session status while a QR pairing might be in progress.
+  useEffect(() => {
+    if (!openwaQr) return;
+    const timer = setInterval(() => void loadOpenwa(), 4000);
+    return () => clearInterval(timer);
+  }, [openwaQr, loadOpenwa]);
+
+  // Stop showing the QR once the session reports connected/ready.
+  useEffect(() => {
+    const s = openwa?.status?.toLowerCase();
+    if (s === "connected" || s === "ready" || s === "authenticated") {
+      setOpenwaQr(null);
+    }
+  }, [openwa?.status]);
   const sendTest = async () => {
     if (!testPhone.trim()) {
       alert("Enter a phone number first");
@@ -327,38 +390,114 @@ export default function WhatsAppTemplatesPage() {
           <p className="text-[13px] text-neutral-500">Loading WhatsApp configuration...</p>
         </Panel>
       ) : tab === "connection" ? (
-        <Panel title="Connect WhatsApp">
-          <div className="space-y-4">
-            <p className="text-[13px] text-neutral-600">
-              Connect your own WhatsApp Business account. Click below, sign in with Facebook, select your WhatsApp Business account and phone number. Once connected, all messages for this branch will be sent from that number.
-            </p>
-            {!WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID && (
-              <div className="rounded-md bg-red-50 p-3 text-[13px] text-red-700">
-                <p className="font-medium">WhatsApp Embedded Signup is not configured.</p>
-                <p className="mt-1">
-                  Set <code>NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID</code> in your environment.
-                </p>
+        <div className="space-y-4">
+          <Panel title="WhatsApp Gateway (OpenWA)">
+            <div className="space-y-4">
+              <p className="text-[13px] text-neutral-600">
+                Self-hosted OpenWA gateway session. Scan the QR once with the clinic WhatsApp number
+                (Linked devices). After pairing, all branch WhatsApp messages are sent through this session.
+              </p>
+
+              {!openwa?.gatewayOnline ? (
+                <div className="rounded-md bg-red-50 p-3 text-[13px] text-red-700">
+                  <p className="font-medium">OpenWA gateway is not reachable.</p>
+                  <p className="mt-1">
+                    {openwa?.detail || "Start the OpenWA service and set OPENWA_BASE_URL in the environment."}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-md bg-neutral-100 p-3 text-[13px] text-neutral-700">
+                  <p className="font-medium">Session: {openwa.sessionId}</p>
+                  <p className="mt-1">
+                    Status: <span className="font-mono">{openwa.status ?? "unknown"}</span>
+                    {openwa.phone ? ` · ${openwa.phone}` : ""}
+                  </p>
+                </div>
+              )}
+
+              {openwaQr && (
+                <div className="flex flex-col items-center gap-2 rounded-md border border-neutral-200 bg-white p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={
+                      openwaQr.startsWith("data:")
+                        ? openwaQr
+                        : `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(openwaQr)}`
+                    }
+                    alt="WhatsApp pairing QR"
+                    className="size-[220px]"
+                  />
+                  <p className="text-[12px] text-neutral-500">
+                    WhatsApp → Linked devices → Link a device. This page refreshes status automatically.
+                  </p>
+                </div>
+              )}
+
+              {openwaError && (
+                <div className="rounded-md bg-red-50 p-3 text-[13px] text-red-700">{openwaError}</div>
+              )}
+
+              <div className="flex gap-2">
+                <AttioButton
+                  variant="primary"
+                  disabled={openwaBusy || !openwa?.gatewayOnline}
+                  onClick={() => void openwaAction("start")}
+                >
+                  {openwaBusy ? "Working..." : "Start / Reconnect Session"}
+                </AttioButton>
+                <AttioButton
+                  variant="secondary"
+                  disabled={openwaBusy || !openwa?.gatewayOnline}
+                  onClick={() => void openwaAction("qr")}
+                >
+                  Show Pairing QR
+                </AttioButton>
+                <AttioButton
+                  variant="secondary"
+                  disabled={openwaBusy || !openwa?.gatewayOnline}
+                  onClick={() => void loadOpenwa()}
+                >
+                  Refresh Status
+                </AttioButton>
               </div>
-            )}
-            {connectedAccount && (
-              <div className="rounded-md bg-green-50 p-3 text-[13px] text-green-700">
-                <p className="font-medium">Connected WhatsApp account</p>
-                <p className="mt-1">WABA ID: {connectedAccount.wabaId}</p>
-                <p>Phone Number ID: {connectedAccount.phoneNumberId}</p>
-                {connectedAccount.displayPhoneNumber && (
-                  <p>Number: {connectedAccount.displayPhoneNumber}</p>
-                )}
-              </div>
-            )}
-            <AttioButton
-              variant="primary"
-              onClick={launchWhatsAppSignup}
-              disabled={!fbLoaded || fbConnecting || !WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID}
-            >
-              {fbConnecting ? "Connecting..." : "Connect WhatsApp Business"}
-            </AttioButton>
-          </div>
-        </Panel>
+            </div>
+          </Panel>
+
+          <Panel title="Connect WhatsApp Business (Meta Cloud API)">
+            <div className="space-y-4">
+              <p className="text-[13px] text-neutral-600">
+                Alternative: connect an official WhatsApp Business Cloud API account. Click below, sign in with
+                Facebook, select your WhatsApp Business account and phone number. Once connected, all messages
+                for this branch will be sent from that number.
+              </p>
+              {!WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID && (
+                <div className="rounded-md bg-red-50 p-3 text-[13px] text-red-700">
+                  <p className="font-medium">WhatsApp Embedded Signup is not configured.</p>
+                  <p className="mt-1">
+                    Set <code>NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID</code> in your environment.
+                  </p>
+                </div>
+              )}
+              {connectedAccount && (
+                <div className="rounded-md bg-green-50 p-3 text-[13px] text-green-700">
+                  <p className="font-medium">Connected WhatsApp account</p>
+                  <p className="mt-1">WABA ID: {connectedAccount.wabaId}</p>
+                  <p>Phone Number ID: {connectedAccount.phoneNumberId}</p>
+                  {connectedAccount.displayPhoneNumber && (
+                    <p>Number: {connectedAccount.displayPhoneNumber}</p>
+                  )}
+                </div>
+              )}
+              <AttioButton
+                variant="primary"
+                onClick={launchWhatsAppSignup}
+                disabled={!fbLoaded || fbConnecting || !WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID}
+              >
+                {fbConnecting ? "Connecting..." : "Connect WhatsApp Business"}
+              </AttioButton>
+            </div>
+          </Panel>
+        </div>
       ) : tab === "templates" ? (
         <div className="space-y-4">
           {templates.map((tpl) => (
