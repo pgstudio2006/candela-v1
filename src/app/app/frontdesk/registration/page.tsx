@@ -238,6 +238,12 @@ export default function RegistrationPage() {
     data: Record<string, string | number | boolean>,
     opts?: { forceDuplicate?: boolean },
   ) => {
+    const hasDob = String(data.dob ?? "").trim() !== "";
+    const hasAge = Number(data.age ?? 0) > 0;
+    if (!hasDob && !hasAge) {
+      toast("Date of birth or age is required — prescription and records print the patient age.", "error");
+      return;
+    }
     const payload = normalizeReferralDoctor(data);
     setSubmitting(true);
     const result = await registerPatientAsync(payload, { startVisit: true, forceDuplicate: opts?.forceDuplicate });

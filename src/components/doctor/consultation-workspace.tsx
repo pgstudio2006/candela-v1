@@ -11,6 +11,7 @@ import { useSession } from "@/components/candela/session-provider";
 import type { ConsultationCartItem, ConsultationRecord, TreatmentMode } from "@/design-system/doctor-data";
 import type { LabOrder } from "@/design-system/lab-data";
 import { useDoctorPoll } from "@/hooks/use-doctor-poll";
+import { formatPrescriptionDuration } from "@/lib/doctor-records";
 import { isRedFlagVisit, resolvePatientAge } from "@/lib/frontdesk-workflow";
 import {
   fetchBillingPackagesFromAPI,
@@ -1164,7 +1165,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                         {c.prescription.map((line) => (
                           <li key={line.id} className="text-[12px]">
                             <span className="font-medium">{line.drug}</span> {line.dose} · {line.frequency} ·{" "}
-                            {line.duration ?? `${line.days} days`}
+                            {formatPrescriptionDuration(line)}
                             {line.instructions ? ` · ${line.instructions}` : ""}
                           </li>
                         ))}

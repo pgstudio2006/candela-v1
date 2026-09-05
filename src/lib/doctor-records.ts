@@ -1,4 +1,4 @@
-import type { ConsultationRecord, DoctorTemplate } from "@/design-system/doctor-data";
+import type { ConsultationRecord, DoctorTemplate, PrescriptionLine } from "@/design-system/doctor-data";
 import { scribeLanguageLabel as scribeLangLabel } from "@/lib/ai/deepgram-languages";
 
 export type PatientClinicalRecord = {
@@ -29,6 +29,31 @@ export function consultPrimaryDiagnosis(c: ConsultationRecord) {
   return String(
     c.diagnosis.primaryDiagnosis ?? c.diagnosis.clinicalImpression ?? "Consultation",
   );
+}
+
+const DURATION_UNIT_LABELS: Record<string, string> = {
+  minutes: "min",
+  hours: "hr",
+  days: "day",
+  weeks: "wk",
+  months: "mo",
+  years: "yr",
+};
+
+/**
+ * Human-readable duration for a prescription line.
+ * The editor saves `days` + `durationUnit`; older rows may only carry the
+ * legacy free-text `duration` string, which is preferred when present.
+ */
+export function formatPrescriptionDuration(
+  line: Pick<PrescriptionLine, "duration" | "days" | "durationUnit">,
+): string {
+  const legacy = String(line.duration ?? "").trim();
+  if (legacy) return legacy;
+  const n = Number(line.days ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  const label = DURATION_UNIT_LABELS[line.durationUnit ?? "days"] ?? "day";
+  return `${n} ${label}${n > 1 ? "s" : ""}`;
 }
 
 export function fieldEntries(data: Record<string, string | number | boolean>) {

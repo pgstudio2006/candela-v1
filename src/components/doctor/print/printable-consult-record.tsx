@@ -3,6 +3,7 @@ import type { ConsultationRecord } from "@/design-system/doctor-data";
 import {
   fieldEntries,
   formatConsultDate,
+  formatPrescriptionDuration,
   humanizeFieldKey,
   scribeLanguageLabel,
 } from "@/lib/doctor-records";
@@ -91,7 +92,7 @@ export function PrintableConsultRecord({
                   <td style={s.td}>{rx.drug}</td>
                   <td style={s.td}>{rx.dose}</td>
                   <td style={s.td}>{rx.frequency}</td>
-                  <td style={s.td}>{rx.duration}</td>
+                  <td style={s.td}>{formatPrescriptionDuration(rx)}</td>
                 </tr>
               ))}
             </tbody>

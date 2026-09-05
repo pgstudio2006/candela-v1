@@ -154,10 +154,17 @@ export default function DoctorPatientDetailPage() {
             <dl className="space-y-2 text-[13px]">
               <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Phone</dt><dd>{patient.phone}</dd></div>
               <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Email</dt><dd>{patient.email || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Date of birth</dt><dd>{patient.dateOfBirth ?? "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Age / Sex</dt><dd>{resolvePatientAge(patient.age, patient.dateOfBirth) || "—"}y · {patient.gender}</dd></div>
               <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Department</dt><dd>{patient.department}</dd></div>
               <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Referred by</dt><dd>{patient.referrer || "Walk-in"}</dd></div>
               <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Balance</dt><dd>₹{patient.balance.toLocaleString("en-IN")}</dd></div>
             </dl>
+            {!resolvePatientAge(patient.age, patient.dateOfBirth) && (
+              <p className="mt-3 rounded-md border border-amber-200/80 bg-amber-50/60 p-2.5 text-[11px] text-amber-800">
+                Age missing — prescriptions print “—y”. Ask the front desk to edit this patient and add date of birth or age.
+              </p>
+            )}
           </Panel>
 
           <Panel title="Visit history">

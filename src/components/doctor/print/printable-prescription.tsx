@@ -1,6 +1,6 @@
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
-import { formatConsultDate } from "@/lib/doctor-records";
+import { formatConsultDate, formatPrescriptionDuration } from "@/lib/doctor-records";
 import { resolvePatientAge } from "@/lib/frontdesk-workflow";
 import { NavayuLetterhead, letterheadStyles as s } from "./navayu-letterhead";
 
@@ -71,7 +71,7 @@ export function PrintablePrescription({
                 <td style={s.td}>{line.drug || "—"}</td>
                 <td style={s.td}>{line.dose}</td>
                 <td style={s.td}>{line.frequency}</td>
-                <td style={s.td}>{line.duration}</td>
+                <td style={s.td}>{formatPrescriptionDuration(line)}</td>
                 <td style={s.td}>{line.instructions ?? "—"}</td>
               </tr>
             ))}

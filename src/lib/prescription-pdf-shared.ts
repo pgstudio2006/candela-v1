@@ -1,5 +1,6 @@
 import { rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { PRESCRIPTION_FREQUENCY_OPTIONS, type PrescriptionLine } from "@/design-system/doctor-data";
+import { formatPrescriptionDuration } from "@/lib/doctor-records";
 
 export const COLORS = {
   ink: rgb(0.12, 0.12, 0.14),
@@ -31,13 +32,9 @@ export function formatFrequency(value: string): string {
 }
 
 export function formatDuration(line: PrescriptionLine): string {
-  if (line.duration && line.duration.trim()) return line.duration.trim();
-  const n = line.days;
-  if (!n || n <= 0) return "--";
-  const unit = line.durationUnit ?? "days";
-  const unitLabel = unit === "minutes" ? "min" : unit === "hours" ? "hr" : unit === "days" ? "day" : unit === "weeks" ? "wk" : unit === "months" ? "mo" : unit === "years" ? "yr" : "day";
-  const plural = n === 1 ? "" : unit === "minutes" ? "s" : unit === "hours" ? "s" : unit === "days" ? "s" : unit === "weeks" ? "s" : unit === "months" ? "s" : unit === "years" ? "s" : "s";
-  return `${n} ${unitLabel}${plural}`;
+  const text = formatPrescriptionDuration(line);
+  // PDF-safe ASCII fallback (em dash is not latin-1 safe for pdf-lib core fonts).
+  return text === "—" ? "--" : text;
 }
 
 export function formatConsultDate(iso: string): string {

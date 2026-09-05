@@ -6,7 +6,7 @@ import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import { useSession } from "@/components/candela/session-provider";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
-import { formatConsultDate } from "@/lib/doctor-records";
+import { formatConsultDate, formatPrescriptionDuration } from "@/lib/doctor-records";
 import { generatePrescriptionPdf, printPdfBytes } from "@/lib/prescription-pdf";
 import { savePdfAsPatientDocument } from "@/lib/patient-documents";
 import type { DocumentTemplate } from "@/design-system/document-templates";
@@ -89,7 +89,7 @@ export function PatientPrescriptionsPanel({ patient, visits }: PatientPrescripti
                               <td className="py-1.5 pr-2 font-medium">{line.drug || "—"}</td>
                               <td className="py-1.5 pr-2">{line.dose || "—"}</td>
                               <td className="py-1.5 pr-2">{line.frequency || "—"}</td>
-                              <td className="py-1.5">{line.duration || `${line.days} days`}</td>
+                              <td className="py-1.5">{formatPrescriptionDuration(line)}</td>
                             </tr>
                           ))}
                         </tbody>

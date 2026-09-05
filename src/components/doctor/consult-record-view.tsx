@@ -1,10 +1,15 @@
 "use client";
 
 import { getVisitReceiptAction } from "@/app/actions/clinical-actions";
+import { listDocumentTemplatesAction } from "@/app/actions/doctor-actions";
 import { PrintableConsultRecord } from "@/components/doctor/print/printable-consult-record";
 import { InvoicePdfPreviewModal } from "@/components/doctor/print/invoice-pdf-preview-modal";
-import { PrintablePrescription } from "@/components/doctor/print/printable-prescription";
 import { PrintPreviewModal } from "@/components/doctor/print/print-preview-modal";
+import { useSession } from "@/components/candela/session-provider";
+import { useToast } from "@/components/ui/toast-provider";
+import { generatePrescriptionPdf, printPdfBytes } from "@/lib/prescription-pdf";
+import { savePdfAsPatientDocument } from "@/lib/patient-documents";
+import type { DocumentTemplate } from "@/design-system/document-templates";
 import type { OpdReceiptPayload } from "@/lib/opd-receipt";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
@@ -13,11 +18,14 @@ import {
   consultPrimaryDiagnosis,
   fieldEntries,
   formatConsultDate,
+  formatPrescriptionDuration,
   humanizeFieldKey,
   scribeLanguageLabel,
 } from "@/lib/doctor-records";
 import { FileText, Printer, Receipt } from "lucide-react";
 import { useEffect, useState } from "react";
+
+const PATAUDI_BRANCH_ID = "branch_pataudi";
 
 type ConsultRecordViewProps = {
   patient: Patient;
@@ -34,10 +42,26 @@ export function ConsultRecordView({
   doctorName,
   compact,
 }: ConsultRecordViewProps) {
-  const [printKind, setPrintKind] = useState<"rx" | "invoice" | "record" | null>(null);
+  const { session } = useSession();
+  const { toast } = useToast();
+  const [printKind, setPrintKind] = useState<"invoice" | "record" | null>(null);
   const [invoiceReceipt, setInvoiceReceipt] = useState<OpdReceiptPayload | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [invoiceError, setInvoiceError] = useState("");
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
+  const [printingRx, setPrintingRx] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listDocumentTemplatesAction()
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setDocumentTemplates(res.data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (printKind !== "invoice") {
@@ -72,6 +96,41 @@ export function ConsultRecordView({
     };
   }, [printKind, visit.id]);
 
+  const handlePrintPrescription = async () => {
+    setPrintingRx(true);
+    try {
+      const isPataudi = session?.branchId === PATAUDI_BRANCH_ID;
+      const defaultTemplate = isPataudi
+        ? (documentTemplates.find((t) => t.kind === "prescription" && t.isDefault) ?? null)
+        : null;
+      const pdfBytes = await generatePrescriptionPdf({
+        patient,
+        visit,
+        consult,
+        doctorName,
+        layout: defaultTemplate?.layout ?? "navayu-letterhead",
+        branchId: session?.branchId,
+        uploadedTemplateFileData: defaultTemplate?.fileData,
+        template: defaultTemplate,
+      });
+      printPdfBytes(pdfBytes, "Prescription");
+      if (isPataudi) {
+        const date = new Date().toISOString().slice(0, 10);
+        await savePdfAsPatientDocument(
+          patient.id,
+          "prescription",
+          `prescription-${patient.uhid ?? patient.id}-${date}.pdf`,
+          pdfBytes,
+          { visitId: visit.id, label: `Prescription · ${doctorName} · ${date}` },
+        );
+      }
+    } catch {
+      toast("Could not generate prescription PDF", "error");
+    } finally {
+      setPrintingRx(false);
+    }
+  };
+
   return (
     <>
       <div className="mb-4 flex flex-wrap gap-2">
@@ -83,9 +142,14 @@ export function ConsultRecordView({
 
       {!compact && (
         <div className="mb-4 flex flex-wrap gap-2">
-          <AttioButton variant="secondary" className="gap-1.5" onClick={() => setPrintKind("rx")}>
+          <AttioButton
+            variant="secondary"
+            className="gap-1.5"
+            disabled={printingRx}
+            onClick={() => void handlePrintPrescription()}
+          >
             <Printer className="size-3.5" />
-            Print prescription
+            {printingRx ? "Preparing…" : "Print prescription"}
           </AttioButton>
           <AttioButton variant="secondary" className="gap-1.5" onClick={() => setPrintKind("invoice")}>
             <Receipt className="size-3.5" />
@@ -180,7 +244,7 @@ export function ConsultRecordView({
                     <td className="py-2 pr-2">{rx.drug}</td>
                     <td className="py-2 pr-2">{rx.dose}</td>
                     <td className="py-2 pr-2">{rx.frequency}</td>
-                    <td className="py-2">{rx.duration}</td>
+                    <td className="py-2">{formatPrescriptionDuration(rx)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -207,15 +271,6 @@ export function ConsultRecordView({
           </Panel>
         )}
       </div>
-
-      <PrintPreviewModal
-        open={printKind === "rx"}
-        onClose={() => setPrintKind(null)}
-        title="Prescription"
-        printId="print-rx"
-      >
-        <PrintablePrescription patient={patient} visit={visit} consult={consult} doctorName={doctorName} />
-      </PrintPreviewModal>
 
       <InvoicePdfPreviewModal
         open={printKind === "invoice"}

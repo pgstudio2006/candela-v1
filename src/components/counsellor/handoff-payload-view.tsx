@@ -3,7 +3,7 @@
 import { Panel, StatusBadge } from "@/components/frontdesk/ui";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
 import type { CounsellorQueueItem } from "@/design-system/doctor-data";
-import { fieldEntries, humanizeFieldKey, scribeLanguageLabel } from "@/lib/doctor-records";
+import { fieldEntries, formatPrescriptionDuration, humanizeFieldKey, scribeLanguageLabel } from "@/lib/doctor-records";
 import { ShieldCheck } from "lucide-react";
 
 type HandoffPayloadViewProps = {
@@ -123,7 +123,7 @@ export function HandoffPayloadView({ item, patient, visit }: HandoffPayloadViewP
             <thead><tr className="border-b text-left text-[var(--attio-text-tertiary)]"><th className="pb-2">Medicine</th><th>Dose</th><th>Freq</th><th>Duration</th></tr></thead>
             <tbody>
               {c.prescription.map((rx) => (
-                <tr key={rx.id} className="border-b border-[var(--attio-border-subtle)]"><td className="py-2">{rx.drug}</td><td>{rx.dose}</td><td>{rx.frequency}</td><td>{rx.duration}</td></tr>
+                <tr key={rx.id} className="border-b border-[var(--attio-border-subtle)]"><td className="py-2">{rx.drug}</td><td>{rx.dose}</td><td>{rx.frequency}</td><td>{formatPrescriptionDuration(rx)}</td></tr>
               ))}
             </tbody>
           </table>

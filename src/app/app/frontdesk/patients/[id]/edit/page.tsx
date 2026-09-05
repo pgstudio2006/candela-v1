@@ -109,6 +109,12 @@ export default function PatientEditPage() {
           initialValues={initialValues}
           submitLabel={submitting ? "Saving…" : "Save changes"}
           onSubmit={async (data) => {
+            const hasDob = String(data.dob ?? "").trim() !== "";
+            const hasAge = Number(data.age ?? 0) > 0;
+            if (!hasDob && !hasAge) {
+              toast("Date of birth or age is required — prescription and records print the patient age.", "error");
+              return;
+            }
             setSubmitting(true);
             const result = await updatePatientAsync(patientId, data);
             setSubmitting(false);
