@@ -79,21 +79,16 @@ export function PrintablePrescription({
         </table>
       )}
 
-      {String(consult.treatment.plan ?? "") && (
+      {String(consult.treatment.followUp ?? "") && (
         <div style={{ ...s.section, marginTop: "16px" }}>
-          <div style={s.sectionTitle}>Advice</div>
-          <div>{String(consult.treatment.plan)}</div>
-          {String(consult.treatment.followUp ?? "") && (
-            <div style={{ marginTop: "4px" }}>
-              <strong>Follow-up:</strong> {String(consult.treatment.followUp)}
-            </div>
-          )}
+          <div style={s.sectionTitle}>Follow-up</div>
+          <div>{String(consult.treatment.followUp)}</div>
         </div>
       )}
 
       {consult.doctorAdvice && (
         <div style={s.section}>
-          <div style={s.sectionTitle}>Doctor advice</div>
+          <div style={s.sectionTitle}>Advice</div>
           <div>{consult.doctorAdvice}</div>
         </div>
       )}

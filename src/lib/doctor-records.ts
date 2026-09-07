@@ -42,18 +42,22 @@ const DURATION_UNIT_LABELS: Record<string, string> = {
 
 /**
  * Human-readable duration for a prescription line.
- * The editor saves `days` + `durationUnit`; older rows may only carry the
- * legacy free-text `duration` string, which is preferred when present.
+ * The editor saves `days` + `durationUnit`; when a real day count exists it
+ * always wins (AI scribe may leave a stale free-text `duration` behind that
+ * must not override the doctor's number). Legacy rows with only the
+ * free-text `duration` string still render from it.
  */
 export function formatPrescriptionDuration(
   line: Pick<PrescriptionLine, "duration" | "days" | "durationUnit">,
 ): string {
+  const n = Number(line.days ?? 0);
+  if (Number.isFinite(n) && n > 0) {
+    const label = DURATION_UNIT_LABELS[line.durationUnit ?? "days"] ?? "day";
+    return `${n} ${label}${n > 1 ? "s" : ""}`;
+  }
   const legacy = String(line.duration ?? "").trim();
   if (legacy) return legacy;
-  const n = Number(line.days ?? 0);
-  if (!Number.isFinite(n) || n <= 0) return "—";
-  const label = DURATION_UNIT_LABELS[line.durationUnit ?? "days"] ?? "day";
-  return `${n} ${label}${n > 1 ? "s" : ""}`;
+  return "—";
 }
 
 export function fieldEntries(data: Record<string, string | number | boolean>) {

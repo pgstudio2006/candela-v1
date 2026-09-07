@@ -173,13 +173,13 @@ export function PrescriptionEditor({ lines, onChange }: PrescriptionEditorProps)
                     type="number"
                     min={1}
                     value={line.days}
-                    onChange={(e) => update(line.id, { days: Number(e.target.value) })}
+                    onChange={(e) => update(line.id, { days: Number(e.target.value), duration: undefined })}
                     placeholder="Duration"
                     className="rounded border border-[var(--attio-border)] bg-white px-2 py-1.5 text-[12px] outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
                   />
                   <select
                     value={line.durationUnit ?? "days"}
-                    onChange={(e) => update(line.id, { durationUnit: e.target.value as PrescriptionLine["durationUnit"] })}
+                    onChange={(e) => update(line.id, { durationUnit: e.target.value as PrescriptionLine["durationUnit"], duration: undefined })}
                     className="rounded border border-[var(--attio-border)] bg-white px-2 py-1.5 text-[12px] outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
                   >
                     {DURATION_UNIT_OPTIONS.map((o) => (

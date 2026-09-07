@@ -14,7 +14,7 @@ import {
 } from "@/design-system/doctor-data";
 import type { DocumentTemplate } from "@/design-system/document-templates";
 import type { DoctorSnapshot } from "@/server/doctor";
-import type { ScribeDraft } from "@/lib/ai/scribe-types";
+import { normalizeScribePrescriptionLine, type ScribeDraft } from "@/lib/ai/scribe-types";
 import { computeDoctorChartAnalytics } from "@/lib/doctor-analytics-data";
 import { filterDoctorOpdQueue } from "@/lib/doctor-queue";
 import { patientDisplayName } from "@/lib/frontdesk-workflow";
@@ -482,7 +482,7 @@ export function DoctorStoreProvider({ children }: { children: ReactNode }) {
         setPrescription(
           visitId,
           draft.prescription.map((line, i) => ({
-            ...line,
+            ...normalizeScribePrescriptionLine(line),
             id: `rx_scribe_${Date.now()}_${i}`,
           })),
         );

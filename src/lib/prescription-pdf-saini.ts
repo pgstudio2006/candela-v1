@@ -512,20 +512,7 @@ function drawPrescriptionContent(
     });
   }
 
-  // 7. Advice
-  if (String(consult.treatment?.plan ?? "").trim()) {
-    const planLines = wrapText(String(consult.treatment.plan), font, FONT.body, infoWidth);
-    ensureSpace(ctx, pdfDoc, image, 12 + planLines.length * LAYOUT.lineLeading + LAYOUT.paragraphGap);
-    drawText(ctx.page, "Advice", LAYOUT.marginLeft, ctx.y, bold, FONT.tableHead);
-    ctx.y -= 12;
-    planLines.forEach((line) => {
-      drawText(ctx.page, line, LAYOUT.marginLeft, ctx.y, font, FONT.body);
-      ctx.y -= LAYOUT.lineLeading;
-    });
-    ctx.y -= LAYOUT.paragraphGap;
-  }
-
-  // 8. Follow-up
+  // 7. Follow-up
   const followUp = String(consult.treatment?.followUp ?? "").trim();
   if (followUp) {
     ensureSpace(ctx, pdfDoc, image, 12 + LAYOUT.lineLeading + LAYOUT.paragraphGap);
@@ -536,12 +523,12 @@ function drawPrescriptionContent(
     ctx.y -= LAYOUT.paragraphGap;
   }
 
-  // 9. Doctor Notes
+  // 8. Advice — doctor's advice to the patient (NOT the internal treatment plan)
   if (consult.doctorAdvice) {
     const adviceLines = wrapText(consult.doctorAdvice, font, FONT.body, infoWidth);
     const blockHeight = 12 + adviceLines.length * LAYOUT.lineLeading + LAYOUT.paragraphGap;
     ensureSpace(ctx, pdfDoc, image, blockHeight);
-    drawText(ctx.page, "Doctor Notes", LAYOUT.marginLeft, ctx.y, bold, FONT.tableHead);
+    drawText(ctx.page, "Advice", LAYOUT.marginLeft, ctx.y, bold, FONT.tableHead);
     ctx.y -= 12;
     adviceLines.forEach((line) => {
       drawText(ctx.page, line, LAYOUT.marginLeft, ctx.y, font, FONT.body);

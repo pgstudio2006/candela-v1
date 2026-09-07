@@ -35,10 +35,10 @@ Return ONLY valid JSON matching this schema:
     "referrals": "string optional"
   },
   "prescription": [
-    { "drug": "full drug with strength", "dose": "e.g. 1 tab", "frequency": "OD|BD|TDS|SOS", "duration": "e.g. 7 days", "instructions": "optional" }
+    { "drug": "full drug with strength", "dose": "e.g. 1 tab", "frequency": "OD|BD|TDS|QID|HS|SOS", "days": 7, "durationUnit": "days|weeks|months", "instructions": "optional" }
   ]
 }
-Use Indian brand/generic medicine names when mentioned. If no medicines discussed, return empty prescription array.
+Use Indian brand/generic medicine names when mentioned. "days" must be a number (e.g. 5, 7) with "durationUnit" as days|weeks|months — never write duration as free text. If no medicines discussed, return empty prescription array.
 Do not invent critical findings not supported by the transcript.`;
 
 export async function analyzeScribeTranscript(input: {

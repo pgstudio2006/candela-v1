@@ -182,26 +182,18 @@ export async function generatePrescriptionPdf(props: PrescriptionPdfProps): Prom
     currentY -= LAYOUT.paragraphGap;
   }
 
-  // Advice
-  if (String(consult.treatment.plan ?? "")) {
-    drawText(page, "Advice", LAYOUT.marginLeft, currentY, bold, FONT.tableHead);
+  // Follow-up
+  if (String(consult.treatment.followUp ?? "")) {
+    drawText(page, "Follow-up", LAYOUT.marginLeft, currentY, bold, FONT.tableHead);
     currentY -= 14;
-    const planLines = wrapText(String(consult.treatment.plan), font, FONT.body, infoWidth);
-    planLines.forEach((line) => {
-      drawText(page, line, LAYOUT.marginLeft, currentY, font, FONT.body);
-      currentY -= LAYOUT.lineLeading;
-    });
-    if (String(consult.treatment.followUp ?? "")) {
-      currentY -= 4;
-      drawText(page, `Follow-up: ${String(consult.treatment.followUp)}`, LAYOUT.marginLeft, currentY, font, FONT.body);
-      currentY -= LAYOUT.lineLeading;
-    }
+    drawText(page, String(consult.treatment.followUp), LAYOUT.marginLeft, currentY, font, FONT.body);
+    currentY -= LAYOUT.lineLeading;
     currentY -= LAYOUT.paragraphGap;
   }
 
-  // Doctor advice
+  // Advice — doctor's advice to the patient (NOT the internal treatment plan)
   if (consult.doctorAdvice) {
-    drawText(page, "Doctor advice", LAYOUT.marginLeft, currentY, bold, FONT.tableHead);
+    drawText(page, "Advice", LAYOUT.marginLeft, currentY, bold, FONT.tableHead);
     currentY -= 14;
     const adviceLines = wrapText(consult.doctorAdvice, font, FONT.body, infoWidth);
     adviceLines.forEach((line) => {
