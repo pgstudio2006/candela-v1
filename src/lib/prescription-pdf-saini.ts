@@ -33,7 +33,7 @@ const PAGE = { width: 595.2, height: 841.9 };
 const LAYOUT = {
   marginLeft: 148,
   marginRight: 560,
-  contentTop: 570,
+  contentTop: 600,
   minRowHeight: 14,
   lineLeading: 11,
   footerMinY: 110,
@@ -104,16 +104,17 @@ function drawCheckbox(page: PDFPage, x: number, y: number, size = 7, checked = f
     color: COLORS.white,
   });
   if (checked) {
+    // Check mark (√) instead of a cross
     page.drawLine({
-      start: { x: x + 1, y: y + 1 },
-      end: { x: x + size - 1, y: y + size - 3 },
-      thickness: 0.5,
+      start: { x: x + 0.5, y: y + size / 2 - 1 },
+      end: { x: x + size * 0.35, y: y + 0.5 },
+      thickness: 0.9,
       color: COLORS.ink,
     });
     page.drawLine({
-      start: { x: x + 1, y: y + size - 3 },
-      end: { x: x + size - 1, y: y + 1 },
-      thickness: 0.5,
+      start: { x: x + size * 0.35, y: y + 0.5 },
+      end: { x: x + size - 0.5, y: y + size - 1.5 },
+      thickness: 0.9,
       color: COLORS.ink,
     });
   }
@@ -235,7 +236,7 @@ function drawPrescriptionContent(
 
   const panelLeft = 148;
   const panelRight = 562;
-  const panelTop = 586;
+  const panelTop = 614;
   const leftLabelX = panelLeft + 10;
   const leftValueX = panelLeft + 92;
   const rightLabelX = panelLeft + 215;
