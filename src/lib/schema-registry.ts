@@ -340,6 +340,33 @@ function normalizeCountryField(schema: FormSchema): FormSchema {
   };
 }
 
+/**
+ * Fields the prescription PDF renders as vitals / Yes-No checkboxes. They must
+ * always exist on the doctor examination form, even if an admin published a
+ * custom form override that dropped them.
+ */
+const PRESCRIPTION_SCREENING_FIELDS: SchemaField[] = [
+  { id: "vitalsBp", type: "text", label: "Blood pressure", placeholder: "120/80" },
+  { id: "vitalsPulse", type: "number", label: "Pulse / PR (bpm)" },
+  { id: "allergyKnown", type: "radio", label: "Known drug allergy", defaultValue: "No", span: 2, options: [{ value: "No", label: "No" }, { value: "Yes", label: "Yes" }] },
+  { id: "allergies", type: "text", label: "Allergy details (if yes)", placeholder: "e.g. Penicillin — or NKDA" },
+  { id: "diabetes", type: "radio", label: "Diabetes", defaultValue: "No", options: [{ value: "No", label: "No" }, { value: "Yes", label: "Yes" }] },
+  { id: "thyroidDisorder", type: "radio", label: "Thyroid disorder", defaultValue: "No", options: [{ value: "No", label: "No" }, { value: "Yes", label: "Yes" }] },
+  { id: "hypertension", type: "radio", label: "Hypertension", defaultValue: "No", options: [{ value: "No", label: "No" }, { value: "Yes", label: "Yes" }] },
+];
+
+function ensurePrescriptionScreeningFields(schema: FormSchema): FormSchema {
+  if (schema.id !== "doctor-examination") return schema;
+  const existing = new Set(schemaFieldIds(schema));
+  const missing = PRESCRIPTION_SCREENING_FIELDS.filter((f) => !existing.has(f.id));
+  if (missing.length === 0) return schema;
+  const sections = schema.sections.length
+    ? [...schema.sections]
+    : [{ id: "complaint", label: "Chief complaint & history", fields: [] as SchemaField[] }];
+  sections[0] = { ...sections[0], fields: [...sections[0].fields, ...missing] };
+  return { ...schema, sections };
+}
+
 export function getAnyFormSchema(id: string): FormSchema {
   const override = schemaOverrides[id];
   const fallback = ALL_DEFAULT_SCHEMAS[id];
@@ -357,7 +384,7 @@ export function getAnyFormSchema(id: string): FormSchema {
     ? mergeRegistrationOverride(overrideClone, base)
     : overrideClone ?? base;
   schema.id = id;
-  return normalizeCountryField(schema);
+  return normalizeCountryField(ensurePrescriptionScreeningFields(schema));
 }
 
 export function getDefaultDoctorSchema(id: DoctorFormSchemaId): FormSchema {

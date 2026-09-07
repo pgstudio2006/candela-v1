@@ -1,5 +1,10 @@
 import type { FormSchema } from "@/design-system/frontdesk-schemas";
 
+const YES_NO_OPTIONS = [
+  { value: "No", label: "No" },
+  { value: "Yes", label: "Yes" },
+];
+
 export const DOCTOR_EXAMINATION_SCHEMA: FormSchema = {
   id: "doctor-examination",
   title: "Examination",
@@ -10,12 +15,16 @@ export const DOCTOR_EXAMINATION_SCHEMA: FormSchema = {
       fields: [
         { id: "chiefComplaint", type: "textarea", label: "Chief complaints", required: true, span: 2 },
         { id: "vitalsBp", type: "text", label: "Blood pressure", placeholder: "120/80" },
-        { id: "vitalsPulse", type: "number", label: "Pulse (bpm)" },
+        { id: "vitalsPulse", type: "number", label: "Pulse / PR (bpm)" },
         { id: "vitalsWeight", type: "number", label: "Weight (kg)" },
         { id: "vitalsSpo2", type: "number", label: "SpO₂ (%)" },
         { id: "historyPresent", type: "textarea", label: "History of present illness", span: 2 },
         { id: "pastHistory", type: "textarea", label: "Past medical / surgical history", span: 2 },
-        { id: "allergies", type: "text", label: "Allergies", placeholder: "NKDA" },
+        { id: "allergyKnown", type: "radio", label: "Known drug allergy", defaultValue: "No", span: 2, options: YES_NO_OPTIONS },
+        { id: "allergies", type: "text", label: "Allergy details (if yes)", placeholder: "e.g. Penicillin — or NKDA" },
+        { id: "diabetes", type: "radio", label: "Diabetes", defaultValue: "No", options: YES_NO_OPTIONS },
+        { id: "thyroidDisorder", type: "radio", label: "Thyroid disorder", defaultValue: "No", options: YES_NO_OPTIONS },
+        { id: "hypertension", type: "radio", label: "Hypertension", defaultValue: "No", options: YES_NO_OPTIONS },
       ],
     },
     {

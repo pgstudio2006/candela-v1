@@ -53,6 +53,7 @@ const SHOWN_IN_PATIENT_INFO = new Set([
   "vitalsWeight",
   "vitalsSpo2",
   "vitalsTemperature",
+  "allergyKnown",
   "allergies",
   "diabetes",
   "thyroidDisorder",
@@ -276,7 +277,17 @@ function drawPrescriptionContent(
   drawPatientValue(ctx.page, rightValueX, panelY, pr || "--", font, FONT.body, 90);
   panelY -= lineGap;
 
-  const hasAllergy = !!(allergies && allergies.trim() && allergies.trim().toLowerCase() !== "none" && allergies.trim() !== "--");
+  const explicitAllergyKnown = consult.examination?.allergyKnown;
+  const allergyText = allergies.trim().toLowerCase();
+  const hasTextAllergy =
+    !!allergyText &&
+    !["none", "nkda", "nil", "no", "--", "-"].includes(allergyText);
+  const hasAllergy =
+    isYes(explicitAllergyKnown)
+      ? true
+      : isNo(explicitAllergyKnown)
+        ? false
+        : hasTextAllergy;
 
   function isYes(value: unknown): boolean {
     return value === true || value === "Yes" || value === "yes";

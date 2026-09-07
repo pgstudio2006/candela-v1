@@ -4,6 +4,7 @@ import { PublishedSchemaForm } from "@/components/candela/published-schema-form"
 import { AiScribePanel } from "@/components/doctor/ai-scribe-panel";
 import { useDoctorStore } from "@/components/doctor/doctor-store";
 import { PrescriptionEditor } from "@/components/doctor/prescription-editor";
+import { VerifyPrescriptionModal } from "@/components/doctor/print/verify-prescription-modal";
 import { useDoctorFormSchema } from "@/components/doctor/use-doctor-form-schema";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
@@ -134,6 +135,8 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [savingHandoff, setSavingHandoff] = useState(false);
   const [handoffSaved, setHandoffSaved] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [pendingForceSkip, setPendingForceSkip] = useState(false);
   const [historyConsultations, setHistoryConsultations] = useState<ConsultationRecord[]>([]);
   const [historyLabOrders, setHistoryLabOrders] = useState<LabOrder[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -282,8 +285,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     );
   }
 
-  const finishConsult = async (forceSkip = false) => {
-    setCompleting(true);
+  const validateForCompletion = (): boolean => {
     const consultData = getConsultation(visitId);
     const examErrors = validateFormValues(examSchema, consultData?.examination ?? {});
     const dxErrors = validateFormValues(dxSchema, consultData?.diagnosis ?? {});
@@ -294,16 +296,27 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
       Object.values(handoffErrors)[0];
     if (firstError) {
       toast(firstError, "error");
-      setCompleting(false);
-      return;
+      return false;
     }
 
     if (treatmentMode === "ipd" && (!handoffValues.ward || !handoffValues.bed)) {
       toast("Select an IPD ward and bed before completing the consultation.", "error");
-      setCompleting(false);
-      return;
+      return false;
     }
+    return true;
+  };
 
+  /** Opens the prescription verification gate — completion runs only after the doctor confirms. */
+  const requestFinish = (forceSkip = false) => {
+    if (!validateForCompletion()) return;
+    setPendingForceSkip(forceSkip);
+    setVerifyOpen(true);
+  };
+
+  const finishConsult = async () => {
+    const forceSkip = pendingForceSkip;
+    setVerifyOpen(false);
+    setCompleting(true);
     const { cart: _, ...handoffPayload } = handoffValues;
     const result = await completeConsultation(visitId, {
       treatmentMode,
@@ -339,16 +352,16 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
         template: selectedTemplate,
       });
       printPdfBytes(pdfBytes, "Prescription");
-      if (isPataudi) {
-        const date = new Date().toISOString().slice(0, 10);
-        await savePdfAsPatientDocument(
-          patient.id,
-          "prescription",
-          `prescription-${patient.uhid ?? patient.id}-${date}.pdf`,
-          pdfBytes,
-          { visitId: visit.id, label: `Prescription · ${visit.doctorName} · ${date}` },
-        );
-      }
+      // Keep the exact printed prescription in the patient profile documents.
+      const date = new Date().toISOString().slice(0, 10);
+      await savePdfAsPatientDocument(
+        patient.id,
+        "prescription",
+        `prescription-${patient.uhid ?? patient.id}-${date}.pdf`,
+        pdfBytes,
+        { visitId: visit.id, label: `Prescription · ${visit.doctorName} · ${date}` },
+      );
+      toast("Prescription saved to patient profile", "success");
     } catch (error) {
       toast("Could not generate prescription PDF", "error");
     }
@@ -1098,7 +1111,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 placeholder="Private consult notes…"
                 className="w-full resize-none rounded-lg border border-[var(--attio-border)] px-3 py-2 text-[13px] outline-none"
               />
-              <AttioButton variant="primary" className="w-full gap-1.5" onClick={() => finishConsult()} disabled={completing}>
+              <AttioButton variant="primary" className="w-full gap-1.5" onClick={() => requestFinish(false)} disabled={completing}>
                 {completing ? (
                   <>
                     <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -1123,7 +1136,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                   disabled={completing}
                   onClick={() => {
                     setSkipCounsellor(true);
-                    finishConsult(true);
+                    requestFinish(true);
                   }}
                 >
                   {completing ? (
@@ -1216,6 +1229,20 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
             )}
           </Panel>
         </div>
+      )}
+
+      {consult && (
+        <VerifyPrescriptionModal
+          open={verifyOpen}
+          patient={patient}
+          visit={visit}
+          consult={consult}
+          doctorName={visit.doctorName || "Doctor"}
+          confirmLabel={recommendCounsellor && !pendingForceSkip && !isPataudi ? "Verify & send to counsellor" : "Verify & complete consultation"}
+          confirmDisabled={completing}
+          onConfirm={() => void finishConsult()}
+          onClose={() => setVerifyOpen(false)}
+        />
       )}
     </PageChrome>
   );

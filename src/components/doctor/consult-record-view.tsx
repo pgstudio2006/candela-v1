@@ -114,16 +114,15 @@ export function ConsultRecordView({
         template: defaultTemplate,
       });
       printPdfBytes(pdfBytes, "Prescription");
-      if (isPataudi) {
-        const date = new Date().toISOString().slice(0, 10);
-        await savePdfAsPatientDocument(
-          patient.id,
-          "prescription",
-          `prescription-${patient.uhid ?? patient.id}-${date}.pdf`,
-          pdfBytes,
-          { visitId: visit.id, label: `Prescription · ${doctorName} · ${date}` },
-        );
-      }
+      // Keep the exact printed prescription in the patient profile documents.
+      const date = new Date().toISOString().slice(0, 10);
+      await savePdfAsPatientDocument(
+        patient.id,
+        "prescription",
+        `prescription-${patient.uhid ?? patient.id}-${date}.pdf`,
+        pdfBytes,
+        { visitId: visit.id, label: `Prescription · ${doctorName} · ${date}` },
+      );
     } catch {
       toast("Could not generate prescription PDF", "error");
     } finally {
