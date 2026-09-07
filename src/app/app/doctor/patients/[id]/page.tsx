@@ -23,7 +23,6 @@ export default function DoctorPatientDetailPage() {
   const { toast } = useToast();
   const patientId = params.id as string;
   const [tab, setTab] = useState("timeline");
-  const [fixDob, setFixDob] = useState("");
   const [fixAge, setFixAge] = useState("");
   const [savingAge, setSavingAge] = useState(false);
   const {
@@ -170,24 +169,17 @@ export default function DoctorPatientDetailPage() {
             {!resolvePatientAge(patient.age, patient.dateOfBirth) && (
               <div className="mt-3 rounded-md border border-amber-200/80 bg-amber-50/60 p-3">
                 <p className="text-[11px] font-medium text-amber-900">
-                  Age missing — prescriptions print “—y”. Enter date of birth or age to fix.
+                  Age missing — prescriptions print “—y”. Enter the patient age to fix.
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <input
-                    type="date"
-                    value={fixDob}
-                    onChange={(e) => setFixDob(e.target.value)}
-                    className="h-8 rounded border border-[var(--attio-border)] bg-white px-2 text-[12px]"
-                  />
-                  <span className="text-[11px] text-amber-700">or</span>
                   <input
                     type="number"
                     min={0}
                     max={120}
-                    placeholder="Age"
+                    placeholder="Age (years)"
                     value={fixAge}
                     onChange={(e) => setFixAge(e.target.value)}
-                    className="h-8 w-20 rounded border border-[var(--attio-border)] bg-white px-2 text-[12px]"
+                    className="h-8 w-28 rounded border border-[var(--attio-border)] bg-white px-2 text-[12px]"
                   />
                   <AttioButton
                     variant="primary"
@@ -196,7 +188,6 @@ export default function DoctorPatientDetailPage() {
                     onClick={async () => {
                       setSavingAge(true);
                       const result = await updatePatientDemographicsAction(patientId, {
-                        dob: fixDob || undefined,
                         age: fixAge ? Number(fixAge) : undefined,
                       });
                       setSavingAge(false);
@@ -205,7 +196,6 @@ export default function DoctorPatientDetailPage() {
                         return;
                       }
                       toast("Age updated — prescriptions will now print it", "success");
-                      setFixDob("");
                       setFixAge("");
                       await refresh();
                     }}

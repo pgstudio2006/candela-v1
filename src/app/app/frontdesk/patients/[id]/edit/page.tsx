@@ -48,7 +48,6 @@ export default function PatientEditPage() {
       notes: patient.registrationNotes ?? "",
       visitType: patient.tags[0] ?? "opd",
       age: patient.age ?? "",
-      dob: patient.dateOfBirth ? patient.dateOfBirth.split("T")[0] : "",
       alternatePhone: patient.alternatePhone ?? "",
       country: patient.country ?? "",
       state: patient.state ?? "",
@@ -109,10 +108,9 @@ export default function PatientEditPage() {
           initialValues={initialValues}
           submitLabel={submitting ? "Saving…" : "Save changes"}
           onSubmit={async (data) => {
-            const hasDob = String(data.dob ?? "").trim() !== "";
             const hasAge = Number(data.age ?? 0) > 0;
-            if (!hasDob && !hasAge) {
-              toast("Date of birth or age is required — prescription and records print the patient age.", "error");
+            if (!hasAge) {
+              toast("Patient age is required — it prints on prescriptions and records.", "error");
               return;
             }
             setSubmitting(true);

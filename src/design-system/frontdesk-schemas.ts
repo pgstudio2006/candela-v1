@@ -117,8 +117,7 @@ export const REGISTRATION_SCHEMA: FormSchema = {
             { value: "O", label: "Other" },
           ],
         },
-        { id: "dob", type: "date", label: "Date of birth", hint: "Required if age is unknown", placeholder: "dd-mm-yyyy" },
-        { id: "age", type: "number", label: "Age (if DOB unknown)", placeholder: "e.g. 35", hint: "Required if Date of birth is empty — printed on prescriptions" },
+        { id: "age", type: "number", label: "Age", required: true, placeholder: "e.g. 35", hint: "In years — printed on prescriptions and patient records" },
         {
           id: "appointmentCentre",
           type: "select",

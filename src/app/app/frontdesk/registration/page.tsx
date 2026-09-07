@@ -10,6 +10,7 @@ import { useSession } from "@/components/candela/session-provider";
 import type { ReferralDoctor } from "@/design-system/admin-data";
 import type { CrmLead } from "@/design-system/crm-data";
 import { isPataudiBranch } from "@/lib/auth-types";
+import { ageFromDob } from "@/lib/frontdesk-workflow";
 import { checkDuplicatePatientAction, getActiveReferralDoctorsAction } from "@/app/actions/clinical-actions";
 import {
   detectLeadByMobileAction,
@@ -153,13 +154,8 @@ export default function RegistrationPage() {
     }
     if (lead.age != null && typeof lead.age === "number") {
       values.age = lead.age;
-    }
-    if (lead.dob && typeof lead.dob === "string") {
-      values.dob = lead.dob;
-    } else if (lead.age != null && typeof lead.age === "number") {
-      const today = new Date();
-      const dob = new Date(today.getFullYear() - lead.age, today.getMonth(), today.getDate());
-      values.dob = dob.toISOString().split("T")[0];
+    } else if (lead.dob && typeof lead.dob === "string") {
+      values.age = ageFromDob(lead.dob);
     }
     if (lead.country) values.country = lead.country;
     if (lead.state) values.state = lead.state;
@@ -238,10 +234,9 @@ export default function RegistrationPage() {
     data: Record<string, string | number | boolean>,
     opts?: { forceDuplicate?: boolean },
   ) => {
-    const hasDob = String(data.dob ?? "").trim() !== "";
     const hasAge = Number(data.age ?? 0) > 0;
-    if (!hasDob && !hasAge) {
-      toast("Date of birth or age is required — prescription and records print the patient age.", "error");
+    if (!hasAge) {
+      toast("Patient age is required — it prints on prescriptions and records.", "error");
       return;
     }
     const payload = normalizeReferralDoctor(data);
