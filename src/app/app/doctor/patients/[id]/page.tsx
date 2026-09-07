@@ -1,8 +1,10 @@
 "use client";
 
+import { updatePatientDemographicsAction } from "@/app/actions/clinical-actions";
 import { useDoctorStore } from "@/components/doctor/doctor-store";
 import { PageChrome } from "@/components/frontdesk/page-chrome";
 import { AttioButton, Panel, StatusBadge } from "@/components/frontdesk/ui";
+import { useToast } from "@/components/ui/toast-provider";
 import { PatientDocumentsPanel } from "@/components/patient-documents";
 import { PatientConsentsPanel } from "@/components/patient-consents";
 import { PatientLabReportsPanel } from "@/components/candela/patient-lab-reports-panel";
@@ -18,14 +20,19 @@ import { useState } from "react";
 export default function DoctorPatientDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { toast } = useToast();
   const patientId = params.id as string;
   const [tab, setTab] = useState("timeline");
+  const [fixDob, setFixDob] = useState("");
+  const [fixAge, setFixAge] = useState("");
+  const [savingAge, setSavingAge] = useState(false);
   const {
     getPatient,
     visits,
     getPatientConsultations,
     getVisit,
     startConsultation,
+    refresh,
   } = useDoctorStore();
 
   const patient = getPatient(patientId);
@@ -161,9 +168,52 @@ export default function DoctorPatientDetailPage() {
               <div className="flex justify-between"><dt className="text-[var(--attio-text-tertiary)]">Balance</dt><dd>₹{patient.balance.toLocaleString("en-IN")}</dd></div>
             </dl>
             {!resolvePatientAge(patient.age, patient.dateOfBirth) && (
-              <p className="mt-3 rounded-md border border-amber-200/80 bg-amber-50/60 p-2.5 text-[11px] text-amber-800">
-                Age missing — prescriptions print “—y”. Ask the front desk to edit this patient and add date of birth or age.
-              </p>
+              <div className="mt-3 rounded-md border border-amber-200/80 bg-amber-50/60 p-3">
+                <p className="text-[11px] font-medium text-amber-900">
+                  Age missing — prescriptions print “—y”. Enter date of birth or age to fix.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    value={fixDob}
+                    onChange={(e) => setFixDob(e.target.value)}
+                    className="h-8 rounded border border-[var(--attio-border)] bg-white px-2 text-[12px]"
+                  />
+                  <span className="text-[11px] text-amber-700">or</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={120}
+                    placeholder="Age"
+                    value={fixAge}
+                    onChange={(e) => setFixAge(e.target.value)}
+                    className="h-8 w-20 rounded border border-[var(--attio-border)] bg-white px-2 text-[12px]"
+                  />
+                  <AttioButton
+                    variant="primary"
+                    className="h-8 text-[11px]"
+                    disabled={savingAge}
+                    onClick={async () => {
+                      setSavingAge(true);
+                      const result = await updatePatientDemographicsAction(patientId, {
+                        dob: fixDob || undefined,
+                        age: fixAge ? Number(fixAge) : undefined,
+                      });
+                      setSavingAge(false);
+                      if (!result.ok) {
+                        toast(result.error ?? "Could not save age", "error");
+                        return;
+                      }
+                      toast("Age updated — prescriptions will now print it", "success");
+                      setFixDob("");
+                      setFixAge("");
+                      await refresh();
+                    }}
+                  >
+                    {savingAge ? "Saving…" : "Save age"}
+                  </AttioButton>
+                </div>
+              </div>
             )}
           </Panel>
 

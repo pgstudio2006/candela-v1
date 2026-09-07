@@ -24,6 +24,7 @@ import {
   saveSubmission,
   searchPatientsPaginated,
   updatePatient,
+  updatePatientDemographics,
 } from "@/server/clinical";
 import { getPatientInvoices, getVisitInvoiceForBilling } from "@/server/invoicing";
 import { requireAuth, requireAnyModule, requireModule } from "@/server/auth";
@@ -199,6 +200,17 @@ export async function updatePatientAction(
 ) {
   const ctx = await requireModule("frontdesk");
   return updatePatient(ctx, patientId, data);
+}
+
+/** Age/DOB-only fix — usable by doctor & frontdesk so prescriptions print a real age. */
+export async function updatePatientDemographicsAction(
+  patientId: string,
+  input: { dob?: string; age?: number },
+): Promise<ActionResult<{ patientId: string; age: number; dateOfBirth: string | null }>> {
+  return runAction(async () => {
+    const ctx = await requireAnyModule("frontdesk", "doctor", "admin");
+    return updatePatientDemographics(ctx, patientId, input);
+  });
 }
 
 export async function saveSubmissionAction(

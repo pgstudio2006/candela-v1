@@ -4,7 +4,7 @@ import { PrintablePrescription } from "@/components/doctor/print/printable-presc
 import { AttioButton } from "@/components/frontdesk/ui";
 import type { ConsultationRecord } from "@/design-system/doctor-data";
 import type { Patient, Visit } from "@/design-system/frontdesk-data";
-import { printHtmlElement } from "@/lib/doctor-records";
+import { printPdfBytes } from "@/lib/prescription-pdf";
 import { CheckCircle2, Pencil, Printer } from "lucide-react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -15,6 +15,10 @@ type VerifyPrescriptionModalProps = {
   visit: Visit;
   consult: ConsultationRecord;
   doctorName: string;
+  /** Object URL of the generated prescription PDF (same bytes that print). */
+  pdfUrl?: string | null;
+  pdfBytes?: Uint8Array | null;
+  pdfLoading?: boolean;
   /** Label for the primary confirm action, e.g. "Verify & complete consultation". */
   confirmLabel: string;
   confirmDisabled?: boolean;
@@ -24,8 +28,9 @@ type VerifyPrescriptionModalProps = {
 
 /**
  * Final gate before a consultation is completed — the doctor must see the
- * printable prescription and explicitly verify it. Completion only proceeds
- * after the confirm button is pressed.
+ * printable prescription (the exact clinic-letterhead PDF) and explicitly
+ * verify it. Completion only proceeds after the confirm button is pressed.
+ * Falls back to the quick HTML preview if PDF generation is unavailable.
  */
 export function VerifyPrescriptionModal({
   open,
@@ -33,6 +38,9 @@ export function VerifyPrescriptionModal({
   visit,
   consult,
   doctorName,
+  pdfUrl,
+  pdfBytes,
+  pdfLoading,
   confirmLabel,
   confirmDisabled,
   onConfirm,
@@ -55,7 +63,7 @@ export function VerifyPrescriptionModal({
       role="presentation"
     >
       <div
-        className="mb-8 w-full max-w-[210mm] overflow-hidden rounded-xl border border-[var(--attio-border)] bg-white shadow-2xl"
+        className="mb-8 w-full max-w-[880px] overflow-hidden rounded-xl border border-[var(--attio-border)] bg-white shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label="Verify prescription"
@@ -65,7 +73,7 @@ export function VerifyPrescriptionModal({
             <div>
               <h2 className="text-[14px] font-semibold">Verify prescription before completing</h2>
               <p className="mt-0.5 text-[12px] text-[var(--attio-text-tertiary)]">
-                Check patient details, diagnosis and medicines. The consultation completes only after you verify.
+                This is the exact prescription that will print. Check patient details, diagnosis and medicines.
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
@@ -73,21 +81,34 @@ export function VerifyPrescriptionModal({
                 <Pencil className="size-3.5" />
                 Back to edit
               </AttioButton>
-              <AttioButton
-                variant="secondary"
-                className="gap-1.5"
-                onClick={() => printHtmlElement("verify-prescription-sheet", "Prescription")}
-              >
-                <Printer className="size-3.5" />
-                Print
-              </AttioButton>
+              {pdfBytes && (
+                <AttioButton variant="secondary" className="gap-1.5" onClick={() => printPdfBytes(pdfBytes, "Prescription")}>
+                  <Printer className="size-3.5" />
+                  Print
+                </AttioButton>
+              )}
             </div>
           </div>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto bg-[#f5f5f4] p-6">
-          <div id="verify-prescription-sheet" className="mx-auto bg-white p-8 shadow-sm" style={{ width: "210mm", minHeight: "297mm" }}>
-            <PrintablePrescription patient={patient} visit={visit} consult={consult} doctorName={doctorName} />
-          </div>
+        <div className="h-[70vh] overflow-y-auto bg-[#f5f5f4] p-4">
+          {pdfLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="flex items-center gap-2 text-[13px] text-[var(--attio-text-tertiary)]">
+                <div className="size-4 animate-spin rounded-full border-2 border-[var(--attio-border)] border-t-[var(--attio-accent)]" />
+                Generating prescription preview…
+              </div>
+            </div>
+          ) : pdfUrl ? (
+            <iframe
+              src={pdfUrl}
+              title="Prescription preview"
+              className="h-full min-h-[60vh] w-full rounded-lg border border-[var(--attio-border-subtle)] bg-white"
+            />
+          ) : (
+            <div className="mx-auto bg-white p-8 shadow-sm" style={{ width: "210mm", minHeight: "297mm" }}>
+              <PrintablePrescription patient={patient} visit={visit} consult={consult} doctorName={doctorName} />
+            </div>
+          )}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-[var(--attio-border-subtle)] px-4 py-3">
           <AttioButton variant="secondary" onClick={onClose}>

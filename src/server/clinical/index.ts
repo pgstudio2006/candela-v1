@@ -1588,6 +1588,50 @@ export async function updatePatient(
   return { patientId, uhid };
 }
 
+/**
+ * Narrow demographics fix — sets only age / date of birth on a patient.
+ * Used by the doctor patient profile so a missing age (which prints on
+ * prescriptions as "—y") can be corrected without a full frontdesk edit.
+ */
+export async function updatePatientDemographics(
+  ctx: ServerContext,
+  patientId: string,
+  input: { dob?: string; age?: number },
+) {
+  await ensureClinicalSeed();
+  const scope = branchScope(ctx);
+  const existing = await prisma.patient.findFirst({
+    where: { id: patientId, tenantId: scope.tenantId, branchId: scope.branchId },
+  });
+  if (!existing) throw new ServerActionError("NOT_FOUND", "Patient not found.");
+
+  const dob = String(input.dob ?? "").trim();
+  const ageInput = Number(input.age ?? 0);
+  if (!dob && !(Number.isFinite(ageInput) && ageInput > 0)) {
+    throw new ServerActionError("VALIDATION", "Date of birth or age is required.");
+  }
+  const age = dob ? ageFromDob(dob) : Math.round(ageInput);
+
+  const updated = await prisma.patient.update({
+    where: { id: patientId },
+    data: {
+      age,
+      dateOfBirth: dob ? new Date(dob) : null,
+    },
+  });
+
+  await writePlatformAudit({
+    ctx,
+    module: "doctor",
+    action: "patient_demographics_updated",
+    entityType: "patient",
+    entityId: patientId,
+    summary: `Updated age/DOB for ${updated.name} (${existing.uhid}) — age ${age}`,
+  });
+
+  return { patientId, age, dateOfBirth: dob || null };
+}
+
 export async function bookAppointment(
   ctx: ServerContext,
   input: { data: AppointmentInput; appointmentId: string; visitId: string },

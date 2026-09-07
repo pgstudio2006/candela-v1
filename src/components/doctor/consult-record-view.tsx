@@ -108,7 +108,7 @@ export function ConsultRecordView({
         visit,
         consult,
         doctorName,
-        layout: defaultTemplate?.layout ?? "navayu-letterhead",
+        layout: defaultTemplate?.layout ?? "dr-sunil-saini-letterhead",
         branchId: session?.branchId,
         uploadedTemplateFileData: defaultTemplate?.fileData,
         template: defaultTemplate,

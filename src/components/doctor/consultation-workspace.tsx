@@ -137,6 +137,10 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   const [completing, setCompleting] = useState(false);
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [pendingForceSkip, setPendingForceSkip] = useState(false);
+  const [rxPdfBytes, setRxPdfBytes] = useState<Uint8Array | null>(null);
+  const [rxPdfUrl, setRxPdfUrl] = useState<string | null>(null);
+  const [rxPdfLoading, setRxPdfLoading] = useState(false);
+  const rxPdfUrlRef = useRef<string | null>(null);
   const [historyConsultations, setHistoryConsultations] = useState<ConsultationRecord[]>([]);
   const [historyLabOrders, setHistoryLabOrders] = useState<LabOrder[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -307,15 +311,43 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
   };
 
   /** Opens the prescription verification gate — completion runs only after the doctor confirms. */
-  const requestFinish = (forceSkip = false) => {
+  const requestFinish = async (forceSkip = false) => {
     if (!validateForCompletion()) return;
     setPendingForceSkip(forceSkip);
     setVerifyOpen(true);
+    setRxPdfBytes(null);
+    setRxPdfLoading(true);
+    if (rxPdfUrlRef.current) {
+      URL.revokeObjectURL(rxPdfUrlRef.current);
+      rxPdfUrlRef.current = null;
+      setRxPdfUrl(null);
+    }
+    try {
+      const bytes = await buildPrescriptionPdf();
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
+      rxPdfUrlRef.current = url;
+      setRxPdfBytes(bytes);
+      setRxPdfUrl(url);
+    } catch {
+      toast("Could not generate the prescription preview — showing quick preview instead.", "error");
+    } finally {
+      setRxPdfLoading(false);
+    }
+  };
+
+  const closeVerify = () => {
+    setVerifyOpen(false);
+    if (rxPdfUrlRef.current) {
+      URL.revokeObjectURL(rxPdfUrlRef.current);
+      rxPdfUrlRef.current = null;
+    }
+    setRxPdfUrl(null);
+    setRxPdfBytes(null);
   };
 
   const finishConsult = async () => {
     const forceSkip = pendingForceSkip;
-    setVerifyOpen(false);
+    closeVerify();
     setCompleting(true);
     const { cart: _, ...handoffPayload } = handoffValues;
     const result = await completeConsultation(visitId, {
@@ -335,22 +367,27 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
     router.push("/app/doctor/queue");
   };
 
+  const buildPrescriptionPdf = async (): Promise<Uint8Array> => {
+    if (!patient || !visit || !consult) throw new Error("Consultation is not ready.");
+    const selectedTemplate = prescriptionTemplates.find((t) => t.id === selectedTemplateId);
+    return generatePrescriptionPdf({
+      patient,
+      visit,
+      consult,
+      doctorName: visit.doctorName,
+      layout: selectedTemplate?.layout ?? "dr-sunil-saini-letterhead",
+      branchId: session?.branchId,
+      uploadedTemplateFileData: isPataudi
+        ? documentTemplates.find((template) => template.kind === "prescription" && template.isDefault)?.fileData
+        : undefined,
+      template: selectedTemplate,
+    });
+  };
+
   const handlePrintPrescription = async () => {
     if (!patient || !visit || !consult) return;
     try {
-      const selectedTemplate = prescriptionTemplates.find((t) => t.id === selectedTemplateId);
-      const pdfBytes = await generatePrescriptionPdf({
-        patient,
-        visit,
-        consult,
-        doctorName: visit.doctorName,
-        layout: selectedTemplate?.layout ?? "navayu-letterhead",
-        branchId: session?.branchId,
-        uploadedTemplateFileData: isPataudi
-          ? documentTemplates.find((template) => template.kind === "prescription" && template.isDefault)?.fileData
-          : undefined,
-        template: selectedTemplate,
-      });
+      const pdfBytes = await buildPrescriptionPdf();
       printPdfBytes(pdfBytes, "Prescription");
       // Keep the exact printed prescription in the patient profile documents.
       const date = new Date().toISOString().slice(0, 10);
@@ -1111,7 +1148,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                 placeholder="Private consult notes…"
                 className="w-full resize-none rounded-lg border border-[var(--attio-border)] px-3 py-2 text-[13px] outline-none"
               />
-              <AttioButton variant="primary" className="w-full gap-1.5" onClick={() => requestFinish(false)} disabled={completing}>
+              <AttioButton variant="primary" className="w-full gap-1.5" onClick={() => void requestFinish(false)} disabled={completing}>
                 {completing ? (
                   <>
                     <div className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -1136,7 +1173,7 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
                   disabled={completing}
                   onClick={() => {
                     setSkipCounsellor(true);
-                    requestFinish(true);
+                    void requestFinish(true);
                   }}
                 >
                   {completing ? (
@@ -1238,10 +1275,13 @@ export function ConsultationWorkspace({ visitId }: ConsultationWorkspaceProps) {
           visit={visit}
           consult={consult}
           doctorName={visit.doctorName || "Doctor"}
+          pdfUrl={rxPdfUrl}
+          pdfBytes={rxPdfBytes}
+          pdfLoading={rxPdfLoading}
           confirmLabel={recommendCounsellor && !pendingForceSkip && !isPataudi ? "Verify & send to counsellor" : "Verify & complete consultation"}
           confirmDisabled={completing}
           onConfirm={() => void finishConsult()}
-          onClose={() => setVerifyOpen(false)}
+          onClose={closeVerify}
         />
       )}
     </PageChrome>
