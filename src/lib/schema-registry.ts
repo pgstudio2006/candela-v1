@@ -367,6 +367,57 @@ function ensurePrescriptionScreeningFields(schema: FormSchema): FormSchema {
   return { ...schema, sections };
 }
 
+/**
+ * Registration is age-only: the age number prints on prescriptions and
+ * records. Published form overrides from the form builder may still carry a
+ * date-of-birth field and/or an age field under a mismatched id (the builder
+ * regenerates ids), which made the submit guard see an empty age. Force the
+ * shape: drop DOB, guarantee a required `age` number field.
+ */
+function normalizeRegistrationAgeField(schema: FormSchema): FormSchema {
+  if (schema.id !== "registration") return schema;
+  const sections = schema.sections.map((section) => ({ ...section, fields: [...section.fields] }));
+
+  // 1. Drop DOB (by id or label) from every section.
+  for (const section of sections) {
+    section.fields = section.fields.filter(
+      (f) => f.id !== "dob" && !/date\s*of\s*birth/i.test(f.label ?? ""),
+    );
+  }
+
+  // 2. Guarantee an `age` field: reuse an existing age-like field if the
+  //    override renamed its id, otherwise add one. Every other age-like
+  //    duplicate (override "Age (if DOB unknown)" + merged default "Age")
+  //    is removed so exactly one age field is rendered.
+  const isAgeLike = (f: SchemaField) =>
+    (f.id !== "age" && /\bage\b/i.test(f.id)) || /^(patient\s*)?age(\s*\(.*)?$/i.test((f.label ?? "").trim());
+  const allFields = sections.flatMap((s) => s.fields);
+  let ageField = allFields.find((f) => f.id === "age");
+  if (!ageField) {
+    ageField = allFields.find(isAgeLike);
+    if (ageField) ageField.id = "age";
+  }
+  for (const section of sections) {
+    section.fields = section.fields.filter((f) => f === ageField || f.id === "age" || !isAgeLike(f));
+  }
+  if (ageField) {
+    ageField.type = "number";
+    ageField.label = "Age";
+    ageField.required = true;
+    if (ageField.hint) delete ageField.hint;
+    ageField.placeholder = ageField.placeholder || "e.g. 35";
+  } else {
+    sections[0] = {
+      ...sections[0],
+      fields: [
+        ...sections[0].fields,
+        { id: "age", type: "number", label: "Age", required: true, placeholder: "e.g. 35", hint: "In years — printed on prescriptions and patient records" },
+      ],
+    };
+  }
+  return { ...schema, sections };
+}
+
 export function getAnyFormSchema(id: string): FormSchema {
   const override = schemaOverrides[id];
   const fallback = ALL_DEFAULT_SCHEMAS[id];
@@ -376,7 +427,7 @@ export function getAnyFormSchema(id: string): FormSchema {
   if (override && isCorruptSchemaOverride(id, override)) {
     const schema = structuredClone(fallback!);
     schema.id = id;
-    return normalizeCountryField(schema);
+    return normalizeCountryField(normalizeRegistrationAgeField(schema));
   }
   const base = structuredClone(fallback!);
   const overrideClone = override ? structuredClone(override) : null;
@@ -384,7 +435,7 @@ export function getAnyFormSchema(id: string): FormSchema {
     ? mergeRegistrationOverride(overrideClone, base)
     : overrideClone ?? base;
   schema.id = id;
-  return normalizeCountryField(ensurePrescriptionScreeningFields(schema));
+  return normalizeCountryField(normalizeRegistrationAgeField(ensurePrescriptionScreeningFields(schema)));
 }
 
 export function getDefaultDoctorSchema(id: DoctorFormSchemaId): FormSchema {
